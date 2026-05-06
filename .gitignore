@@ -1,0 +1,120 @@
+# ----------------------------------------------------------------------------
+# Build output (CMake)
+# ----------------------------------------------------------------------------
+# Out-of-tree build dirs. Covers `build/`, `build-debug/`, `build-release/`,
+# CLion's `cmake-build-*/`, and Google-style `out/`.
+build/
+build-*/
+cmake-build-*/
+out/
+
+# In-source CMake artifacts (only triggered if someone does an in-source build).
+CMakeCache.txt
+CMakeFiles/
+CMakeScripts/
+cmake_install.cmake
+CTestTestfile.cmake
+CPackConfig.cmake
+CPackSourceConfig.cmake
+Makefile
+install_manifest.txt
+compile_commands.json
+
+# Ninja
+.ninja_deps
+.ninja_log
+
+# ----------------------------------------------------------------------------
+# Compiled artifacts
+# ----------------------------------------------------------------------------
+# Object files, archives, shared libs, and executables — matched at any depth.
+*.o
+*.obj
+*.a
+*.la
+*.lo
+*.so
+*.so.*
+*.dylib
+*.dll
+*.exe
+
+# Default GCC/Clang output name when no `-o` flag is passed.
+a.out
+
+# Debug symbols
+*.dSYM/
+*.pdb
+*.idb
+*.ilk
+*.map
+
+# Linker artifacts
+*.exp
+*.lib
+
+# ----------------------------------------------------------------------------
+# Coverage / profiling
+# ----------------------------------------------------------------------------
+*.gcda
+*.gcno
+*.gcov
+coverage/
+*.profraw
+*.profdata
+lcov.info
+
+# ----------------------------------------------------------------------------
+# Xcode (iOS / macOS targets)
+# ----------------------------------------------------------------------------
+# Per-user state inside Xcode projects — never share these.
+xcuserdata/
+*.xcuserstate
+*.xcworkspace/xcuserdata/
+*.xcscheme
+DerivedData/
+
+# ----------------------------------------------------------------------------
+# IDE / editor
+# ----------------------------------------------------------------------------
+.vscode/
+.idea/
+*.iml
+.cache/
+.ccls-cache/
+.clangd/
+
+# Editor backups and swap files
+*~
+*.swp
+*.swo
+.*.swp
+.*.swo
+*.bak
+\#*\#
+.\#*
+
+# ----------------------------------------------------------------------------
+# OS noise
+# ----------------------------------------------------------------------------
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ----------------------------------------------------------------------------
+# Agent-tool machine-local overrides
+# ----------------------------------------------------------------------------
+# Shared OpenSpec scaffolding under .claude/, .cursor/, etc. is intentionally
+# tracked. The patterns below let those same dirs hold per-user, per-machine
+# state (sessions, caches, local permission grants) without polluting git.
+**/settings.local.json
+**/*.local.json
+**/.session/
+
+# ----------------------------------------------------------------------------
+# Misc
+# ----------------------------------------------------------------------------
+*.log
+*.tmp
+*.pid
+core
