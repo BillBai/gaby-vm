@@ -1,0 +1,41 @@
+{
+  "version": 6,
+  "cmakeMinimumRequired": { "major": 3, "minor": 25, "patch": 0 },
+  "configurePresets": [
+    {
+      "name": "dev-debug",
+      "displayName": "Dev (Debug)",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/debug",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+        "GABY_VM_BUILD_TESTS": "ON",
+        "GABY_VM_BUILD_DEMOS": "ON"
+      }
+    },
+    {
+      "name": "dev-release",
+      "displayName": "Dev (Release)",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/release",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+        "GABY_VM_BUILD_TESTS": "ON",
+        "GABY_VM_BUILD_DEMOS": "ON"
+      }
+    }
+  ],
+  "buildPresets": [
+    { "name": "dev-debug",   "configurePreset": "dev-debug" },
+    { "name": "dev-release", "configurePreset": "dev-release" }
+  ],
+  "testPresets": [
+    {
+      "name": "dev-debug",
+      "configurePreset": "dev-debug",
+      "output": { "outputOnFailure": true }
+    }
+  ]
+}

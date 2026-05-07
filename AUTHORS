@@ -1,0 +1,11 @@
+# Below is a list of people and organisations that have contributed to the
+# gaby-vm project. Entries should be added to the list as:
+#
+#   Name/Organisation <email address>
+
+billbai <billbai42@gmail.com>
+
+# Vendored AArch64 simulator code originates from the VIXL project; see
+# ../vixl/AUTHORS for the upstream contributor list (ARM Ltd., Google Inc.,
+# Linaro). Per-file headers in vendored sources retain their original
+# copyright notices.
