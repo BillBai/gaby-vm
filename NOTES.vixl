@@ -1,0 +1,28 @@
+# VIXL Import Provenance
+
+This file records the exact VIXL upstream baseline that the AArch64 simulator
+code under `src/` and `src/aarch64/` was imported from. It is the anchor for
+the `// gaby-vm:` marker convention: every modification inside an imported
+file is auditable as a deviation from the commit recorded here.
+
+## Imported baseline
+
+- **Upstream**: https://github.com/Linaro/vixl
+- **Commit (full)**: `3fe16863216491846caa02ea8eaa746411526e4a`
+- **Commit (short)**: `3fe16863`
+- **Commit date**: 2026-05-06 17:58:05 +0100
+- **Commit subject**: Faster IsLeafNode() check in the decoder
+- **Imported on**: 2026-05-08
+
+## Re-sync procedure (manual)
+
+1. Update the local VIXL working tree (`../vixl`) to a newer upstream commit.
+2. Run `git grep -nE 'gaby-vm( BEGIN| END|:)' src/` to enumerate every
+   Gaby-VM-local modification of the imported files.
+3. For each imported file under `src/` and `src/aarch64/`, three-way merge
+   the upstream change against the marker-protected Gaby-VM regions.
+4. Update the commit hash above to the new baseline.
+
+The marker convention is documented in
+`openspec/changes/extract-vixl-aarch64-simulator-baseline/design.md` (decision
+D5) and in the spec under `specs/aarch64-simulator/spec.md` (requirement R4).

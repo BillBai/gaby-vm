@@ -5,7 +5,8 @@
 
 billbai <billbai42@gmail.com>
 
-# Vendored AArch64 simulator code originates from the VIXL project; see
-# ../vixl/AUTHORS for the upstream contributor list (ARM Ltd., Google Inc.,
-# Linaro). Per-file headers in vendored sources retain their original
-# copyright notices.
+# AArch64 simulator code under src/ and src/aarch64/ is derived from the VIXL
+# project (https://github.com/Linaro/vixl) and credited to the upstream VIXL
+# contributors: ARM Ltd., Google Inc., Linaro. Per-file copyright notices in
+# the imported sources are preserved verbatim. The exact upstream commit
+# imported into this repository is recorded in NOTES.vixl at the repo root.

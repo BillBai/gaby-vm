@@ -1,0 +1,16 @@
+# Disable clang-format inside src/ because this directory holds VIXL-derived
+# sources whose byte-identity against upstream is a spec invariant (see
+# specs/aarch64-simulator/spec.md, requirement R3 and design.md decision D5).
+# Even small formatter-version differences (e.g. spacing around binary
+# operators in template expressions) would silently introduce drift not
+# bracketed by `// gaby-vm:` markers.
+#
+# Project-authored files belong outside src/ (e.g. include/ for headers, or a
+# future subdirectory with its own .clang-format if more under-src/ code
+# lands). The existing `version.cc.in` is a CMake configure_file template and
+# is never run through clang-format anyway. clang-format's directory walk
+# finds this file from src/aarch64/ as well, so one suppression covers both
+# the shared-root and AArch64 imports.
+
+DisableFormat: true
+SortIncludes: Never

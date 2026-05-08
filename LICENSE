@@ -7,8 +7,9 @@ All rights reserved.
 
 The software in this repository is covered by the BSD 3-clause license below.
 Source files imported from VIXL (https://github.com/Linaro/vixl) retain their
-original per-file copyright notices and are licensed under the same terms; see
-the AUTHORS file for the full list of upstream contributors.
+original per-file copyright notices and are licensed under the same terms; the
+verbatim VIXL license text is reproduced in `LICENSE.vixl`. See the AUTHORS
+file for the full list of upstream contributors.
 
 ----------------------------------------------------------------------------
 BSD 3-clause license
