@@ -1,0 +1,988 @@
+<!DOCTYPE html>
+<html lang="zh-Hans">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>baseline-correctness-test · Overview</title>
+<style>
+:root {
+  --bg: #fafaf9;
+  --surface: #ffffff;
+  --surface-2: #f4f4f5;
+  --border: #e4e4e7;
+  --border-strong: #d4d4d8;
+  --text: #18181b;
+  --text-muted: #52525b;
+  --text-faint: #a1a1aa;
+  --accent: #4338ca;
+  --accent-soft: #eef2ff;
+  --success: #15803d;
+  --success-soft: #f0fdf4;
+  --danger: #b91c1c;
+  --danger-soft: #fef2f2;
+  --warning: #b45309;
+  --warning-soft: #fffbeb;
+  --info: #0369a1;
+  --info-soft: #f0f9ff;
+  --code-bg: #1e1e2e;
+  --code-fg: #cdd6f4;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #18181b;
+    --surface: #27272a;
+    --surface-2: #1f1f23;
+    --border: #3f3f46;
+    --border-strong: #52525b;
+    --text: #fafafa;
+    --text-muted: #d4d4d8;
+    --text-faint: #71717a;
+    --accent: #818cf8;
+    --accent-soft: #312e81;
+    --success: #4ade80;
+    --success-soft: #14532d;
+    --danger: #f87171;
+    --danger-soft: #7f1d1d;
+    --warning: #fbbf24;
+    --warning-soft: #78350f;
+    --info: #38bdf8;
+    --info-soft: #075985;
+  }
+}
+
+* { box-sizing: border-box; }
+
+html { scroll-behavior: smooth; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei",
+               "Segoe UI", Roboto, sans-serif;
+  font-size: 15px;
+  line-height: 1.6;
+  background: var(--bg);
+  color: var(--text);
+  margin: 0;
+  padding: 0;
+}
+
+.container {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 3rem 2rem 6rem;
+}
+
+@media (max-width: 768px) {
+  .container { padding: 1.5rem 1rem 3rem; }
+}
+
+h1, h2, h3, h4 {
+  margin: 0 0 0.5rem;
+  line-height: 1.3;
+  letter-spacing: -0.01em;
+}
+
+h1 { font-size: 2rem; font-weight: 700; }
+h2 { font-size: 1.5rem; font-weight: 700; margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--border); }
+h3 { font-size: 1.1rem; font-weight: 600; margin-top: 2rem; }
+h4 { font-size: 0.95rem; font-weight: 600; margin: 0; }
+
+code, pre, .mono {
+  font-family: "SF Mono", "Menlo", "Consolas", monospace;
+  font-size: 0.875em;
+}
+
+code {
+  background: var(--surface-2);
+  padding: 0.1em 0.4em;
+  border-radius: 3px;
+  border: 1px solid var(--border);
+}
+
+pre {
+  background: var(--code-bg);
+  color: var(--code-fg);
+  padding: 1rem 1.25rem;
+  border-radius: 6px;
+  overflow-x: auto;
+  line-height: 1.5;
+  border: 1px solid var(--border);
+}
+pre code {
+  background: transparent;
+  border: none;
+  padding: 0;
+  color: inherit;
+}
+
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+.muted { color: var(--text-muted); }
+.faint { color: var(--text-faint); }
+
+/* ----- Header ----- */
+.hero {
+  padding: 1rem 0 2rem;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 1rem;
+}
+
+.tag-row {
+  display: flex; flex-wrap: wrap; gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.tag {
+  display: inline-flex; align-items: center; gap: 0.4rem;
+  font-size: 0.78rem; font-weight: 500;
+  padding: 0.25rem 0.6rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-muted);
+}
+.tag .dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: currentColor;
+}
+.tag.ok { color: var(--success); background: var(--success-soft); border-color: transparent; }
+.tag.info { color: var(--info); background: var(--info-soft); border-color: transparent; }
+
+.hero h1 { margin-bottom: 0.5rem; }
+.hero .sub { color: var(--text-muted); font-size: 1.05rem; max-width: 720px; }
+
+/* ----- Grid utilities ----- */
+.grid { display: grid; gap: 1rem; }
+.grid-2 { grid-template-columns: repeat(2, 1fr); }
+.grid-3 { grid-template-columns: repeat(3, 1fr); }
+.grid-4 { grid-template-columns: repeat(4, 1fr); }
+@media (max-width: 768px) {
+  .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; }
+}
+
+/* ----- Card ----- */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 1.1rem 1.25rem;
+}
+
+.card h4 { margin-bottom: 0.4rem; }
+.card p { margin: 0.3rem 0; color: var(--text-muted); font-size: 0.92rem; }
+.card .kicker {
+  font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.08em;
+  color: var(--text-faint); font-weight: 600;
+  margin-bottom: 0.3rem;
+}
+
+.card.accent  { border-left: 3px solid var(--accent); }
+.card.success { border-left: 3px solid var(--success); }
+.card.danger  { border-left: 3px solid var(--danger); }
+.card.warning { border-left: 3px solid var(--warning); }
+.card.info    { border-left: 3px solid var(--info); }
+
+/* ----- Two-column compare ----- */
+.compare {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+@media (max-width: 768px) {
+  .compare { grid-template-columns: 1fr; }
+}
+.compare > div {
+  padding: 1rem 1.2rem;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+}
+.compare .before {
+  background: var(--danger-soft);
+  border-color: transparent;
+}
+.compare .after {
+  background: var(--success-soft);
+  border-color: transparent;
+}
+.compare h4 { margin-bottom: 0.4rem; }
+.compare .before h4 { color: var(--danger); }
+.compare .after  h4 { color: var(--success); }
+.compare p { margin: 0.25rem 0; font-size: 0.92rem; }
+
+/* ----- Coverage strip ----- */
+.coverage {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 0.6rem;
+}
+@media (max-width: 768px) {
+  .coverage { grid-template-columns: repeat(2, 1fr); }
+}
+.cov {
+  padding: 0.8rem 0.9rem;
+  border-radius: 6px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  text-align: left;
+}
+.cov .label {
+  font-size: 0.72rem; text-transform: uppercase;
+  letter-spacing: 0.06em; color: var(--text-faint);
+  font-weight: 600;
+}
+.cov .mnemonics {
+  font-family: "SF Mono", "Menlo", monospace;
+  font-size: 0.8rem;
+  color: var(--text);
+  margin-top: 0.25rem;
+  font-weight: 600;
+}
+.cov .why { font-size: 0.8rem; color: var(--text-muted); margin-top: 0.4rem; }
+
+/* ----- Decisions ----- */
+details.decision {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  margin-bottom: 0.5rem;
+  overflow: hidden;
+}
+details.decision summary {
+  padding: 0.75rem 1rem;
+  cursor: pointer;
+  list-style: none;
+  display: flex;
+  align-items: baseline;
+  gap: 0.8rem;
+  font-size: 0.95rem;
+  transition: background 0.15s;
+}
+details.decision summary::-webkit-details-marker { display: none; }
+details.decision summary:hover { background: var(--surface-2); }
+details.decision .d-id {
+  font-family: "SF Mono", monospace;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--accent);
+  padding: 2px 7px;
+  border-radius: 4px;
+  background: var(--accent-soft);
+  flex-shrink: 0;
+}
+details.decision .d-title { font-weight: 500; }
+details.decision .d-body {
+  padding: 0 1rem 1rem;
+  border-top: 1px solid var(--border);
+  margin-top: 0.5rem;
+  padding-top: 0.8rem;
+  color: var(--text-muted);
+  font-size: 0.92rem;
+}
+details.decision .d-body p { margin: 0.4rem 0; }
+details.decision[open] summary { background: var(--surface-2); }
+
+/* ----- Timeline (execution path) ----- */
+.timeline {
+  position: relative;
+  padding-left: 1.5rem;
+}
+.timeline::before {
+  content: "";
+  position: absolute;
+  left: 7px; top: 8px; bottom: 8px;
+  width: 2px;
+  background: var(--border-strong);
+}
+.tl-item {
+  position: relative;
+  padding-bottom: 1.2rem;
+}
+.tl-item:last-child { padding-bottom: 0; }
+.tl-item::before {
+  content: "";
+  position: absolute;
+  left: -1.5rem;
+  top: 0.4rem;
+  width: 16px; height: 16px;
+  border-radius: 50%;
+  background: var(--surface);
+  border: 2px solid var(--accent);
+}
+.tl-item .tl-head {
+  display: flex; gap: 0.5rem; align-items: baseline;
+  margin-bottom: 0.2rem;
+}
+.tl-item .tl-n {
+  font-family: "SF Mono", monospace;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--accent);
+}
+.tl-item .tl-title { font-weight: 600; font-size: 0.98rem; }
+.tl-item .tl-count {
+  font-size: 0.75rem; color: var(--text-faint);
+  font-family: "SF Mono", monospace;
+}
+.tl-item .tl-desc { color: var(--text-muted); font-size: 0.9rem; }
+
+/* ----- Future-value scenario cards ----- */
+.future {
+  border-radius: 10px;
+  padding: 1.5rem 1.6rem;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  margin-bottom: 1rem;
+  position: relative;
+}
+.future.flagship {
+  background: linear-gradient(180deg, var(--accent-soft) 0%, var(--surface) 100%);
+  border: 1px solid var(--accent);
+  border-left-width: 4px;
+}
+.future .badge {
+  position: absolute;
+  top: -0.6rem; right: 1.2rem;
+  font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.08em;
+  font-weight: 700;
+  padding: 0.2rem 0.7rem;
+  border-radius: 4px;
+  color: white;
+  background: var(--accent);
+}
+.future h3 {
+  margin-top: 0;
+  display: flex; align-items: center; gap: 0.6rem;
+  font-size: 1.1rem;
+}
+.future .trigger {
+  color: var(--text-muted);
+  font-size: 0.92rem;
+  margin: 0.2rem 0 1rem;
+}
+.future .trigger strong { color: var(--text); font-weight: 600; }
+
+/* ----- SVG diagrams ----- */
+.diagram-wrap {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 1.5rem;
+  margin: 1rem 0;
+  overflow-x: auto;
+}
+.diagram-wrap svg { display: block; margin: 0 auto; max-width: 100%; height: auto; }
+.diagram-caption {
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  margin-top: 0.6rem;
+}
+
+/* ----- Files panel ----- */
+.files {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 1rem 1.25rem;
+}
+.files .row {
+  display: flex; gap: 1rem; align-items: baseline;
+  padding: 0.4rem 0;
+  border-bottom: 1px dashed var(--border);
+  font-size: 0.92rem;
+}
+.files .row:last-child { border-bottom: none; }
+.files .path { font-family: "SF Mono", monospace; font-size: 0.85rem; flex-shrink: 0; }
+.files .desc { color: var(--text-muted); }
+
+/* ----- Section intro ----- */
+.section-intro {
+  color: var(--text-muted);
+  max-width: 760px;
+  margin-bottom: 1.5rem;
+}
+
+/* ----- TOC ----- */
+.toc {
+  position: sticky; top: 0;
+  background: var(--bg);
+  padding: 0.6rem 0;
+  margin-bottom: 1.5rem;
+  border-bottom: 1px solid var(--border);
+  z-index: 10;
+  display: flex; flex-wrap: wrap; gap: 1rem;
+  font-size: 0.85rem;
+}
+.toc a {
+  color: var(--text-muted);
+  font-weight: 500;
+}
+.toc a:hover { color: var(--accent); text-decoration: none; }
+</style>
+</head>
+<body>
+<div class="container">
+
+<!-- ====== HERO ====== -->
+<header class="hero">
+  <div class="tag-row">
+    <span class="tag ok"><span class="dot"></span>4/4 artifacts complete</span>
+    <span class="tag ok"><span class="dot"></span>openspec validate: valid</span>
+    <span class="tag info">commit <code>51222d2</code></span>
+    <span class="tag">schema: spec-driven</span>
+  </div>
+  <h1>baseline-correctness-test</h1>
+  <p class="sub">
+    给刚导入的 VIXL AArch64 simulator 织一张回归网 ——
+    用手工编码的 <code>uint32_t</code> 序列穿过 <code>Simulator::RunFrom</code>,
+    在 ADD/SUB/MUL、AND/ORR/EOR、LDR/STR、B.cond/CBZ/CBNZ、BL+RET 五个指令族上断言寄存器与内存状态。
+    smoke 只证明能跑;这个测试证明<strong>跑得对</strong>。
+  </p>
+</header>
+
+<!-- ====== TOC ====== -->
+<nav class="toc">
+  <a href="#why">为什么</a>
+  <a href="#what">做什么</a>
+  <a href="#arch">架构</a>
+  <a href="#decisions">设计决策</a>
+  <a href="#execution">执行路径</a>
+  <a href="#future">长期价值 ★</a>
+  <a href="#files">文件</a>
+</nav>
+
+<!-- ====== WHY ====== -->
+<section id="why">
+<h2>为什么需要这个测试</h2>
+<p class="section-intro">
+  现有的 <code>simulator_smoke</code> 只验证一件事:<em>能不能构造一个 Simulator 并跑一条 NOP 不崩</em>。
+  它不检查 PC 是否前进、不检查寄存器状态、不检查任何语义。
+  对一份刚刚原样导入、还没改过一行的 VIXL 代码,这是"它在那里"的证明,不是"它对"的证明。
+</p>
+
+<div class="compare">
+  <div class="before">
+    <h4>没有 simulator_correctness 时</h4>
+    <p>• VIXL 上游 re-sync 后,leaf 语义可能静默改变,要等下游用户报 bug 才知道</p>
+    <p>• 未来的 predecode/dispatch cache 上线时,<em>没有任何 baseline 可对照</em>"cache 是不是改变了语义"</p>
+    <p>• 改 simulator 内部代码(refactor、移文件、改命名)只能靠"编译过就算赢"</p>
+    <p>• 新平台(iOS/arm64-linux)首次跑 simulator,无从分辨是平台问题还是代码问题</p>
+  </div>
+  <div class="after">
+    <h4>有 simulator_correctness 后</h4>
+    <p>• 每次 re-sync、refactor、cache 改动都先要过这关,语义回归在 PR 阶段就被拦下</p>
+    <p>• cache 上线后,同一序列同时穿过两条路径,直接 diff 输出 = differential oracle</p>
+    <p>• 新平台只要 <code>ctest</code> 全绿就建立了第一道平台可信度</p>
+    <p>• 用户报 bug → 加一个 sub-test → 永久回归保护,模式化</p>
+  </div>
+</div>
+</section>
+
+<!-- ====== WHAT ====== -->
+<section id="what">
+<h2>具体覆盖什么</h2>
+<p class="section-intro">
+  五个指令族,每个族至少一个子测试。每个子测试是一段独立的 <code>uint32_t[]</code> 序列,以 <code>RET</code> 收尾,
+  以"宿主算出的期望值"为对照标准。
+</p>
+
+<div class="coverage">
+  <div class="cov">
+    <div class="label">Arithmetic</div>
+    <div class="mnemonics">ADD · SUB · MUL</div>
+    <div class="why">最基础的整数 ALU 通路。任何 leaf 通路退化都会在这里先被发现。</div>
+  </div>
+  <div class="cov">
+    <div class="label">Logical</div>
+    <div class="mnemonics">AND · ORR · EOR</div>
+    <div class="why">位运算 leaf。操作数刻意选择互不相等的输出,防止编码互换的"巧合通过"。</div>
+  </div>
+  <div class="cov">
+    <div class="label">Load / Store</div>
+    <div class="mnemonics">LDR · STR<br>(imm + reg offset)</div>
+    <div class="why">内存访问路径。买宿主侧 stack buffer,地址通过寄存器传入,两种寻址模式都覆盖。</div>
+  </div>
+  <div class="cov">
+    <div class="label">Conditional</div>
+    <div class="mnemonics">B.cond · CBZ · CBNZ</div>
+    <div class="why">分支译码 + NZCV 通路。B.cond 前必置 <code>SUBS</code>,不依赖 reset 默认值。同时直接断言 <code>ReadNzcv()</code>。</div>
+  </div>
+  <div class="cov">
+    <div class="label">Call / Return</div>
+    <div class="mnemonics">BL · RET</div>
+    <div class="why">函数调用 ABI 的最小单位。callee 写哨兵值 <code>0xc011ab1e</code>,外层 LR 用 X19 保住以正常终止。</div>
+  </div>
+</div>
+</section>
+
+<!-- ====== ARCHITECTURE ====== -->
+<section id="arch">
+<h2>测试家族中的位置</h2>
+<p class="section-intro">
+  本次新增的 <code>simulator_correctness</code> 是项目第三个 CTest case。
+  它在 simulator_smoke 之上多了一层"<strong>语义层</strong>"覆盖。
+</p>
+
+<div class="diagram-wrap">
+<svg viewBox="0 0 720 280" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Test target hierarchy">
+  <style>
+    .box  { fill: var(--surface, white); stroke: var(--border-strong, #d4d4d8); stroke-width: 1.5; }
+    .new  { fill: var(--accent-soft, #eef2ff); stroke: var(--accent, #4338ca); stroke-width: 2; }
+    .lbl  { font: 600 13px -apple-system, sans-serif; fill: var(--text, #18181b); }
+    .sub  { font: 12px "SF Mono", monospace; fill: var(--text-muted, #52525b); }
+    .bar  { stroke-width: 14; stroke-linecap: round; }
+    .bar-bg { stroke: var(--border, #e4e4e7); }
+    .bar-fg { stroke: var(--accent, #4338ca); }
+    .arrow-lbl { font: italic 12px -apple-system; fill: var(--text-muted, #52525b); }
+  </style>
+
+  <!-- gaby_vm_smoke -->
+  <rect class="box" x="20" y="30" width="200" height="60" rx="6"/>
+  <text class="lbl" x="120" y="55" text-anchor="middle">gaby_vm_smoke</text>
+  <text class="sub" x="120" y="76" text-anchor="middle">link only · version()</text>
+  <line class="bar bar-bg" x1="240" y1="60" x2="380" y2="60"/>
+  <line class="bar bar-fg" x1="240" y1="60" x2="262" y2="60"/>
+
+  <!-- simulator_smoke -->
+  <rect class="box" x="20" y="115" width="200" height="60" rx="6"/>
+  <text class="lbl" x="120" y="140" text-anchor="middle">simulator_smoke</text>
+  <text class="sub" x="120" y="161" text-anchor="middle">ctor + 1 NOP dispatch</text>
+  <line class="bar bar-bg" x1="240" y1="145" x2="380" y2="145"/>
+  <line class="bar bar-fg" x1="240" y1="145" x2="296" y2="145"/>
+
+  <!-- simulator_correctness -->
+  <rect class="new" x="20" y="200" width="200" height="60" rx="6"/>
+  <text class="lbl" x="120" y="225" text-anchor="middle">simulator_correctness</text>
+  <text class="sub" x="120" y="246" text-anchor="middle">leaf SEMANTICS · 5 families</text>
+  <line class="bar bar-bg" x1="240" y1="230" x2="380" y2="230"/>
+  <line class="bar bar-fg" x1="240" y1="230" x2="372" y2="230"/>
+
+  <!-- coverage axis label -->
+  <text class="sub" x="310" y="22" text-anchor="middle" style="fill: var(--text-faint, #a1a1aa)">coverage depth →</text>
+
+  <!-- annotations on the right -->
+  <text class="arrow-lbl" x="400" y="64">仅证明:库能链接</text>
+  <text class="arrow-lbl" x="400" y="149">+ 证明:decode/dispatch 不崩</text>
+  <text class="arrow-lbl" x="400" y="234" style="font-weight:700; fill: var(--accent, #4338ca)">+ 证明:leaf 算得对  ← 本次</text>
+</svg>
+<div class="diagram-caption">三个测试目标,层层叠加。本次新增填上"语义正确性"这一层。</div>
+</div>
+
+<h3>每个序列的形状(D3 + D7)</h3>
+<p>
+  关键不变量:<code>Simulator::ResetRegisters()</code> 把 <code>LR</code> 初始化为 <code>kEndOfSimAddress (= nullptr)</code>,
+  <code>Run()</code> 在 <code>pc == kEndOfSimAddress</code> 时退出。
+  所以每段序列都是一个隐式的"叶子函数体",以 <code>RET</code> 收尾。
+</p>
+
+<div class="diagram-wrap">
+<svg viewBox="0 0 720 260" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Sequence termination protocol">
+  <style>
+    .nb { fill: var(--surface, white); stroke: var(--border-strong, #d4d4d8); stroke-width: 1.5; }
+    .nb-emph { fill: var(--accent-soft, #eef2ff); stroke: var(--accent, #4338ca); stroke-width: 2; }
+    .lbl2 { font: 600 12px -apple-system, sans-serif; fill: var(--text, #18181b); }
+    .mono2 { font: 12px "SF Mono", monospace; fill: var(--text, #18181b); }
+    .anno { font: italic 11px -apple-system; fill: var(--text-muted, #52525b); }
+    .arr  { fill: none; stroke: var(--text-muted, #52525b); stroke-width: 1.5; marker-end: url(#tri); }
+    .arr-emph { fill: none; stroke: var(--accent, #4338ca); stroke-width: 2; marker-end: url(#tri-emph); }
+  </style>
+  <defs>
+    <marker id="tri" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+      <path d="M0,0 L8,4 L0,8 Z" fill="#52525b"/>
+    </marker>
+    <marker id="tri-emph" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+      <path d="M0,0 L8,4 L0,8 Z" fill="#4338ca"/>
+    </marker>
+  </defs>
+
+  <rect class="nb" x="20" y="20" width="180" height="50" rx="5"/>
+  <text class="lbl2" x="110" y="40" text-anchor="middle">作者侧</text>
+  <text class="mono2" x="110" y="58" text-anchor="middle">WriteXRegister(1, A)</text>
+
+  <path class="arr" d="M210,45 L240,45"/>
+
+  <rect class="nb" x="250" y="20" width="220" height="50" rx="5"/>
+  <text class="lbl2" x="360" y="40" text-anchor="middle">RunFrom(start)</text>
+  <text class="mono2" x="360" y="58" text-anchor="middle">→ Run() loop</text>
+
+  <path class="arr" d="M360,80 L360,100"/>
+
+  <rect class="nb" x="220" y="110" width="280" height="80" rx="5"/>
+  <text class="anno" x="360" y="128" text-anchor="middle">每条指令: decode → visit → leaf</text>
+  <text class="mono2" x="360" y="148" text-anchor="middle">0x8b020020  // add x0, x1, x2</text>
+  <text class="mono2" x="360" y="166" text-anchor="middle">0x...       // (其他)</text>
+  <text class="mono2" x="360" y="184" text-anchor="middle">0xd65f03c0  // ret  ← LR == NULL</text>
+
+  <path class="arr-emph" d="M360,200 L360,222"/>
+
+  <rect class="nb-emph" x="220" y="225" width="280" height="30" rx="5"/>
+  <text class="lbl2" x="360" y="245" text-anchor="middle">pc == kEndOfSimAddress → exit</text>
+
+  <path class="arr" d="M510,240 L580,240 L580,45 L490,45"/>
+  <rect class="nb" x="510" y="20" width="180" height="50" rx="5"/>
+  <text class="lbl2" x="600" y="40" text-anchor="middle">作者侧</text>
+  <text class="mono2" x="600" y="58" text-anchor="middle">ReadXRegister(0) ?= A+B</text>
+</svg>
+<div class="diagram-caption">每个 sub-test 的生命周期:写入 → 跑 → 终止于 <code>RET</code> 到 NULL LR → 断言。</div>
+</div>
+</section>
+
+<!-- ====== DECISIONS ====== -->
+<section id="decisions">
+<h2>11 条设计决策</h2>
+<p class="section-intro">
+  点击展开任何一条查看完整理由与备选方案。完整内容见 <code>design.md</code>。
+</p>
+
+<details class="decision">
+  <summary><span class="d-id">D1</span><span class="d-title">单 TU + 按指令族分子测试 + 手写断言</span></summary>
+  <div class="d-body">
+    <p>一份 <code>test/simulator_correctness.cc</code>;一个 <code>TestState</code> 结构 + 三个 <code>expect_eq_*</code> 助手;五个 family 函数;一个 main()。</p>
+    <p><strong>为什么:</strong> 匹配现有 <code>simulator_smoke</code> 的纯手工模式;不引入 Catch2/GoogleTest 这类依赖,因为测试面积太小,框架成本不值得;真到几十个子测试再说。</p>
+  </div>
+</details>
+
+<details class="decision">
+  <summary><span class="d-id">D2</span><span class="d-title">指令序列直写 <code>alignas(uint32_t) uint32_t[]</code>,每 word 配助记符注释</span></summary>
+  <div class="d-body">
+    <p>每个编码值在源码中以字面量出现,旁边一行注释写明助记符。作者侧用 <code>llvm-mc</code> 校验后手抄进来。</p>
+    <p><strong>为什么:</strong> Tier-0 边界禁止 assembler 进仓库;助记符宏 = 30 行的 assembler,等同绕过。外部 <code>llvm-mc</code> 只在<em>写代码时</em>使用,产出落地为字面量,运行链路里没有 assembler。</p>
+  </div>
+</details>
+
+<details class="decision">
+  <summary><span class="d-id">D3</span><span class="d-title">终止协议:序列末尾必为 <code>RET</code>,依赖 <code>LR == NULL</code> 初始不变量</span></summary>
+  <div class="d-body">
+    <p><code>ResetRegisters()</code> 将 LR 初始化为 <code>kEndOfSimAddress (nullptr)</code>;<code>Run()</code> 在 <code>pc == kEndOfSimAddress</code> 时退出。所有序列都是隐式叶子函数。</p>
+    <p><strong>为什么:</strong> 这就是 VIXL 自带的协议;镜像它而不是发明 HLT/BRK trap,既不动 imported 代码也无需注册 callback;末尾 <code>RET</code> 还顺带验证 <code>RET</code> leaf 的语义。</p>
+  </div>
+</details>
+
+<details class="decision">
+  <summary><span class="d-id">D4</span><span class="d-title">用裸 <code>WriteXRegister</code> / <code>RunFrom</code> / <code>ReadXRegister</code>,不用模板版 <code>RunFrom&lt;R, Args...&gt;</code></span></summary>
+  <div class="d-body">
+    <p>显式写入输入寄存器 → 调用非模板 RunFrom → 显式读取输出寄存器。</p>
+    <p><strong>为什么:</strong> 模板版门控在 <code>VIXL_HAS_ABI_SUPPORT</code> + C++11 + GCC 版本检查上,任何一个失败就整组测试消失;且模板只能传/读 ABI 寄存器(stack args 是 TODO),无法检查任意寄存器/NZCV。</p>
+  </div>
+</details>
+
+<details class="decision">
+  <summary><span class="d-id">D5</span><span class="d-title">每个子测试构造一份新的 <code>Simulator</code></span></summary>
+  <div class="d-body">
+    <p>不在 family 内复用 Simulator + <code>ResetState()</code>,而是局部构造、自然析构。</p>
+    <p><strong>为什么:</strong> 避免"忘了重置某个状态"的二阶 bug;Simulator 内部状态相当庞大,reset 覆盖度漂移会被这个选择隔绝;构造开销在 CI 里看不见。</p>
+  </div>
+</details>
+
+<details class="decision">
+  <summary><span class="d-id">D6</span><span class="d-title">Load/Store 用宿主侧 stack buffer,地址通过 X 寄存器传入</span></summary>
+  <div class="d-body">
+    <p>子测试内 <code>alignas(uint64_t) std::array&lt;uint8_t, 64&gt; buf</code>;<code>WriteXRegister(0, &amp;buf[0])</code>;序列内通过 [X0, #imm] 或 [X0, X1] 访问。</p>
+    <p><strong>为什么:</strong> Simulator 是软件解释器,没有 guest 虚拟地址空间;"内存"就是宿主进程内存;stack 分配天然生命周期对齐 sub-test。</p>
+  </div>
+</details>
+
+<details class="decision">
+  <summary><span class="d-id">D7</span><span class="d-title">BL+RET 用 <code>MOV X19, LR</code> / <code>BL</code> / <code>MOV LR, X19</code> / <code>RET</code> 保住外层 LR</span></summary>
+  <div class="d-body">
+    <p>callee 被 BL 调用时会覆盖 LR;若不恢复,外层 RET 就跳不回 NULL,Run() 不会终止。用 X19(callee-saved)做中转。</p>
+    <p><strong>为什么:</strong> 比 STP X29,X30,[SP,#-16]! / LDP 的标准 prologue 简单(不需要 SP 算术和成对 load/store,那是另一族指令);保持本次测试自包含。</p>
+  </div>
+</details>
+
+<details class="decision">
+  <summary><span class="d-id">D8</span><span class="d-title">B.cond 必须前置 <code>SUBS</code>/<code>CMP</code> 显式设置 NZCV</span></summary>
+  <div class="d-body">
+    <p>不依赖 <code>ResetSystemRegisters</code> 给的 NZCV 默认值;B.cond 子测试同时直接断言 <code>ReadNzcv()</code> 的 Z 位。</p>
+    <p><strong>为什么:</strong> 把"flag-setting 通路对不对"和"条件解码对不对"分开:只看 marker 寄存器的话,这两类回归会混在一起;同时断言 NZCV 直接区分。</p>
+  </div>
+</details>
+
+<details class="decision">
+  <summary><span class="d-id">D9</span><span class="d-title">可执行文件和 CTest case 都叫 <code>simulator_correctness</code>(不带 <code>_test</code> 后缀)</span></summary>
+  <div class="d-body">
+    <p>对齐 <code>simulator_smoke</code> 命名:两者(可执行 + CTest case)同名。</p>
+    <p><strong>为什么:</strong> Proposal 里写 "e.g. simulator_correctness_test" 是举例;设计阶段择优定名,与现有项目惯例一致。</p>
+  </div>
+</details>
+
+<details class="decision">
+  <summary><span class="d-id">D10</span><span class="d-title">CMake 块逐行抄 <code>simulator_smoke</code> 的块</span></summary>
+  <div class="d-body">
+    <p>PRIVATE 链接 <code>gaby_vm::gaby_vm</code>;PRIVATE include <code>${PROJECT_SOURCE_DIR}/src</code>;三个 VIXL 编译定义;<code>gaby_vm_apply_compile_flags</code>(项目策略助手,不是 imported 放宽助手)。</p>
+    <p><strong>为什么:</strong> 测试代码对 imported 头的访问权限和 smoke 完全一致;未来 re-sync 改 VIXL 定义时,两个块一起改、grep 友好;测试代码受项目正常 warning 策略约束。</p>
+  </div>
+</details>
+
+<details class="decision">
+  <summary><span class="d-id">D11</span><span class="d-title">输出流默认 <code>stdout</code>,不做 trace 调整</span></summary>
+  <div class="d-body">
+    <p>同 simulator_smoke;不调 <code>set_trace_parameters</code>。CTest 捕获 stdout 仅在失败时打印,所以默认 verbosity 在通过时无害,在失败时反而有用。</p>
+  </div>
+</details>
+</section>
+
+<!-- ====== EXECUTION PATH ====== -->
+<section id="execution">
+<h2>10 个任务组(实施顺序)</h2>
+<p class="section-intro">
+  按依赖顺序排列。Group 1 把 design 留下的 4 个开放问题钉成具体决定;Group 2 先用空源验证 CMake 装配;然后逐族实现;最后逐条 spec scenario 核对。
+</p>
+
+<div class="timeline">
+
+  <div class="tl-item">
+    <div class="tl-head"><span class="tl-n">G1</span><span class="tl-title">解开放问题(写代码前)</span><span class="tl-count">4 todos</span></div>
+    <div class="tl-desc">钉死:llvm-mc 作为校码工具 · V1 每个 mnemonic 只测一种 form · step-mode helper 延后 · B.cond 同时断言 ReadNzcv()</div>
+  </div>
+
+  <div class="tl-item">
+    <div class="tl-head"><span class="tl-n">G2</span><span class="tl-title">CMake 装配 + 空源</span><span class="tl-count">5 todos</span></div>
+    <div class="tl-desc">先抄 simulator_smoke 那一块,空 <code>main()</code> 验证两个 preset 都过 + CTest 枚举正确。把装配错误和编码错误隔离开。</div>
+  </div>
+
+  <div class="tl-item">
+    <div class="tl-head"><span class="tl-n">G3</span><span class="tl-title">Harness 脚手架</span><span class="tl-count">8 todos</span></div>
+    <div class="tl-desc">includes · TestState · <code>expect_eq_u64/u32/u8</code> · <code>make_simulator</code> 工厂(含 SetCPUFeatures(All())) · 头注释块 · 五个 family stub · main()</div>
+  </div>
+
+  <div class="tl-item">
+    <div class="tl-head"><span class="tl-n">G4</span><span class="tl-title">Arithmetic family</span><span class="tl-count">5 todos</span></div>
+    <div class="tl-desc">ADD / SUB / MUL · 输入值刻意触发 carry / 回绕,期望 = 宿主算出的结果</div>
+  </div>
+
+  <div class="tl-item">
+    <div class="tl-head"><span class="tl-n">G5</span><span class="tl-title">Logical family</span><span class="tl-count">5 todos</span></div>
+    <div class="tl-desc">AND / ORR / EOR · 操作数刻意区分(AND ≠ OR ≠ XOR),防止"巧合通过"</div>
+  </div>
+
+  <div class="tl-item">
+    <div class="tl-head"><span class="tl-n">G6</span><span class="tl-title">Load / Store family</span><span class="tl-count">7 todos</span></div>
+    <div class="tl-desc">LDR 立即/寄存器寻址,STR 立即/寄存器寻址 · 64 字节对齐 buf · 立即偏移的 scaling(×8)在注释里显式</div>
+  </div>
+
+  <div class="tl-item">
+    <div class="tl-head"><span class="tl-n">G7</span><span class="tl-title">Conditional control flow</span><span class="tl-count">8 todos</span></div>
+    <div class="tl-desc">CBZ/CBNZ 各正反双向(4)+ B.cond 前置 SUBS 各正反(2),B.cond 同时验 NZCV · PC-relative 偏移在注释里算清</div>
+  </div>
+
+  <div class="tl-item">
+    <div class="tl-head"><span class="tl-n">G8</span><span class="tl-title">Call / Return family</span><span class="tl-count">5 todos</span></div>
+    <div class="tl-desc">完整 prologue + BL + epilogue + outer-RET + callee + inner-RET 序列 · callee 写哨兵 <code>0xc011ab1e</code> · 验"两条腿"(callee 跑了 + 外层正常终止)</div>
+  </div>
+
+  <div class="tl-item">
+    <div class="tl-head"><span class="tl-n">G9</span><span class="tl-title">逐条对照 spec</span><span class="tl-count">16 todos</span></div>
+    <div class="tl-desc">R-A 6 条(装配契约)+ R-B 8 条(覆盖契约)逐一核对 · 故意篡改一个 expected 验证诊断输出 · <code>openspec validate --strict</code></div>
+  </div>
+
+  <div class="tl-item">
+    <div class="tl-head"><span class="tl-n">G10</span><span class="tl-title">收尾</span><span class="tl-count">4 todos</span></div>
+    <div class="tl-desc">clang-format · 头注释复审 · 提交 · <code>openspec archive</code> 把 delta 合进 canonical spec</div>
+  </div>
+
+</div>
+</section>
+
+<!-- ====== FUTURE VALUE (centerpiece) ====== -->
+<section id="future">
+<h2>这套 harness 在后续开发里会怎样持续发挥作用 ★</h2>
+<p class="section-intro">
+  这是写这个 PR 之外、文档里最容易被忽略的事 ——
+  这一份 <em>~300 行</em> 的测试代码不是为了"现在过 CI",而是为了在接下来的几年里反复 catch 各种回归。
+  下面是六个具体的未来场景。
+</p>
+
+<!-- FLAGSHIP: predecode cache -->
+<div class="future flagship">
+  <span class="badge">项目主目标</span>
+  <h3>1. Predecode / dispatch cache 的 differential oracle</h3>
+  <p class="trigger">
+    <strong>触发事件:</strong>项目核心优化方向落地 ——
+    把 <code>decode → visit → leaf</code> 这条解释路径替换/旁路为
+    <code>cached → direct leaf dispatch</code>(CLAUDE.md 里写的正是这条线)。
+  </p>
+
+  <div class="diagram-wrap" style="margin: 0;">
+  <svg viewBox="0 0 720 280" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Differential oracle for predecode cache">
+    <style>
+      .ob { fill: var(--surface, white); stroke: var(--border-strong, #d4d4d8); stroke-width: 1.5; }
+      .oa { fill: var(--accent-soft, #eef2ff); stroke: var(--accent, #4338ca); stroke-width: 2; }
+      .ok { fill: var(--success-soft, #f0fdf4); stroke: var(--success, #15803d); stroke-width: 2; }
+      .bad { fill: var(--danger-soft, #fef2f2); stroke: var(--danger, #b91c1c); stroke-width: 2; }
+      .tlbl { font: 600 13px -apple-system; fill: var(--text); }
+      .tmono { font: 11px "SF Mono", monospace; fill: var(--text-muted); }
+      .tarr { fill: none; stroke: var(--text-muted); stroke-width: 1.5; marker-end: url(#tri3); }
+    </style>
+    <defs>
+      <marker id="tri3" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+        <path d="M0,0 L8,4 L0,8 Z" fill="#52525b"/>
+      </marker>
+    </defs>
+
+    <!-- input -->
+    <rect class="oa" x="280" y="10" width="160" height="46" rx="5"/>
+    <text class="tlbl" x="360" y="32" text-anchor="middle">同一 uint32_t 序列</text>
+    <text class="tmono" x="360" y="48" text-anchor="middle">[ ADD x0,x1,x2; RET ]</text>
+
+    <path class="tarr" d="M340,60 L210,100"/>
+    <path class="tarr" d="M380,60 L510,100"/>
+
+    <!-- visitor path -->
+    <rect class="ob" x="60" y="105" width="300" height="60" rx="5"/>
+    <text class="tlbl" x="210" y="130" text-anchor="middle">visitor 路径(今天)</text>
+    <text class="tmono" x="210" y="150" text-anchor="middle">Decoder → VisitNamedInstruction → leaf</text>
+
+    <!-- cached path -->
+    <rect class="ob" x="360" y="105" width="300" height="60" rx="5"/>
+    <text class="tlbl" x="510" y="130" text-anchor="middle">cached 路径(未来)</text>
+    <text class="tmono" x="510" y="150" text-anchor="middle">cached entry → direct leaf dispatch</text>
+
+    <path class="tarr" d="M210,170 L300,210"/>
+    <path class="tarr" d="M510,170 L420,210"/>
+
+    <!-- diff -->
+    <rect class="oa" x="285" y="215" width="150" height="46" rx="5"/>
+    <text class="tlbl" x="360" y="237" text-anchor="middle">diff(状态)</text>
+    <text class="tmono" x="360" y="253" text-anchor="middle">simulator_correctness assert</text>
+  </svg>
+  <div class="diagram-caption">本次新增的 <code>simulator_correctness</code> 此时成为<strong>差分参照</strong> —— cache 路径不能比 visitor 路径"多做一件事或少做一件事"。</div>
+  </div>
+
+  <p>
+    <strong>没有它会怎样:</strong>cache 上线只能靠"smoke 还跑得过 + 单元 microbench 看起来变快"来判断没坏 ——
+    这两个证据都不证明 leaf 语义保持。一个改写了 ADD 上溢行为的 cache bug 可能要等几个月才被下游程序触发。
+  </p>
+  <p>
+    <strong>有它会怎样:</strong>cache 实现的 PR 在测试阶段就跑 simulator_correctness 两遍(forced visitor / forced cached),
+    任何状态 diff 立即失败,问题精确定位到指令族。
+    随着 cache 覆盖更多 leaf,这个测试集合同步扩展,差分覆盖与 cache 覆盖<em>共生长</em>。
+  </p>
+</div>
+
+<!-- Other scenarios -->
+<div class="grid grid-2">
+
+  <div class="future">
+    <h3>2. VIXL 上游 re-sync 时的语义漂移检测</h3>
+    <p class="trigger">
+      <strong>触发事件:</strong>团队从 <code>../vixl</code> 拉一次新提交,合并到 <code>src/</code> 下的 imported 文件。
+    </p>
+    <p>
+      <strong>没有它会怎样:</strong>上游修了一个 MUL overflow bug,改变了我们以前依赖的行为;
+      没有任何 CI 信号能区分"合并干净"和"语义改了"。
+    </p>
+    <p>
+      <strong>有它会怎样:</strong>re-sync PR 里 simulator_correctness 的 MUL 子测试失败 →
+      bug 在 review 阶段被讨论,而不是几周后由下游用户报回来。同样适用于 NZCV、移位、load/store 边界等所有上游可能变动的 leaf。
+    </p>
+  </div>
+
+  <div class="future">
+    <h3>3. 覆盖扩展:SIMD / FP / SVE / PointerAuth</h3>
+    <p class="trigger">
+      <strong>触发事件:</strong>未来某个 change 决定加 FP 算术覆盖。
+    </p>
+    <p>
+      <strong>没有它会怎样:</strong>那个 change 从零搭一套测试框架、断言助手、Simulator 工厂、CMake 装配。
+    </p>
+    <p>
+      <strong>有它会怎样:</strong>直接在文件里加 <code>run_fp_tests(TestState&amp;)</code>,
+      复用 <code>make_simulator</code> / <code>expect_eq_*</code> / 编码校验工作流 / CMake 块。
+      <em>哈尼斯本身就是反复增量复用的资产</em> —— 固定成本只付一次。
+    </p>
+  </div>
+
+  <div class="future">
+    <h3>4. Bug 复现成回归保护</h3>
+    <p class="trigger">
+      <strong>触发事件:</strong>有人报告 "Simulator 跑到 <code>SUB x0,x1,x2</code> 当 x1=0x8000...000 时算错"。
+    </p>
+    <p>
+      <strong>没有它会怎样:</strong>修 bug + 写一个一次性脚本验证;一段时间后没人再跑这个脚本,同一 bug 又回来。
+    </p>
+    <p>
+      <strong>有它会怎样:</strong>修 bug 时<em>必须</em>在 <code>run_arithmetic_tests</code> 加一行 sub-test 复现该输入;
+      bug 自此永久回归保护。模式化:"接到 bug → 加 sub-test → 修 → 永远绿"。
+    </p>
+  </div>
+
+  <div class="future">
+    <h3>5. iOS / Android / arm64-linux 移植首信号</h3>
+    <p class="trigger">
+      <strong>触发事件:</strong>项目第一次在 iOS 设备上 build + run 这套代码。
+    </p>
+    <p>
+      <strong>没有它会怎样:</strong>build 过了就以为没事;实际 LDR 在某种对齐下因平台差异行为不同;
+      要靠下游用户在生产里命中才发现。
+    </p>
+    <p>
+      <strong>有它会怎样:</strong>第一次在新平台跑 ctest,如果 simulator_correctness 全绿,
+      就建立了"在这个平台上整数核心通路也对"的可信度;失败时也能立刻定位到指令族而不是茫茫代码海。
+    </p>
+  </div>
+
+  <div class="future">
+    <h3>6. 工具链 / 编译器升级的保险</h3>
+    <p class="trigger">
+      <strong>触发事件:</strong>clang 17 → 19、libc++ 升级、macOS SDK 切版。
+    </p>
+    <p>
+      <strong>没有它会怎样:</strong>新编译器对某段 UB 行为优化得不同,Simulator 中某个 leaf 路径被影响;
+      你以为只是升级,实际改了 simulator 行为,要靠下游回归发现。
+    </p>
+    <p>
+      <strong>有它会怎样:</strong>升级 PR 上 simulator_correctness 任何子测试一变红,
+      升级讨论从"要不要升"自然转入"哪条路径变了"。
+    </p>
+  </div>
+
+</div>
+
+<h3 style="margin-top: 2.5rem;">这套 harness 的"复利"模型</h3>
+<p>
+  写一次,赚一辈子。每加一个新指令族(SIMD/FP/SVE 等),固定成本(harness 装配、Simulator 工厂、断言助手、编码校验流程)<strong>都不需要再付一次</strong>,只付增量(那一族的子测试)。
+  每发生一次未来事件(re-sync / cache 上线 / 平台移植 / 工具链升级 / bug 报告),simulator_correctness 都是<strong>第一个证据源</strong>。
+</p>
+<p>
+  这就是为什么这个 <em>300 行</em> 的测试值得 <em>4 份 artifact</em> 的规划工作 —— 它的杠杆来自后续每一次复用与每一次拦下回归,而不是它本身那一次 CI 通过。
+</p>
+</section>
+
+<!-- ====== FILES ====== -->
+<section id="files">
+<h2>本 change 的文件构成</h2>
+<div class="files">
+  <div class="row">
+    <span class="path">proposal.md</span>
+    <span class="desc">为什么、做什么(范围)、out-of-scope 边界。修改的是 <code>aarch64-simulator</code> 这个 capability。</span>
+  </div>
+  <div class="row">
+    <span class="path">design.md</span>
+    <span class="desc">11 条编号决策(D1–D11) + 7 条 risk + 4 个开放问题。怎么做,以及为什么这么做。</span>
+  </div>
+  <div class="row">
+    <span class="path">specs/aarch64-simulator/spec.md</span>
+    <span class="desc">2 个 ADDED requirements + 11 个 scenario。<code>openspec validate</code> 已通过。</span>
+  </div>
+  <div class="row">
+    <span class="path">tasks.md</span>
+    <span class="desc">10 个任务组,~50 个可勾选 todo。开放问题在 G1 钉死,实施按 G2–G10 顺序。</span>
+  </div>
+  <div class="row">
+    <span class="path">overview.html</span>
+    <span class="desc faint">本页;非 openspec 标准产物,仅作可视化。</span>
+  </div>
+</div>
+
+<p style="margin-top: 2rem; color: var(--text-faint); font-size: 0.85rem;">
+  最后一次 openspec 校验:<code>valid: true</code> · 当前 commit:<code>51222d2</code> ·
+  下一步:从 G1 开始落地,或 review 整个 tasks 列表。
+</p>
+</section>
+
+</div><!-- /.container -->
+
+</body>
+</html>

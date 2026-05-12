@@ -24,3 +24,19 @@ target_compile_definitions(simulator_smoke PRIVATE
 gaby_vm_apply_compile_flags(simulator_smoke)
 
 add_test(NAME simulator_smoke COMMAND simulator_smoke)
+
+# Simulator correctness: drives hand-encoded AArch64 sequences through
+# Simulator::RunFrom and asserts on post-run register / memory state. Reuses
+# the privileged build pattern simulator_smoke uses (PRIVATE include of src/,
+# same three VIXL compile definitions); see
+# openspec/changes/baseline-correctness-test/{design.md (D10), specs/aarch64-simulator/spec.md}.
+add_executable(simulator_correctness simulator_correctness.cc)
+target_link_libraries(simulator_correctness PRIVATE gaby_vm::gaby_vm)
+target_include_directories(simulator_correctness PRIVATE ${PROJECT_SOURCE_DIR}/src)
+target_compile_definitions(simulator_correctness PRIVATE
+  VIXL_INCLUDE_TARGET_A64
+  VIXL_INCLUDE_SIMULATOR_AARCH64
+  $<$<CONFIG:Debug>:VIXL_DEBUG>)
+gaby_vm_apply_compile_flags(simulator_correctness)
+
+add_test(NAME simulator_correctness COMMAND simulator_correctness)
