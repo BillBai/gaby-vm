@@ -55,7 +55,28 @@ namespace {
 using vixl::CPUFeatures;
 using vixl::aarch64::Decoder;
 using vixl::aarch64::Instruction;
+using vixl::aarch64::Register;
 using vixl::aarch64::Simulator;
+
+// Named GPR objects from VIXL (registers-aarch64.h:813, defined by macro
+// expansion of `VIXL_DEFINE_REGISTERS(N)`). Imported here so test code says
+// `x0`, `x1`, `x2` instead of magic integer codes 0, 1, 2.
+using vixl::aarch64::x0;
+using vixl::aarch64::x1;
+using vixl::aarch64::x2;
+
+// -------- Register access (thin wrappers over the unsigned-code API) --------
+//
+// Simulator's Read/WriteXRegister take `unsigned code`, not a Register object,
+// so the .GetCode() call must live somewhere. Concentrating it in these
+// helpers lets every call site use VIXL's named Register objects directly,
+// keeping "which register" visible at the type-system level.
+void write_x(Simulator& sim, const Register& r, uint64_t v) {
+  sim.WriteXRegister(r.GetCode(), static_cast<int64_t>(v));
+}
+uint64_t read_x(const Simulator& sim, const Register& r) {
+  return static_cast<uint64_t>(sim.ReadXRegister(r.GetCode()));
+}
 
 // -------- Test state --------
 
@@ -167,10 +188,10 @@ void run_arithmetic_tests(TestState& s) {
     Decoder decoder;
     Simulator sim(&decoder, stdout);
     configure_simulator(sim);
-    sim.WriteXRegister(1, a);
-    sim.WriteXRegister(2, b);
+    write_x(sim, x1, a);
+    write_x(sim, x2, b);
     sim.RunFrom(reinterpret_cast<const Instruction*>(&code[0]));
-    expect_eq_u64(s, sim.ReadXRegister(0), a + b, "X0 = X1 + X2");
+    expect_eq_u64(s, read_x(sim, x0), a + b, "X0 = X1 + X2");
   }
 
   // SUB x0, x1, x2 — same encoding shape as ADD but with op-bit set.
@@ -187,12 +208,12 @@ void run_arithmetic_tests(TestState& s) {
     Decoder decoder;
     Simulator sim(&decoder, stdout);
     configure_simulator(sim);
-    sim.WriteXRegister(1, a);
-    sim.WriteXRegister(2, b);
+    write_x(sim, x1, a);
+    write_x(sim, x2, b);
     sim.RunFrom(reinterpret_cast<const Instruction*>(&code[0]));
     // a - b in uint64_t modular arithmetic equals AArch64's 64-bit SUB
     // exactly: both wrap modulo 2^64.
-    expect_eq_u64(s, sim.ReadXRegister(0), a - b, "X0 = X1 - X2");
+    expect_eq_u64(s, read_x(sim, x0), a - b, "X0 = X1 - X2");
   }
 
   // MUL x0, x1, x2 — MADD with Ra = XZR. Operands chosen so the full 128-bit
@@ -209,10 +230,10 @@ void run_arithmetic_tests(TestState& s) {
     Decoder decoder;
     Simulator sim(&decoder, stdout);
     configure_simulator(sim);
-    sim.WriteXRegister(1, a);
-    sim.WriteXRegister(2, b);
+    write_x(sim, x1, a);
+    write_x(sim, x2, b);
     sim.RunFrom(reinterpret_cast<const Instruction*>(&code[0]));
-    expect_eq_u64(s, sim.ReadXRegister(0), a * b, "X0 = (X1 * X2) low 64 bits");
+    expect_eq_u64(s, read_x(sim, x0), a * b, "X0 = (X1 * X2) low 64 bits");
   }
 }
 
@@ -240,10 +261,10 @@ void run_logical_tests(TestState& s) {
     Decoder decoder;
     Simulator sim(&decoder, stdout);
     configure_simulator(sim);
-    sim.WriteXRegister(1, a);
-    sim.WriteXRegister(2, b);
+    write_x(sim, x1, a);
+    write_x(sim, x2, b);
     sim.RunFrom(reinterpret_cast<const Instruction*>(&code[0]));
-    expect_eq_u64(s, sim.ReadXRegister(0), a & b, "X0 = X1 & X2");
+    expect_eq_u64(s, read_x(sim, x0), a & b, "X0 = X1 & X2");
   }
 
   // ORR x0, x1, x2 — register-register form.
@@ -256,10 +277,10 @@ void run_logical_tests(TestState& s) {
     Decoder decoder;
     Simulator sim(&decoder, stdout);
     configure_simulator(sim);
-    sim.WriteXRegister(1, a);
-    sim.WriteXRegister(2, b);
+    write_x(sim, x1, a);
+    write_x(sim, x2, b);
     sim.RunFrom(reinterpret_cast<const Instruction*>(&code[0]));
-    expect_eq_u64(s, sim.ReadXRegister(0), a | b, "X0 = X1 | X2");
+    expect_eq_u64(s, read_x(sim, x0), a | b, "X0 = X1 | X2");
   }
 
   // EOR x0, x1, x2 — register-register form.
@@ -272,10 +293,10 @@ void run_logical_tests(TestState& s) {
     Decoder decoder;
     Simulator sim(&decoder, stdout);
     configure_simulator(sim);
-    sim.WriteXRegister(1, a);
-    sim.WriteXRegister(2, b);
+    write_x(sim, x1, a);
+    write_x(sim, x2, b);
     sim.RunFrom(reinterpret_cast<const Instruction*>(&code[0]));
-    expect_eq_u64(s, sim.ReadXRegister(0), a ^ b, "X0 = X1 ^ X2");
+    expect_eq_u64(s, read_x(sim, x0), a ^ b, "X0 = X1 ^ X2");
   }
 }
 
@@ -303,9 +324,9 @@ void run_loadstore_tests(TestState& s) {
     Decoder decoder;
     Simulator sim(&decoder, stdout);
     configure_simulator(sim);
-    sim.WriteXRegister(1, reinterpret_cast<uint64_t>(buf.data()));
+    write_x(sim, x1, reinterpret_cast<uint64_t>(buf.data()));
     sim.RunFrom(reinterpret_cast<const Instruction*>(&code[0]));
-    expect_eq_u64(s, sim.ReadXRegister(0), ldr_pattern, "X0 = mem[buf+16]");
+    expect_eq_u64(s, read_x(sim, x0), ldr_pattern, "X0 = mem[buf+16]");
   }
 
   // LDR x0, [x1, x2] — register offset (LSL #0, the default no-shift form).
@@ -320,13 +341,10 @@ void run_loadstore_tests(TestState& s) {
     Decoder decoder;
     Simulator sim(&decoder, stdout);
     configure_simulator(sim);
-    sim.WriteXRegister(1, reinterpret_cast<uint64_t>(buf.data()));
-    sim.WriteXRegister(2, 16ULL);
+    write_x(sim, x1, reinterpret_cast<uint64_t>(buf.data()));
+    write_x(sim, x2, 16ULL);
     sim.RunFrom(reinterpret_cast<const Instruction*>(&code[0]));
-    expect_eq_u64(s,
-                  sim.ReadXRegister(0),
-                  ldr_pattern,
-                  "X0 = mem[buf + X2(16)]");
+    expect_eq_u64(s, read_x(sim, x0), ldr_pattern, "X0 = mem[buf + X2(16)]");
   }
 
   // STR x0, [x1, #24] — immediate (unsigned) offset.
@@ -340,8 +358,8 @@ void run_loadstore_tests(TestState& s) {
     Decoder decoder;
     Simulator sim(&decoder, stdout);
     configure_simulator(sim);
-    sim.WriteXRegister(0, str_value);
-    sim.WriteXRegister(1, reinterpret_cast<uint64_t>(buf.data()));
+    write_x(sim, x0, str_value);
+    write_x(sim, x1, reinterpret_cast<uint64_t>(buf.data()));
     sim.RunFrom(reinterpret_cast<const Instruction*>(&code[0]));
     uint64_t read_back = 0;
     std::memcpy(&read_back, buf.data() + 24, sizeof(read_back));
@@ -359,9 +377,9 @@ void run_loadstore_tests(TestState& s) {
     Decoder decoder;
     Simulator sim(&decoder, stdout);
     configure_simulator(sim);
-    sim.WriteXRegister(0, str_value);
-    sim.WriteXRegister(1, reinterpret_cast<uint64_t>(buf.data()));
-    sim.WriteXRegister(2, 24ULL);
+    write_x(sim, x0, str_value);
+    write_x(sim, x1, reinterpret_cast<uint64_t>(buf.data()));
+    write_x(sim, x2, 24ULL);
     sim.RunFrom(reinterpret_cast<const Instruction*>(&code[0]));
     uint64_t read_back = 0;
     std::memcpy(&read_back, buf.data() + 24, sizeof(read_back));
@@ -391,11 +409,11 @@ void run_branch_tests(TestState& s) {
     Decoder decoder;
     Simulator sim(&decoder, stdout);
     configure_simulator(sim);
-    sim.WriteXRegister(0, sentinel_a);
-    sim.WriteXRegister(1, 0ULL);
+    write_x(sim, x0, sentinel_a);
+    write_x(sim, x1, 0ULL);
     sim.RunFrom(reinterpret_cast<const Instruction*>(&code[0]));
     expect_eq_u64(s,
-                  sim.ReadXRegister(0),
+                  read_x(sim, x0),
                   sentinel_a,
                   "X0 == sentinel_a (CBZ taken)");
   }
@@ -410,11 +428,11 @@ void run_branch_tests(TestState& s) {
     Decoder decoder;
     Simulator sim(&decoder, stdout);
     configure_simulator(sim);
-    sim.WriteXRegister(0, sentinel_a);
-    sim.WriteXRegister(1, 1ULL);
+    write_x(sim, x0, sentinel_a);
+    write_x(sim, x1, 1ULL);
     sim.RunFrom(reinterpret_cast<const Instruction*>(&code[0]));
     expect_eq_u64(s,
-                  sim.ReadXRegister(0),
+                  read_x(sim, x0),
                   sentinel_b,
                   "X0 == sentinel_b (CBZ not-taken; MOV ran)");
   }
@@ -430,11 +448,11 @@ void run_branch_tests(TestState& s) {
     Decoder decoder;
     Simulator sim(&decoder, stdout);
     configure_simulator(sim);
-    sim.WriteXRegister(0, sentinel_a);
-    sim.WriteXRegister(1, 1ULL);
+    write_x(sim, x0, sentinel_a);
+    write_x(sim, x1, 1ULL);
     sim.RunFrom(reinterpret_cast<const Instruction*>(&code[0]));
     expect_eq_u64(s,
-                  sim.ReadXRegister(0),
+                  read_x(sim, x0),
                   sentinel_a,
                   "X0 == sentinel_a (CBNZ taken)");
   }
@@ -449,11 +467,11 @@ void run_branch_tests(TestState& s) {
     Decoder decoder;
     Simulator sim(&decoder, stdout);
     configure_simulator(sim);
-    sim.WriteXRegister(0, sentinel_a);
-    sim.WriteXRegister(1, 0ULL);
+    write_x(sim, x0, sentinel_a);
+    write_x(sim, x1, 0ULL);
     sim.RunFrom(reinterpret_cast<const Instruction*>(&code[0]));
     expect_eq_u64(s,
-                  sim.ReadXRegister(0),
+                  read_x(sim, x0),
                   sentinel_b,
                   "X0 == sentinel_b (CBNZ not-taken; MOV ran)");
   }
@@ -475,11 +493,11 @@ void run_branch_tests(TestState& s) {
     Decoder decoder;
     Simulator sim(&decoder, stdout);
     configure_simulator(sim);
-    sim.WriteXRegister(0, sentinel_a);
-    sim.WriteXRegister(1, 42ULL);  // any value; SUBS X1-X1 produces 0
+    write_x(sim, x0, sentinel_a);
+    write_x(sim, x1, 42ULL);  // any value; SUBS X1-X1 produces 0
     sim.RunFrom(reinterpret_cast<const Instruction*>(&code[0]));
     expect_eq_u64(s,
-                  sim.ReadXRegister(0),
+                  read_x(sim, x0),
                   sentinel_a,
                   "X0 == sentinel_a (B.EQ taken)");
     expect_eq_u8(s,
@@ -500,12 +518,12 @@ void run_branch_tests(TestState& s) {
     Decoder decoder;
     Simulator sim(&decoder, stdout);
     configure_simulator(sim);
-    sim.WriteXRegister(0, sentinel_a);
-    sim.WriteXRegister(1, 10ULL);
-    sim.WriteXRegister(2, 3ULL);
+    write_x(sim, x0, sentinel_a);
+    write_x(sim, x1, 10ULL);
+    write_x(sim, x2, 3ULL);
     sim.RunFrom(reinterpret_cast<const Instruction*>(&code[0]));
     expect_eq_u64(s,
-                  sim.ReadXRegister(0),
+                  read_x(sim, x0),
                   sentinel_b,
                   "X0 == sentinel_b (B.EQ not-taken; MOV ran)");
     expect_eq_u8(s,
@@ -555,7 +573,7 @@ void run_call_return_tests(TestState& s) {
     configure_simulator(sim);
     sim.RunFrom(reinterpret_cast<const Instruction*>(&code[0]));
     expect_eq_u64(s,
-                  sim.ReadXRegister(0),
+                  read_x(sim, x0),
                   0xC011AB1EULL,
                   "X0 == sentinel 0xC011AB1E (callee ran AND outer RET "
                   "reached)");
