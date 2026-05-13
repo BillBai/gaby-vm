@@ -24,15 +24,15 @@ The main optimization direction is simple:
 predecode once -> cache decoded dispatch target -> execute cached path repeatedly
 ```
 
-This is a decode/dispatch cache, not a new complex IR.
+This is a decode/dispatch cache, not a new complex IR. Keep VIXL's leaf execution code wherever practical; change the repeated execution path, not the semantics.
 
 The primary no-JIT target is iOS. The project should also support macOS and POSIX-like environments such as Linux, Android, and HarmonyOS. Windows is not a target for now.
 
-A core goal is to make interpreted execution as fast as practical while preserving correctness.
+Correctness first, then interpreter execution speed.
 
 ## Scope
 
-V1 should focus on EL0/user-mode A64 execution, ordinary register/memory behavior, and compatibility with the imported VIXL simulator semantics.
+V1 focuses on EL0/user-mode A64 execution, ordinary register/memory behavior, and compatibility with the imported VIXL simulator semantics.
 
 Out of scope unless explicitly required later:
 
@@ -47,60 +47,36 @@ Out of scope unless explicitly required later:
 
 Traps, unsupported instructions, syscall-like instructions, or simulated faults may be represented later through callbacks, status codes, or fallback behavior. Do not build a full exception-level simulator in V1.
 
-## Implementation Direction
+## 中文表达风格
 
-Keep VIXL's AArch64 simulator leaf execution code wherever practical.
+用中文回复时，请用自然、清醒、像真人聊天的中文。避免 AI 味、报告腔、公众号腔、咨询腔和过度结构化。不要滥用「本质、底层逻辑、维度、框架、闭环、赋能、抓手、范式」这类抽象词。可以有结构，但不要机械分点。优先说人话、说重点、给判断、给能直接用的建议。不要过度安慰，不要灌鸡汤，不要为了显得全面而啰嗦。
 
-Change the repeated execution path from:
+同时也不要为了简洁而把句子砍得过短。要把背景介绍清楚，详细一点，假设读者不一定具备相关知识。整体目标是「说人话」——既不是 AI 报告体，也不是电报式短句。
 
-```text
-decode instruction -> visitor dispatch -> execute leaf
-```
-
-to:
-
-```text
-cached instruction -> direct cached leaf dispatch
-```
-
-Do not rewrite instruction semantics just to make the cache cleaner.
-
-## Build and Platform Notes
-
-Use CMake for this standalone repository.
-
-Keep the code portable across iOS, macOS, and POSIX-like systems. Avoid platform assumptions that would make iOS embedding difficult.
-
-No runtime code generation:
-
-- no JIT
-- no RWX memory
-- no executable memory allocation
-- predecoded data is ordinary data
-
-## Validation
-
-Use VIXL's own tests where practical.
-
-Also add Stretto-specific tests for:
-
-- standalone extraction correctness
-- baseline simulator behavior
-- predecoded dispatch behavior
-- fallback behavior
-- performance benchmarks
-
-When possible, compare the cached path against the original VIXL-style simulator path.
+这条规则对生成的文档内容同样适用（包括中文注释、中文 commit message、中文说明性文本等等）。
 
 ## Agent Rules
 
 - Study `../vixl` before changing related code.
 - Prioritize correctness first, then interpreter execution speed. Structural changes are acceptable when they clearly serve performance or standalone maintainability.
-- Do not blindly import the entire VIXL repository.
-- Do not invent a new IR unless explicitly asked.
-- Do not add JIT assumptions.
-- Do not rewrite simulator leaf semantics unnecessarily.
+- Do not blindly import the entire VIXL repository. Stay within the import tiers defined in [`docs/refs/vixl-extraction-map.md`](docs/refs/vixl-extraction-map.md).
+- Do not invent a new IR.
+- Do not add JIT assumptions: no runtime code generation, no RWX memory, no executable memory allocation. Predecoded data is ordinary data.
+- Do not rewrite simulator leaf semantics just to make the cache cleaner.
+- Edits to imported files must use the marker convention; see [`docs/architecture.md`](docs/architecture.md#vixl-import-boundary).
 - Keep CMake working.
-- Keep iOS/macOS/POSIX portability in mind.
-- Preserve upstream license headers.
+- Keep iOS/macOS/POSIX portability in mind. Avoid platform assumptions that would make iOS embedding difficult.
+- Preserve upstream license headers; never rewrite VIXL copyrights.
 - Optimize with measurements, but do not avoid necessary architectural changes merely to keep patches small.
+
+## References
+
+Durable conventions and design facts live in `docs/`. Read these before proposing or making non-trivial changes:
+
+- Architecture, memory model, threading model, VIXL import boundary → [`docs/architecture.md`](docs/architecture.md)
+- Internal build structure (targets, warning-policy split, VIXL define scoping) → [`docs/build.md`](docs/build.md)
+- Coding conventions (formatting, namespaces, license headers, marker convention) → [`docs/conventions.md`](docs/conventions.md)
+- Testing strategy (CTest layout, encoding policy) → [`docs/testing.md`](docs/testing.md)
+- VIXL import tier list → [`docs/refs/vixl-extraction-map.md`](docs/refs/vixl-extraction-map.md)
+- Capability requirements (normative) → [`openspec/specs/`](openspec/specs/)
+- User-facing build and embedding instructions → [`README.md`](README.md)

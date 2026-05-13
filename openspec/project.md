@@ -1,0 +1,46 @@
+# Project context
+
+Gaby-VM is an embeddable AArch64 (EL0 / user-mode) instruction interpreter
+built on imported VIXL simulator semantics. It ships as the CMake static
+library `gaby_vm::gaby_vm`, designed to embed into a host process whose
+address space the simulator shares directly.
+
+Tech stack: C++17, CMake ≥ 3.21, CTest, `.clang-format` (Google base).
+
+## Where to find everything
+
+This file deliberately stays thin. Look elsewhere for substantive content:
+
+- Mission, scope, and agent rules → [`../AGENTS.md`](../AGENTS.md)
+- Architecture, memory model, threading model, VIXL import boundary → [`../docs/architecture.md`](../docs/architecture.md)
+- Internal build structure → [`../docs/build.md`](../docs/build.md)
+- Coding conventions → [`../docs/conventions.md`](../docs/conventions.md)
+- Testing strategy → [`../docs/testing.md`](../docs/testing.md)
+- VIXL import tier list → [`../docs/refs/vixl-extraction-map.md`](../docs/refs/vixl-extraction-map.md)
+- Live capability specs (normative requirements) → [`specs/`](specs/)
+- User-facing build and embedding instructions → [`../README.md`](../README.md)
+
+## OpenSpec notes specific to this repo
+
+- The repo uses OpenSpec for change proposals. Capabilities live under
+  `specs/<capability>/spec.md`. In-flight changes live under `changes/`;
+  archived changes under `changes/archive/`.
+- The default capability for changes touching the imported simulator boundary
+  is `aarch64-simulator`. Cross-cutting work (a future predecode/dispatch
+  cache, the embedding API, platform-portability layers) should introduce its
+  own capability rather than expanding `aarch64-simulator`.
+- When authoring a change, **link to docs rather than restating them**. The
+  docs above are the source of truth for conventions; duplicating into a
+  change proposal tends to create drift.
+- Two constraints to keep in mind, both drawn from the docs:
+  - Imports stay within the tiers listed in the extraction map. If a change
+    needs something outside the current tiers, update
+    `docs/refs/vixl-extraction-map.md` alongside the import.
+  - Edits to imported files use the `// gaby-vm` marker convention so that a
+    single `git grep gaby-vm src/` continues to enumerate drift from
+    upstream.
+- Design context to inherit: gaby-vm is used as **one `Simulator` instance
+  per host thread, lazily initialised**. State that a change introduces is
+  easiest to reason about when it's per-instance, or read-only / atomically
+  updated if shared. Cross-thread mutable global state doesn't fit this
+  model.

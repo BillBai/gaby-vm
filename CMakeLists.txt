@@ -11,6 +11,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 option(GABY_VM_BUILD_TESTS "Build gaby-vm tests" ${PROJECT_IS_TOP_LEVEL})
 option(GABY_VM_BUILD_DEMOS "Build gaby-vm demos" ${PROJECT_IS_TOP_LEVEL})
+option(GABY_VM_BUILD_BENCHMARKS "Build gaby-vm benchmarks" ${PROJECT_IS_TOP_LEVEL})
 
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/CompileFlags.cmake)
 
@@ -23,4 +24,8 @@ endif()
 
 if(GABY_VM_BUILD_DEMOS)
   add_subdirectory(demos/cli)
+endif()
+
+if(GABY_VM_BUILD_BENCHMARKS)
+  add_subdirectory(bench)
 endif()

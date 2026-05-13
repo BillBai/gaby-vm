@@ -1,0 +1,899 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>baseline-benchmark-harness · OpenSpec 改动总览</title>
+<style>
+*,*::before,*::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg: #fafaf7;
+  --bg-card: #ffffff;
+  --bg-elevated: #f3f3ef;
+  --fg: #1a1a1a;
+  --fg-muted: #5a5a5a;
+  --fg-subtle: #8a8a85;
+  --accent: #2563eb;
+  --accent-soft: #dbeafe;
+  --teal: #0d9488;
+  --teal-soft: #ccfbf1;
+  --success: #059669;
+  --success-soft: #d1fae5;
+  --warning: #b45309;
+  --warning-soft: #fef3c7;
+  --danger: #b91c1c;
+  --danger-soft: #fee2e2;
+  --code-bg: #f6f8fa;
+  --border: #e5e5e0;
+  --shadow: 0 1px 3px rgba(0,0,0,0.05);
+}
+html { scroll-behavior: smooth; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  background: var(--bg);
+  color: var(--fg);
+  line-height: 1.6;
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 2rem 1.5rem 5rem;
+}
+code, pre, .mono {
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 0.88em;
+}
+code {
+  background: var(--code-bg);
+  padding: 0.1em 0.4em;
+  border-radius: 3px;
+  border: 1px solid var(--border);
+  white-space: nowrap;
+}
+pre {
+  background: var(--code-bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.75rem 1rem;
+  overflow-x: auto;
+  font-size: 0.85em;
+  margin: 0.5rem 0;
+}
+h1, h2, h3, h4 { line-height: 1.3; font-weight: 600; }
+h1 { font-size: 1.85rem; margin-bottom: 0.4rem; letter-spacing: -0.01em; }
+h2 {
+  font-size: 1.4rem;
+  margin: 2.75rem 0 1rem;
+  padding-bottom: 0.45rem;
+  border-bottom: 2px solid var(--accent);
+}
+h3 { font-size: 1.08rem; margin: 1rem 0 0.5rem; }
+h4 { font-size: 0.95rem; margin: 0.7rem 0 0.25rem; color: var(--fg-muted); }
+p { margin: 0.5rem 0; }
+ul, ol { margin: 0.5rem 0 0.5rem 1.5rem; }
+li { margin-bottom: 0.3rem; }
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding-bottom: 1.5rem;
+  border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+.header-meta { color: var(--fg-muted); font-size: 0.88rem; margin-top: 0.3rem; }
+.header-meta code { font-size: 0.85em; }
+.progress { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; }
+.progress-item {
+  display: flex; align-items: center; gap: 0.35rem;
+  font-size: 0.82rem; padding: 0.3rem 0.7rem;
+  background: var(--success-soft); color: var(--success);
+  border-radius: 999px; font-weight: 600;
+}
+.progress-item::before { content: "✓"; font-weight: 700; }
+
+nav.toc {
+  background: var(--bg-elevated);
+  border-radius: 8px;
+  padding: 0.8rem 1.25rem;
+  margin: 1.5rem 0 2rem;
+  display: flex;
+  gap: 1.4rem;
+  flex-wrap: wrap;
+  font-size: 0.88rem;
+}
+nav.toc a {
+  color: var(--accent);
+  text-decoration: none;
+  font-weight: 500;
+}
+nav.toc a:hover { text-decoration: underline; }
+
+.callout {
+  background: var(--accent-soft);
+  border-left: 4px solid var(--accent);
+  padding: 1rem 1.25rem;
+  border-radius: 4px;
+  margin: 1rem 0;
+  font-size: 0.95rem;
+}
+.callout-teal {
+  background: var(--teal-soft);
+  border-left-color: var(--teal);
+}
+.callout strong { color: var(--accent); }
+.callout-teal strong { color: var(--teal); }
+
+.kvgrid {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 0.4rem 1.25rem;
+  margin: 0.75rem 0;
+  font-size: 0.92rem;
+}
+.kvgrid dt {
+  color: var(--fg-muted);
+  font-weight: 500;
+  white-space: nowrap;
+}
+.kvgrid dd { color: var(--fg); }
+
+.badge {
+  display: inline-block;
+  padding: 0.13rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  vertical-align: 0.1em;
+  margin-left: 0.4rem;
+}
+.badge-new { background: var(--accent-soft); color: var(--accent); }
+.badge-resolved { background: var(--success-soft); color: var(--success); }
+.badge-out { background: var(--danger-soft); color: var(--danger); }
+.badge-warn { background: var(--warning-soft); color: var(--warning); }
+
+.scope-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+@media (max-width: 720px) { .scope-grid { grid-template-columns: 1fr; } }
+.scope-box {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 1rem 1.25rem;
+}
+.scope-box.in { border-top: 3px solid var(--success); }
+.scope-box.out { border-top: 3px solid var(--danger); }
+.scope-box h3 { margin-top: 0; display: flex; align-items: center; gap: 0.5rem; }
+.scope-box ul { font-size: 0.92rem; }
+
+.decision-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+  gap: 1rem;
+  margin-top: 1rem;
+}
+.decision {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--accent);
+  border-radius: 6px;
+  padding: 1rem 1.2rem;
+  display: flex; flex-direction: column;
+  font-size: 0.93rem;
+}
+.decision-num {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--accent);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.decision h3 { margin: 0.2rem 0 0.6rem; font-size: 1.02rem; }
+.decision .why {
+  color: var(--fg-muted);
+  font-size: 0.88rem;
+  margin-top: auto;
+  padding-top: 0.6rem;
+  border-top: 1px dashed var(--border);
+}
+
+.risk {
+  display: grid;
+  grid-template-columns: 1.2rem 1fr;
+  gap: 0.6rem;
+  padding: 0.7rem 1rem;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--warning);
+  border-radius: 5px;
+  margin-bottom: 0.5rem;
+  font-size: 0.92rem;
+}
+.risk-icon { color: var(--warning); font-weight: 700; font-size: 1rem; line-height: 1.4; }
+.risk-content strong { color: var(--warning); }
+.risk-content .mit { color: var(--fg-muted); display: block; margin-top: 0.2rem; }
+
+.oq {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 0.7rem 1rem;
+  margin-top: 0.5rem;
+}
+.oq-q { font-weight: 500; }
+.oq-a {
+  background: var(--success-soft);
+  border-left: 3px solid var(--success);
+  padding: 0.5rem 0.75rem;
+  border-radius: 4px;
+  font-size: 0.92rem;
+}
+.oq-a strong { color: var(--success); }
+
+details.req {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.7rem 1.1rem;
+  margin-bottom: 0.5rem;
+}
+details.req[open] { border-color: var(--accent); }
+details.req > summary {
+  cursor: pointer;
+  font-weight: 500;
+  list-style: none;
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  font-size: 0.95rem;
+}
+details.req > summary::before {
+  content: "▸";
+  color: var(--accent);
+  flex-shrink: 0;
+  font-size: 0.85em;
+}
+details.req[open] > summary::before { content: "▾"; }
+details.req .req-num {
+  color: var(--accent);
+  font-family: ui-monospace, monospace;
+  font-size: 0.85em;
+  flex-shrink: 0;
+}
+details.req .scenarios {
+  margin-top: 0.7rem;
+  padding-left: 1.1rem;
+  border-left: 2px solid var(--border);
+}
+.scenario {
+  background: var(--code-bg);
+  padding: 0.55rem 0.8rem;
+  margin: 0.4rem 0;
+  border-radius: 4px;
+  font-size: 0.88rem;
+}
+.scenario .sname {
+  display: block;
+  color: var(--accent);
+  font-weight: 600;
+  margin-bottom: 0.25rem;
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.scenario .when, .scenario .then {
+  display: block;
+  padding-left: 4.5em;
+  text-indent: -4.5em;
+  margin: 0.15rem 0;
+  font-size: 0.92em;
+}
+.scenario .when::before {
+  content: "WHEN";
+  font-weight: 700;
+  color: var(--teal);
+  display: inline-block;
+  width: 4em;
+  font-size: 0.8em;
+}
+.scenario .then::before {
+  content: "THEN";
+  font-weight: 700;
+  color: var(--accent);
+  display: inline-block;
+  width: 4em;
+  font-size: 0.8em;
+}
+
+.task-group {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  margin-bottom: 0.65rem;
+  overflow: hidden;
+}
+.task-group > summary {
+  cursor: pointer;
+  list-style: none;
+  padding: 0.7rem 1.1rem;
+  background: var(--bg-elevated);
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-size: 0.95rem;
+}
+.task-group > summary::before {
+  content: "▸";
+  color: var(--accent);
+  font-size: 0.85em;
+}
+.task-group[open] > summary::before { content: "▾"; }
+.task-group > summary .gnum {
+  font-family: ui-monospace, monospace;
+  color: var(--accent);
+  font-size: 0.9em;
+}
+.task-group > summary .count {
+  margin-left: auto;
+  background: var(--bg-card);
+  color: var(--fg-muted);
+  font-size: 0.78rem;
+  padding: 0.15rem 0.55rem;
+  border-radius: 999px;
+  font-weight: 500;
+}
+.task-list { padding: 0.5rem 1.1rem 0.7rem; }
+.task {
+  display: grid;
+  grid-template-columns: 1.2rem 2.5rem 1fr;
+  gap: 0.5rem;
+  padding: 0.3rem 0;
+  font-size: 0.88rem;
+  align-items: baseline;
+}
+.task .id {
+  color: var(--accent);
+  font-family: ui-monospace, monospace;
+  font-size: 0.85em;
+  font-weight: 500;
+}
+.task .check {
+  color: var(--fg-subtle);
+  font-family: ui-monospace, monospace;
+  font-size: 0.9em;
+}
+.task .spec-ref {
+  display: inline-block;
+  background: var(--teal-soft);
+  color: var(--teal);
+  font-size: 0.72rem;
+  padding: 0.05rem 0.4rem;
+  border-radius: 3px;
+  margin-left: 0.4rem;
+  font-style: italic;
+}
+
+.stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 0.7rem;
+  margin: 1rem 0 1.5rem;
+}
+.stat {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  padding: 0.75rem 1rem;
+  border-radius: 6px;
+  text-align: center;
+}
+.stat-num {
+  font-size: 1.6rem;
+  font-weight: 700;
+  color: var(--accent);
+  line-height: 1;
+  display: block;
+}
+.stat-label {
+  font-size: 0.78rem;
+  color: var(--fg-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-top: 0.3rem;
+  display: block;
+}
+
+table.simple {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0.75rem 0;
+  font-size: 0.9rem;
+}
+table.simple th, table.simple td {
+  border: 1px solid var(--border);
+  padding: 0.55rem 0.8rem;
+  text-align: left;
+  vertical-align: top;
+}
+table.simple th {
+  background: var(--bg-elevated);
+  font-weight: 600;
+  font-size: 0.85rem;
+  color: var(--fg-muted);
+}
+table.simple tr:hover td { background: var(--code-bg); }
+
+.footer {
+  margin-top: 4rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--border);
+  color: var(--fg-subtle);
+  font-size: 0.85rem;
+  text-align: center;
+}
+.footer code { font-size: 0.85em; }
+</style>
+</head>
+<body>
+
+<header class="header">
+  <div>
+    <h1>baseline-benchmark-harness</h1>
+    <div class="header-meta">
+      Schema <code>spec-driven</code> · 新增 capability <code>benchmark-harness</code>
+      · 创建于 2026-05-12 · 状态 <strong>4/4 artifacts complete</strong>
+    </div>
+  </div>
+  <div class="progress">
+    <span class="progress-item">proposal</span>
+    <span class="progress-item">design</span>
+    <span class="progress-item">specs</span>
+    <span class="progress-item">tasks</span>
+  </div>
+</header>
+
+<nav class="toc">
+  <a href="#why">为什么</a>
+  <a href="#scope">范围</a>
+  <a href="#decisions">7 个 Decision</a>
+  <a href="#risks">Risks</a>
+  <a href="#oq">Open Questions</a>
+  <a href="#requirements">9 条 Requirements</a>
+  <a href="#tasks">32 个 Tasks</a>
+</nav>
+
+<!-- ====== WHY ====== -->
+<section id="why">
+  <h2>为什么要做这个 change</h2>
+  <div class="callout">
+    项目的优化方向 <code>predecode once → cached dispatch → repeated execution</code> 只有在<strong>有可测量基准</strong>的前提下才有意义。方法论文档 <code>docs/refs/baseline-benchmark-suite.md</code> 已经写好但没有可跑的代码，前一个 archived 改动 <code>baseline-correctness-test</code> 也把吞吐量测量明确推迟到了这次。
+    <br><br>
+    这次 change 把 harness 落地——<strong>workload、计时循环、报告格式</strong>——让所有后续优化（cache、leaf 微调、任何事）都有一个 measurement contract 可以对齐。
+  </div>
+</section>
+
+<!-- ====== SCOPE ====== -->
+<section id="scope">
+  <h2>范围</h2>
+  <div class="scope-grid">
+    <div class="scope-box in">
+      <h3>本次做 <span class="badge badge-new">In scope</span></h3>
+      <ul>
+        <li>新增顶层 <code>bench/</code> 目录</li>
+        <li>新增 CMake 选项 <code>GABY_VM_BUILD_BENCHMARKS</code>（mirror <code>GABY_VM_BUILD_TESTS/DEMOS</code>）</li>
+        <li><strong>两个</strong> binary：
+          <ul>
+            <li><code>bench_baseline</code> — 实测，mixed workload</li>
+            <li><code>bench_smoke</code> — 自测，~32 条直线指令</li>
+          </ul>
+        </li>
+        <li>两份 workload header（离线生成、commit 进仓库）</li>
+        <li>共享的 <code>bench_runner</code>：warm-up、5 秒预算循环、LR 写入、输出 K/V 行</li>
+        <li><code>bench/README.md</code>（构建、调用、生成流程、与上游对比）</li>
+      </ul>
+    </div>
+    <div class="scope-box out">
+      <h3>本次<strong>不做</strong> <span class="badge badge-out">Out of scope</span></h3>
+      <ul>
+        <li>记录实际 baseline 数字（另一份 report doc 的事）</li>
+        <li>CI、回归告警、自动绘图</li>
+        <li>对照原生 AArch64 硬件执行</li>
+        <li>单指令类 microbenchmark（NEON / SVE / 整数 only / 等等）</li>
+        <li>cache-on vs cache-off 对比（cache 还不存在）</li>
+        <li>多实例原子并发压测（属于 atomics 工作）</li>
+        <li>动 <code>src/</code> / 导入 VIXL / <code>include/gaby_vm/</code> 的任何代码</li>
+        <li>多 workload 选择 UI（<code>--workload &lt;name&gt;</code> 等）</li>
+        <li>统计聚合（median / IQR over N runs）</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ====== DECISIONS ====== -->
+<section id="decisions">
+  <h2>7 个 Design Decision</h2>
+  <div class="decision-grid">
+
+    <div class="decision">
+      <div class="decision-num">Decision 1</div>
+      <h3>Workload 是 commit 的 C++ header</h3>
+      <p>每个 workload 一个头文件，包含 4 个 <code>constexpr</code>：
+        <code>kXxxWorkloadInstructions[]</code>、
+        <code>StaticWordCount</code>、
+        <code>DynamicInstructionsPerIteration</code>、
+        <code>GeneratorTag</code>。schema 在两份 workload 间统一。</p>
+      <div class="why">为什么不用二进制 blob：免 I/O、免路径解析、对 iOS 嵌入零摩擦。</div>
+    </div>
+
+    <div class="decision">
+      <div class="decision-num">Decision 2</div>
+      <h3>Workload 离线生成、不进 build</h3>
+      <p><strong>Mixed</strong>：仓库外的 C++ 程序用上游 <code>BenchCodeGenerator</code> 生成字节，<u>同时</u>跑一次 instrumented simulator（<code>set_trace_parameters</code> hook）记录动态指令数。<br>
+      <strong>Smoke</strong>：<code>llvm-mc</code> + <code>llvm-objcopy</code>，无上游 VIXL 依赖。</p>
+      <div class="why">build 保持 hermetic；重新生成是开发者偶发动作，可重现（seed + commit hash）。</div>
+    </div>
+
+    <div class="decision">
+      <div class="decision-num">Decision 3</div>
+      <h3>时间预算循环 + 数 iteration</h3>
+      <p>1 次 warm-up（丢弃）→ <code>steady_clock</code> 起点 → 循环 <code>RunFrom</code> 直到累计时长 ≥ 目标。默认 <strong>5 秒</strong>（匹配上游 <code>kDefaultRunTime</code>），可用 <code>--seconds &lt;float&gt;</code> 覆盖。</p>
+      <div class="why">和上游 <code>bench-mixed-sim</code> 形状逐字对齐，跨对比直接可信。</div>
+    </div>
+
+    <div class="decision">
+      <div class="decision-num">Decision 4</div>
+      <h3>计时用 <code>std::chrono::steady_clock</code></h3>
+      <p>单调、亚微秒分辨率、零平台分支。多秒测量窗口下分辨率冗余，<code>rdtsc</code> 这种带不来增益。</p>
+      <div class="why">不复制上游 <code>BenchTimer</code>（它在 Tier 0），<code>&lt;chrono&gt;</code> 够用。</div>
+    </div>
+
+    <div class="decision">
+      <div class="decision-num">Decision 5</div>
+      <h3>V1：一个 workload 一个 binary</h3>
+      <p>两个 binary（<code>bench_baseline</code>、<code>bench_smoke</code>）共享一份 <code>bench_runner</code>（OBJECT library）；只有 <code>main()</code> 里 include 的 workload header 不同。</p>
+      <div class="why">N=2 还不值得搞 <code>--workload &lt;name&gt;</code> 注册表，复制 20 行 main 比设计选择 UX 便宜。</div>
+    </div>
+
+    <div class="decision">
+      <div class="decision-num">Decision 6</div>
+      <h3>输出 = 纯文本 K/V 行</h3>
+      <p><strong>主指标</strong> <code>iterations_per_second</code>（=upstream <code>PrintResults</code> 格式）；<strong>派生</strong> <code>throughput_insn_per_sec</code> 和 <code>ns_per_instruction</code> 都用<u>动态计数</u>除，绝不用静态字数。</p>
+      <div class="why">JSON 延后到有下游消费者再上；K/V 文本 grep/awk 友好。</div>
+    </div>
+
+    <div class="decision">
+      <div class="decision-num">Decision 7</div>
+      <h3>CMake mirror <code>test/CMakeLists.txt</code></h3>
+      <p><code>OBJECT</code> 库 <code>bench_runner</code> + 两个 <code>add_executable</code>。<u>不</u>注册 CTest：benchmark 是开发者主动跑的，不归 <code>ctest</code> 管。</p>
+      <div class="why">复用已经验证好的 include + define pattern；不污染正确性测试套。</div>
+    </div>
+
+  </div>
+</section>
+
+<!-- ====== RISKS ====== -->
+<section id="risks">
+  <h2>Risks &amp; Trade-offs（6 条）</h2>
+
+  <div class="risk"><span class="risk-icon">!</span><div class="risk-content">
+    <strong>Workload-blob 与导入的 simulator 漂移</strong>
+    — workload 是按某个 upstream commit 生成的；如果之后导入的 Tier 1-3 又落后了，可能出现 simulator 不认的指令编码。
+    <span class="mit">缓解：header 的 <code>kXxxWorkloadGeneratorTag</code> 记录上游 commit hash；README 说明对齐期望。</span>
+  </div></div>
+
+  <div class="risk"><span class="risk-icon">!</span><div class="risk-content">
+    <strong>不严控宿主就有 wall-clock 噪声</strong>
+    — Laptop turbo / busy desktop / CI runner 会让数字晃。
+    <span class="mit">缓解：<u>接受</u>。V1 目标是数量级正确，不是发表级精度。README 只写一句"别用电池、找个空闲机器"。</span>
+  </div></div>
+
+  <div class="risk"><span class="risk-icon">!</span><div class="risk-content">
+    <strong><code>RunFrom</code> 调用站开销在小 workload 上会显著</strong>
+    — 当前 workload 都够大（≥ 32 条且循环数百万次），可以忽略。未来加小 workload 时需重新评估。
+    <span class="mit">缓解：单条 workload 大小是 header 里的事，加新 workload 的 reviewer 自觉考虑。</span>
+  </div></div>
+
+  <div class="risk"><span class="risk-icon">!</span><div class="risk-content">
+    <strong>Header-blob 把 workload 大小锁成编译期常量</strong>
+    — 改大小需要重新生成 + 重新编译。V1 不是问题（workload 形状固定）。
+    <span class="mit">缓解：等第二个 workload 进来时再评估是否切换到运行期文件加载。</span>
+  </div></div>
+
+  <div class="risk"><span class="risk-icon">!</span><div class="risk-content">
+    <strong>默认 <code>--seconds 5</code> 在某些主机上不合适</strong>
+    — 50 ms/iter 的慢机器 5 秒只跑 ~100 次（噪声高）；0.5 ms/iter 的快机器是 ~10000 次（够了，略浪费）。
+    <span class="mit">缓解：是 CLI flag，不是硬编码常量。匹配上游 <code>kDefaultRunTime</code>。</span>
+  </div></div>
+
+  <div class="risk"><span class="risk-icon">!</span><div class="risk-content">
+    <strong>记录的动态计数与实际执行漂移</strong>
+    — 动态计数是 commit 进 header 的；如果导入的 simulator 行为偏离上游，记录值会失准，<code>ns/insn</code> 会错（但 <code>iterations/sec</code> 仍对）。
+    <span class="mit">缓解：主指标用直接观测的 <code>iterations/sec</code>；<code>ns/insn</code> 在输出里标 "derived" 提醒读者。</span>
+  </div></div>
+
+  <div class="risk"><span class="risk-icon">!</span><div class="risk-content">
+    <strong>两个 workload 角色不同容易被误用</strong>
+    — 把 <code>bench_smoke</code> 的数字当 baseline 发出去，那就完了。
+    <span class="mit">缓解：spec 用 workload-无关的语言写契约；README 明确说"哪个 binary 负责报数"。</span>
+  </div></div>
+</section>
+
+<!-- ====== OPEN QUESTIONS ====== -->
+<section id="oq">
+  <h2>Open Questions（3 个，全部 resolved <span class="badge badge-resolved">resolved</span>）</h2>
+  <div class="oq">
+
+    <div class="oq-q">Q1 — Mixed workload 离线计数用什么 hook？</div>
+    <div class="oq-a"><strong>选 B：</strong>用 simulator 自带的 <code>set_trace_parameters</code> hook（配置为"计数不打印"）；不写自定义 <code>DecoderVisitor</code>。理由：hook 已经接好，几行配置代码即可，比写一个新 visitor 类更省事。</div>
+
+    <div class="oq-q">Q2 — 256 KiB / 64 Ki 这个 buffer 尺寸合适吗？</div>
+    <div class="oq-a"><strong>保留：</strong>V1 跟上游 <code>bench-mixed-sim</code> 用一样的 256 KiB。iOS 适配尺寸延后到真的有 iOS 嵌入目标的 change 再决定。</div>
+
+    <div class="oq-q">Q3 — 要不要 ship 一个 smoke workload？</div>
+    <div class="oq-a"><strong>做：</strong>提升到 scope 里，成为第二个 binary <code>bench_smoke</code>。直线流水 ~32 条指令，<code>llvm-mc</code> 离线生成，无上游 VIXL 依赖。能在 mixed workload 还没生成前先验证 harness 接线正确。</div>
+
+  </div>
+</section>
+
+<!-- ====== REQUIREMENTS ====== -->
+<section id="requirements">
+  <h2>Specs — 9 条 Requirement / 19 个 Scenario</h2>
+  <p style="color:var(--fg-muted); font-size:0.9rem; margin-bottom:1rem;">
+    点击每条 Requirement 展开 Scenarios（WHEN/THEN 格式，每个就是一个潜在测试点）。
+  </p>
+
+  <details class="req">
+    <summary><span class="req-num">R1</span>构建受 <code>GABY_VM_BUILD_BENCHMARKS</code> 选项控制 <span class="badge badge-new">added</span></summary>
+    <div class="scenarios">
+      <div class="scenario">
+        <span class="sname">Option defaults to ON for a top-level configure</span>
+        <span class="when">配置 CMake，无 <code>GABY_VM_BUILD_BENCHMARKS</code> override，项目为 top-level</span>
+        <span class="then"><code>GABY_VM_BUILD_BENCHMARKS</code> 是 ON；<code>bench_baseline</code> + <code>bench_smoke</code> 都在 build targets 里</span>
+      </div>
+      <div class="scenario">
+        <span class="sname">Option turned off removes all benchmark targets</span>
+        <span class="when">配置 <code>-DGABY_VM_BUILD_BENCHMARKS=OFF</code></span>
+        <span class="then">没有任何 <code>bench_*</code> target；<code>bench/</code> 下任何源文件不被编译</span>
+      </div>
+    </div>
+  </details>
+
+  <details class="req">
+    <summary><span class="req-num">R2</span>产出两个 binary（<code>bench_baseline</code> + <code>bench_smoke</code>）<span class="badge badge-new">added</span></summary>
+    <div class="scenarios">
+      <div class="scenario">
+        <span class="sname">Both binaries build when the option is ON</span>
+        <span class="when">配置 <code>GABY_VM_BUILD_BENCHMARKS=ON</code> 并执行 build</span>
+        <span class="then">输出目录里有 <code>bench_baseline</code> 和 <code>bench_smoke</code> 两个可执行</span>
+      </div>
+      <div class="scenario">
+        <span class="sname">Shared runner is factored once</span>
+        <span class="when">读 <code>bench/CMakeLists.txt</code></span>
+        <span class="then">里面定义了一个单独的共享编译单元（OBJECT library）供两个 executable 引用，<u>不</u>是 per-binary 复制</span>
+      </div>
+    </div>
+  </details>
+
+  <details class="req">
+    <summary><span class="req-num">R3</span>Benchmark 不注册到 CTest <span class="badge badge-new">added</span></summary>
+    <div class="scenarios">
+      <div class="scenario">
+        <span class="sname">ctest does not list benchmark binaries</span>
+        <span class="when"><code>ctest -N</code> 跑在配置好的 build 目录里（同时 ON 了 TESTS 和 BENCHMARKS）</span>
+        <span class="then">列表里<u>没有</u> <code>bench_baseline</code> 或 <code>bench_smoke</code></span>
+      </div>
+    </div>
+  </details>
+
+  <details class="req">
+    <summary><span class="req-num">R4</span>Workload 是统一 schema 的 commit header <span class="badge badge-new">added</span></summary>
+    <div class="scenarios">
+      <div class="scenario">
+        <span class="sname">Mixed workload header declares the full schema</span>
+        <span class="when">读 <code>bench/workloads/mixed_workload_data.h</code></span>
+        <span class="then">声明了 <code>kMixedWorkloadInstructions</code> / <code>StaticWordCount</code> / <code>DynamicInstructionsPerIteration</code> / <code>GeneratorTag</code>，类型正确</span>
+      </div>
+      <div class="scenario">
+        <span class="sname">Smoke workload header declares the full schema</span>
+        <span class="when">读 <code>bench/workloads/smoke_workload_data.h</code></span>
+        <span class="then">同上，但是 <code>kSmokeWorkload*</code></span>
+      </div>
+      <div class="scenario">
+        <span class="sname">Smoke workload's dynamic count equals its static count</span>
+        <span class="when">读 smoke header</span>
+        <span class="then"><code>kSmokeWorkloadDynamicInstructionsPerIteration == kSmokeWorkloadStaticWordCount</code>（构造上无内部跳转）</span>
+      </div>
+    </div>
+  </details>
+
+  <details class="req">
+    <summary><span class="req-num">R5</span>Harness 每次 <code>RunFrom</code> 前写 <code>LR = kEndOfSimAddress</code> <span class="badge badge-new">added</span></summary>
+    <div class="scenarios">
+      <div class="scenario">
+        <span class="sname">Runner writes LR before every RunFrom site</span>
+        <span class="when">读 runner 源文件</span>
+        <span class="then">每个调用 <code>simulator.RunFrom(...)</code> 的位置前面紧挨着一个写 <code>kEndOfSimAddress</code> 到 LR 的操作</span>
+      </div>
+      <div class="scenario">
+        <span class="sname">Both binaries terminate cleanly on the committed workloads</span>
+        <span class="when">用 <code>--seconds 0.1</code> 跑任一 binary</span>
+        <span class="then">退出码 0；输出所有规定字段；不 hang / abort / segfault</span>
+      </div>
+    </div>
+  </details>
+
+  <details class="req">
+    <summary><span class="req-num">R6</span>warm-up 丢弃 + 时长预算循环 + 默认 5 秒 + <code>--seconds</code> 可覆盖 <span class="badge badge-new">added</span></summary>
+    <div class="scenarios">
+      <div class="scenario">
+        <span class="sname">Default duration is 5 seconds</span>
+        <span class="when">无参数调用 binary</span>
+        <span class="then"><code>elapsed_seconds</code> ≥ 5.0</span>
+      </div>
+      <div class="scenario">
+        <span class="sname">--seconds overrides the default</span>
+        <span class="when">调用时加 <code>--seconds 1.0</code></span>
+        <span class="then"><code>elapsed_seconds</code> ≥ 1.0 且明显小于 5.0</span>
+      </div>
+      <div class="scenario">
+        <span class="sname">Warm-up is excluded from reported counts</span>
+        <span class="when">读输出</span>
+        <span class="then">报告的 <code>iterations</code> 只数 timed region 内的 <code>RunFrom</code>，不含 warm-up</span>
+      </div>
+    </div>
+  </details>
+
+  <details class="req">
+    <summary><span class="req-num">R7</span>输出 K/V 格式 + <code>iterations_per_second</code> 是主指标 <span class="badge badge-new">added</span></summary>
+    <div class="scenarios">
+      <div class="scenario">
+        <span class="sname">All required keys are present in the output</span>
+        <span class="when">跑任一 benchmark</span>
+        <span class="then">stdout 至少包含：<code>workload</code> · <code>workload_generator_tag</code> · <code>static_words_in_buffer</code> · <code>dynamic_instructions_per_iteration</code> · <code>iterations</code> · <code>total_dynamic_instructions</code> · <code>elapsed_seconds</code> · <code>iterations_per_second</code> · <code>throughput_insn_per_sec</code> · <code>ns_per_instruction</code></span>
+      </div>
+      <div class="scenario">
+        <span class="sname">iterations_per_second matches iterations / elapsed_seconds</span>
+        <span class="when">解析输出</span>
+        <span class="then"><code>iterations_per_second == iterations / elapsed_seconds</code>（浮点容差内）</span>
+      </div>
+      <div class="scenario">
+        <span class="sname">ns_per_instruction uses dynamic count, not static count</span>
+        <span class="when">解析 <code>bench_baseline</code> 输出（mixed workload 的 static ≠ dynamic）</span>
+        <span class="then"><code>ns_per_instruction = elapsed_seconds * 1e9 / (iterations * dynamic_instructions_per_iteration)</code>；用 <code>static_words_in_buffer</code> 代替会得到一个<u>不一致</u>的结果</span>
+      </div>
+    </div>
+  </details>
+
+  <details class="req">
+    <summary><span class="req-num">R8</span><code>bench/README.md</code> 覆盖 build / 调用 / 生成 / 上游对比 <span class="badge badge-new">added</span></summary>
+    <div class="scenarios">
+      <div class="scenario">
+        <span class="sname">README covers each documented procedure</span>
+        <span class="when">读 <code>bench/README.md</code></span>
+        <span class="then">含有以下章节：build invocation、binary usage and output meaning、mixed-workload regeneration、smoke-workload regeneration、upstream cross-comparison（不要求严苛 noise-control 协议；一句宿主卫生提示即可）</span>
+      </div>
+    </div>
+  </details>
+
+  <details class="req">
+    <summary><span class="req-num">R9</span>不动 <code>src/</code> / <code>include/gaby_vm/</code> / 导入 VIXL <span class="badge badge-new">added</span></summary>
+    <div class="scenarios">
+      <div class="scenario">
+        <span class="sname">Diff against merge base is confined to bench/ and top-level CMakeLists.txt</span>
+        <span class="when"><code>git diff</code> against merge base</span>
+        <span class="then">所有变更路径都是：根 <code>CMakeLists.txt</code> / <code>bench/</code> 下 / <code>openspec/changes/baseline-benchmark-harness/</code> 下；其余 0 改动</span>
+      </div>
+      <div class="scenario">
+        <span class="sname">No new public headers are introduced</span>
+        <span class="when">change 前后列 <code>include/gaby_vm/</code></span>
+        <span class="then">两个列表完全一致（增 / 删 / 改全 0）</span>
+      </div>
+    </div>
+  </details>
+</section>
+
+<!-- ====== TASKS ====== -->
+<section id="tasks">
+  <h2>Tasks — 8 个 group / 32 个具体任务</h2>
+
+  <div class="stats">
+    <div class="stat"><span class="stat-num">8</span><span class="stat-label">groups</span></div>
+    <div class="stat"><span class="stat-num">32</span><span class="stat-label">tasks total</span></div>
+    <div class="stat"><span class="stat-num">10</span><span class="stat-label">verification 任务</span></div>
+    <div class="stat"><span class="stat-num">0</span><span class="stat-label">done so far</span></div>
+  </div>
+
+  <details class="task-group" open>
+    <summary><span class="gnum">1.</span> CMake scaffold &amp; build option <span class="count">4 个</span></summary>
+    <div class="task-list">
+      <div class="task"><span class="id">1.1</span><span class="check">[ ]</span><span>顶层 <code>CMakeLists.txt</code> 加 <code>option(GABY_VM_BUILD_BENCHMARKS ...)</code>，紧跟现有 <code>GABY_VM_BUILD_DEMOS</code></span></div>
+      <div class="task"><span class="id">1.2</span><span class="check">[ ]</span><span>加 <code>if(GABY_VM_BUILD_BENCHMARKS) add_subdirectory(bench) endif()</code></span></div>
+      <div class="task"><span class="id">1.3</span><span class="check">[ ]</span><span>建 <code>bench/</code> + 写 <code>bench/CMakeLists.txt</code> 占位（先放个 <code>message(STATUS ...)</code>）</span></div>
+      <div class="task"><span class="id">1.4</span><span class="check">[ ]</span><span>分别 ON / OFF 配置一遍，确认子目录正确进入 / 跳过</span></div>
+    </div>
+  </details>
+
+  <details class="task-group">
+    <summary><span class="gnum">2.</span> Shared runner <span class="count">4 个</span></summary>
+    <div class="task-list">
+      <div class="task"><span class="id">2.1</span><span class="check">[ ]</span><span><code>bench/runner.h</code>：暴露单一入口 <code>RunBenchmark(...)</code>，参数包括 workload 元数据 + argv</span></div>
+      <div class="task"><span class="id">2.2</span><span class="check">[ ]</span><span><code>bench/runner.cc</code>：CLI 解析 <code>--seconds</code>、构造 sim、copy 字节、warm-up、写 LR、steady-state 循环、输出 K/V</span></div>
+      <div class="task"><span class="id">2.3</span><span class="check">[ ]</span><span><code>add_library(bench_runner OBJECT runner.cc)</code>，include / define 与 <code>test/CMakeLists.txt</code> 完全一致</span></div>
+      <div class="task"><span class="id">2.4</span><span class="check">[ ]</span><span>Link 至 <code>test/simulator_correctness</code> 所用的同一个 simulator 库目标；干净编译过 <code>dev-release</code></span></div>
+    </div>
+  </details>
+
+  <details class="task-group">
+    <summary><span class="gnum">3.</span> Smoke workload — 离线生成 <span class="count">4 个</span></summary>
+    <div class="task-list">
+      <div class="task"><span class="id">3.1</span><span class="check">[ ]</span><span>写 <code>bench/workloads/smoke_workload.s</code>：标准 prologue / ~28 条直线 ALU / epilogue（无任何 branch）</span></div>
+      <div class="task"><span class="id">3.2</span><span class="check">[ ]</span><span>在 <code>.s</code> 顶部注释里写明 <code>llvm-mc</code> + <code>llvm-objcopy</code> 调用</span></div>
+      <div class="task"><span class="id">3.3</span><span class="check">[ ]</span><span>本地跑该 toolchain，把字节转成 <code>constexpr uint32_t[]</code>，写入 <code>smoke_workload_data.h</code>（4 个常量 + provenance tag）</span></div>
+      <div class="task"><span class="id">3.4</span><span class="check">[ ]</span><span>目检 schema 完整</span></div>
+    </div>
+  </details>
+
+  <details class="task-group">
+    <summary><span class="gnum">4.</span> Smoke binary — harness 端到端验证 <span class="count">4 个</span></summary>
+    <div class="task-list">
+      <div class="task"><span class="id">4.1</span><span class="check">[ ]</span><span><code>bench/smoke.cc</code>：<code>main</code> include smoke header，调 <code>RunBenchmark(...)</code></span></div>
+      <div class="task"><span class="id">4.2</span><span class="check">[ ]</span><span><code>add_executable(bench_smoke smoke.cc)</code> + link <code>bench_runner</code>；<u>不</u>调 <code>add_test</code></span></div>
+      <div class="task"><span class="id">4.3</span><span class="check">[ ]</span><span>跑 <code>bench_smoke --seconds 0.2</code>，确认干净退出 + 输出键齐</span></div>
+      <div class="task"><span class="id">4.4</span><span class="check">[ ]</span><span>这里 harness pipeline 已端到端绿，无需等待 mixed workload</span></div>
+    </div>
+  </details>
+
+  <details class="task-group">
+    <summary><span class="gnum">5.</span> Mixed workload — 离线生成（依赖 <code>../vixl</code>） <span class="count">4 个</span></summary>
+    <div class="task-list">
+      <div class="task"><span class="id">5.1</span><span class="check">[ ]</span><span>仓库外写 <code>gen_mixed_workload.cc</code>：<code>BenchCodeGenerator</code> 生成 256 KiB + 跑一次 instrumented sim 收 dynamic count + 输出 header</span></div>
+      <div class="task"><span class="id">5.2</span><span class="check">[ ]</span><span>用 <code>scons simulator=aarch64 mode=release</code> 在 <code>../vixl/</code> 编出来；记录 upstream commit hash</span></div>
+      <div class="task"><span class="id">5.3</span><span class="check">[ ]</span><span>跑生成器，重定向 stdout 至 <code>mixed_workload_data.h</code>；确认 4 常量 + provenance tag 齐全</span></div>
+      <div class="task"><span class="id">5.4</span><span class="check">[ ]</span><span>目检：<code>dynamic ≠ static</code>（若相等说明计数 hook 接错了）</span></div>
+    </div>
+  </details>
+
+  <details class="task-group">
+    <summary><span class="gnum">6.</span> Baseline binary <span class="count">3 个</span></summary>
+    <div class="task-list">
+      <div class="task"><span class="id">6.1</span><span class="check">[ ]</span><span><code>bench/baseline.cc</code>：<code>main</code> include mixed header，调 <code>RunBenchmark(...)</code></span></div>
+      <div class="task"><span class="id">6.2</span><span class="check">[ ]</span><span><code>add_executable(bench_baseline baseline.cc)</code> + link <code>bench_runner</code>；<u>不</u>调 <code>add_test</code></span></div>
+      <div class="task"><span class="id">6.3</span><span class="check">[ ]</span><span>跑 <code>bench_baseline --seconds 1.0</code>；确认干净退出 + 数量级合理</span></div>
+    </div>
+  </details>
+
+  <details class="task-group">
+    <summary><span class="gnum">7.</span> README <span class="count">1 个</span></summary>
+    <div class="task-list">
+      <div class="task"><span class="id">7.1</span><span class="check">[ ]</span><span><code>bench/README.md</code>：build / 调用 / 输出含义 / smoke 重生成 / mixed 重生成 / 上游对比 / 一句宿主卫生提示</span></div>
+    </div>
+  </details>
+
+  <details class="task-group">
+    <summary><span class="gnum">8.</span> Verification — 对照 spec scenarios <span class="count">10 个</span></summary>
+    <div class="task-list">
+      <div class="task"><span class="id">8.1</span><span class="check">[ ]</span><span>ON 配置 + build，确认两个 binary 存在 <span class="spec-ref">spec: R2</span></span></div>
+      <div class="task"><span class="id">8.2</span><span class="check">[ ]</span><span>OFF 配置，确认无 <code>bench_*</code> target <span class="spec-ref">spec: R1</span></span></div>
+      <div class="task"><span class="id">8.3</span><span class="check">[ ]</span><span><code>ctest -N</code> 不列任何 benchmark <span class="spec-ref">spec: R3</span></span></div>
+      <div class="task"><span class="id">8.4</span><span class="check">[ ]</span><span>无参跑 <code>bench_smoke</code>，<code>elapsed_seconds ≥ 5.0</code> <span class="spec-ref">spec: R6</span></span></div>
+      <div class="task"><span class="id">8.5</span><span class="check">[ ]</span><span><code>--seconds 1.0</code> 覆盖生效 <span class="spec-ref">spec: R6</span></span></div>
+      <div class="task"><span class="id">8.6</span><span class="check">[ ]</span><span>读 <code>runner.cc</code> 确认每个 <code>RunFrom</code> 前都有 LR 写 <span class="spec-ref">spec: R5</span></span></div>
+      <div class="task"><span class="id">8.7</span><span class="check">[ ]</span><span>数值验证 <code>ns_per_instruction</code> 用 dynamic count，<u>不</u>用 static count <span class="spec-ref">spec: R7</span></span></div>
+      <div class="task"><span class="id">8.8</span><span class="check">[ ]</span><span>两个 binary 的输出包含 spec 列的全部 key <span class="spec-ref">spec: R7</span></span></div>
+      <div class="task"><span class="id">8.9</span><span class="check">[ ]</span><span><code>git diff</code> 只覆盖根 <code>CMakeLists.txt</code> / <code>bench/</code> / 本 change 的 openspec 路径 <span class="spec-ref">spec: R9</span></span></div>
+      <div class="task"><span class="id">8.10</span><span class="check">[ ]</span><span><code>bench/README.md</code> 含全部规定章节 <span class="spec-ref">spec: R8</span></span></div>
+    </div>
+  </details>
+</section>
+
+<!-- ====== FOOTER ====== -->
+<footer class="footer">
+  生成自 <code>openspec/changes/baseline-benchmark-harness/</code> · proposal / design / specs / tasks 同步状态：4/4 完成<br>
+  接下来：<code>/opsx:apply baseline-benchmark-harness</code> → <code>/opsx:verify</code> → <code>/opsx:archive</code>
+</footer>
+
+</body>
+</html>

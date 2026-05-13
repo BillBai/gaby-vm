@@ -1,0 +1,18 @@
+# clangd language-server configuration. Pairs with the compile_commands.json
+# that CMake generates (CMakePresets.json sets CMAKE_EXPORT_COMPILE_COMMANDS=ON
+# for both `dev-debug` and `dev-release` presets). clangd reads per-file
+# compile flags from there, so VIXL-derived sources automatically get the
+# relaxed warnings configured by gaby_vm_apply_imported_compile_flags() and
+# project-authored sources stay strict (-Wall -Wextra -Wpedantic) — the
+# editor-side warning experience matches the build-side policy.
+#
+# Pointing at build/debug rather than build/release because the debug build
+# defines VIXL_DEBUG, which keeps assertion paths and debug-only branches
+# alive in the AST clangd parses — better navigation, more accurate
+# find-references. Switch to build/release if you want a leaner parse.
+#
+# Run `cmake --preset dev-debug` once after cloning so build/debug exists
+# and compile_commands.json is generated; clangd picks it up automatically.
+
+CompileFlags:
+  CompilationDatabase: build/debug
