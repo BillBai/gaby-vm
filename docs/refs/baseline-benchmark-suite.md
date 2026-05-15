@@ -2,8 +2,11 @@
 
 > Methodology for measuring the upstream VIXL AArch64 simulator and
 > comparing it to Gaby-VM's cached-dispatch path. **This document
-> captures the methodology, not results** — actual baseline numbers
-> land in a follow-up report after we run them on a stable host.
+> captures the methodology, not results.** The first baseline snapshot
+> taken under this methodology is in
+> [`baseline-benchmark-results-2026-05.md`](./baseline-benchmark-results-2026-05.md);
+> later runs land as sibling `baseline-benchmark-results-YYYY-MM.md`
+> files rather than edits to that document.
 >
 > Citations are paths inside `../vixl/`. The architectural references
 > live in
