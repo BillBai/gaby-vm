@@ -77,7 +77,13 @@ DerivedData/
 # ----------------------------------------------------------------------------
 # IDE / editor
 # ----------------------------------------------------------------------------
-.vscode/
+# .vscode/ is ignored by default to keep per-user editor state out of the
+# repo, but shared debug/build configs (launch.json, tasks.json) are
+# whitelisted so the project ships a working F5 experience for VSCode,
+# Cursor, CodeBuddy, and other VSCode-derived editors.
+.vscode/*
+!.vscode/launch.json
+!.vscode/tasks.json
 .idea/
 *.iml
 .cache/

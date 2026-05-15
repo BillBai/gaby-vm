@@ -1,0 +1,70 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "cmake: configure (debug)",
+      "type": "shell",
+      "command": "cmake",
+      "args": ["--preset", "dev-debug"],
+      "problemMatcher": [],
+      "presentation": { "reveal": "silent", "panel": "shared" }
+    },
+    {
+      "label": "cmake: build (debug)",
+      "type": "shell",
+      "command": "cmake",
+      "args": ["--build", "--preset", "dev-debug"],
+      "group": { "kind": "build", "isDefault": true },
+      "problemMatcher": ["$gcc"],
+      "presentation": { "reveal": "silent", "panel": "shared" }
+    },
+    {
+      "label": "build: gaby-vm",
+      "type": "shell",
+      "command": "cmake",
+      "args": ["--build", "--preset", "dev-debug", "--target", "gaby-vm"],
+      "problemMatcher": ["$gcc"],
+      "presentation": { "reveal": "silent", "panel": "shared" }
+    },
+    {
+      "label": "build: simulator_correctness",
+      "type": "shell",
+      "command": "cmake",
+      "args": ["--build", "--preset", "dev-debug", "--target", "simulator_correctness"],
+      "problemMatcher": ["$gcc"],
+      "presentation": { "reveal": "silent", "panel": "shared" }
+    },
+    {
+      "label": "build: simulator_smoke",
+      "type": "shell",
+      "command": "cmake",
+      "args": ["--build", "--preset", "dev-debug", "--target", "simulator_smoke"],
+      "problemMatcher": ["$gcc"],
+      "presentation": { "reveal": "silent", "panel": "shared" }
+    },
+    {
+      "label": "build: gaby_vm_smoke",
+      "type": "shell",
+      "command": "cmake",
+      "args": ["--build", "--preset", "dev-debug", "--target", "gaby_vm_smoke"],
+      "problemMatcher": ["$gcc"],
+      "presentation": { "reveal": "silent", "panel": "shared" }
+    },
+    {
+      "label": "build: bench_baseline",
+      "type": "shell",
+      "command": "cmake",
+      "args": ["--build", "--preset", "dev-debug", "--target", "bench_baseline"],
+      "problemMatcher": ["$gcc"],
+      "presentation": { "reveal": "silent", "panel": "shared" }
+    },
+    {
+      "label": "build: bench_smoke",
+      "type": "shell",
+      "command": "cmake",
+      "args": ["--build", "--preset", "dev-debug", "--target", "bench_smoke"],
+      "problemMatcher": ["$gcc"],
+      "presentation": { "reveal": "silent", "panel": "shared" }
+    }
+  ]
+}

@@ -1,0 +1,87 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Debug: gaby-vm (banner)",
+      "type": "lldb-dap",
+      "request": "launch",
+      "program": "${workspaceFolder}/build/debug/demos/cli/gaby-vm",
+      "args": [],
+      "cwd": "${workspaceFolder}",
+      "preLaunchTask": "build: gaby-vm"
+    },
+    {
+      "name": "Debug: gaby-vm --version",
+      "type": "lldb-dap",
+      "request": "launch",
+      "program": "${workspaceFolder}/build/debug/demos/cli/gaby-vm",
+      "args": ["--version"],
+      "cwd": "${workspaceFolder}",
+      "preLaunchTask": "build: gaby-vm"
+    },
+    {
+      "name": "Debug: gaby-vm (prompt args)",
+      "type": "lldb-dap",
+      "request": "launch",
+      "program": "${workspaceFolder}/build/debug/demos/cli/gaby-vm",
+      "args": ["${input:gabyVmArgs}"],
+      "cwd": "${workspaceFolder}",
+      "preLaunchTask": "build: gaby-vm"
+    },
+    {
+      "name": "Debug: simulator_correctness",
+      "type": "lldb-dap",
+      "request": "launch",
+      "program": "${workspaceFolder}/build/debug/test/simulator_correctness",
+      "args": [],
+      "cwd": "${workspaceFolder}",
+      "preLaunchTask": "build: simulator_correctness"
+    },
+    {
+      "name": "Debug: simulator_smoke",
+      "type": "lldb-dap",
+      "request": "launch",
+      "program": "${workspaceFolder}/build/debug/test/simulator_smoke",
+      "args": [],
+      "cwd": "${workspaceFolder}",
+      "preLaunchTask": "build: simulator_smoke"
+    },
+    {
+      "name": "Debug: gaby_vm_smoke",
+      "type": "lldb-dap",
+      "request": "launch",
+      "program": "${workspaceFolder}/build/debug/test/gaby_vm_smoke",
+      "args": [],
+      "cwd": "${workspaceFolder}",
+      "preLaunchTask": "build: gaby_vm_smoke"
+    },
+    {
+      "name": "Debug: bench_baseline",
+      "type": "lldb-dap",
+      "request": "launch",
+      "program": "${workspaceFolder}/build/debug/bench/bench_baseline",
+      "args": [],
+      "cwd": "${workspaceFolder}",
+      "preLaunchTask": "build: bench_baseline"
+    },
+    {
+      "name": "Debug: attach by PID",
+      "type": "lldb-dap",
+      "request": "attach",
+      "pid": "${input:attachPid}"
+    }
+  ],
+  "inputs": [
+    {
+      "id": "gabyVmArgs",
+      "type": "promptString",
+      "description": "Single arg for gaby-vm (e.g. --version, --help). Leave empty for banner mode.",
+      "default": ""
+    },
+    {
+      "id": "attachPid",
+      "type": "promptString",
+      "description": "PID of running process to attach to (run `pgrep gaby-vm` or check Activity Monitor)."
+    }
+  ]
+}
