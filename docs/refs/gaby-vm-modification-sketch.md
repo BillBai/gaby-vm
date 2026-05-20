@@ -12,6 +12,17 @@
 > [`vixl-aarch64-simulator-architecture.md`](./vixl-aarch64-simulator-architecture.md),
 > [`vixl-decode-dispatch-pattern.md`](./vixl-decode-dispatch-pattern.md).
 
+> **预解码缓存部分已被取代**：本 sketch 里关于 predecode cache 的具体形状
+> （per-instance vs shared cache、`predecode_cache_active_` bool gate、
+> operand pre-extraction 的时机、Out-of-range PC fallback 等）已被
+> [`gaby-vm-predecode-cache-design.md`](./gaby-vm-predecode-cache-design.md)
+> 取代。其中两条决议被显式翻转——per-instance → shared、bool gate → API 双轨制
+> （`RunFrom` / `DebugRunFrom`），新文档 §2.3 有详细记录。
+>
+> 本 sketch 剩余三块——**多实例并发、embedder stack ownership、real atomic
+> semantics**——仍是 authoritative，新文档没有触及。读者读到 cache 段落时请跳
+> 到 design doc；读多实例 / 原子 / 栈这三块时本文档仍然有效。
+
 ## Restating the goal
 
 Replace the per-iteration upstream path:
