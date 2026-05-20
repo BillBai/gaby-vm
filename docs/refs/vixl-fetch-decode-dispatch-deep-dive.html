@@ -1,0 +1,837 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>VIXL Simulator Fetch / Decode / Dispatch 深度分析与预解码缓存设计</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<style>
+  :root {
+    --bg: #fafaf7;
+    --fg: #1a1a1a;
+    --muted: #6b6b6b;
+    --accent: #c84630;
+    --accent-soft: #f5e1dd;
+    --green: #5a8f4f;
+    --green-soft: #e1ecdc;
+    --yellow: #b8860b;
+    --yellow-soft: #f4ecd6;
+    --red: #b3261e;
+    --red-soft: #fadcd9;
+    --code-bg: #f0eee8;
+    --border: #d8d6cf;
+    --link: #1166aa;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--fg);
+    font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB",
+                 "Microsoft YaHei", "Segoe UI", Roboto, sans-serif;
+    line-height: 1.7;
+    font-size: 16px;
+  }
+  .container {
+    max-width: 1080px;
+    margin: 0 auto;
+    padding: 40px 32px 80px;
+  }
+  header h1 {
+    font-size: 28px;
+    margin: 0 0 8px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+  }
+  header .subtitle {
+    color: var(--muted);
+    margin: 0 0 24px;
+    font-size: 15px;
+  }
+  header .meta {
+    background: var(--accent-soft);
+    border-left: 4px solid var(--accent);
+    padding: 14px 18px;
+    margin: 0 0 32px;
+    font-size: 14px;
+    border-radius: 4px;
+  }
+  header .meta strong { color: var(--accent); }
+
+  nav.toc {
+    background: white;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 16px 22px;
+    margin: 0 0 36px;
+    font-size: 14px;
+  }
+  nav.toc strong { display: block; margin-bottom: 8px; }
+  nav.toc ol { margin: 0; padding-left: 22px; }
+  nav.toc li { margin: 3px 0; }
+  nav.toc a { color: var(--link); text-decoration: none; }
+  nav.toc a:hover { text-decoration: underline; }
+
+  section {
+    margin: 48px 0;
+  }
+  section h2 {
+    font-size: 22px;
+    margin: 0 0 16px;
+    padding-bottom: 8px;
+    border-bottom: 2px solid var(--border);
+  }
+  section h3 {
+    font-size: 17px;
+    margin: 28px 0 10px;
+    color: #2a2a2a;
+  }
+  section p, section li {
+    color: #2a2a2a;
+  }
+
+  code, pre {
+    font-family: "JetBrains Mono", "Menlo", "Consolas", "Monaco", monospace;
+    font-size: 13px;
+  }
+  code {
+    background: var(--code-bg);
+    padding: 1px 5px;
+    border-radius: 3px;
+  }
+  pre {
+    background: var(--code-bg);
+    padding: 14px 18px;
+    border-radius: 6px;
+    overflow-x: auto;
+    line-height: 1.55;
+  }
+  pre code { background: none; padding: 0; }
+
+  .ref {
+    color: var(--accent);
+    font-family: "JetBrains Mono", "Menlo", monospace;
+    font-size: 12px;
+    background: var(--accent-soft);
+    padding: 1px 5px;
+    border-radius: 3px;
+    white-space: nowrap;
+  }
+
+  /* Mermaid container */
+  .mermaid {
+    background: white;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 20px;
+    margin: 16px 0;
+    overflow-x: auto;
+    text-align: center;
+  }
+
+  /* Hotspot table */
+  table.heat {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 16px 0;
+    font-size: 14px;
+    background: white;
+    border: 1px solid var(--border);
+  }
+  table.heat th, table.heat td {
+    padding: 10px 14px;
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+  }
+  table.heat th {
+    background: #f0eee8;
+    font-weight: 600;
+    color: #2a2a2a;
+  }
+  table.heat tr:last-child td { border-bottom: none; }
+  .pill {
+    display: inline-block;
+    padding: 2px 9px;
+    border-radius: 10px;
+    font-size: 12px;
+    font-weight: 600;
+  }
+  .pill.red    { background: var(--red-soft);    color: var(--red); }
+  .pill.yellow { background: var(--yellow-soft); color: var(--yellow); }
+  .pill.green  { background: var(--green-soft);  color: var(--green); }
+  .pill.gray   { background: #ececec;            color: #555; }
+
+  /* Risk cards */
+  .risk-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(330px, 1fr));
+    gap: 14px;
+    margin: 16px 0;
+  }
+  .risk-card {
+    background: white;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 0;
+    overflow: hidden;
+  }
+  .risk-card summary {
+    cursor: pointer;
+    list-style: none;
+    padding: 14px 18px;
+    background: #fafaf6;
+    font-weight: 600;
+    color: #2a2a2a;
+    border-bottom: 1px solid transparent;
+  }
+  .risk-card summary::-webkit-details-marker { display: none; }
+  .risk-card summary::before {
+    content: "▶";
+    color: var(--accent);
+    margin-right: 10px;
+    font-size: 11px;
+    display: inline-block;
+    transition: transform 0.15s;
+  }
+  .risk-card[open] summary::before { transform: rotate(90deg); }
+  .risk-card[open] summary { border-bottom-color: var(--border); }
+  .risk-card .card-body {
+    padding: 14px 18px;
+    font-size: 14px;
+    color: #2a2a2a;
+  }
+  .risk-card .card-body p { margin: 0 0 8px; }
+  .risk-card .card-body strong { color: var(--accent); font-weight: 600; }
+
+  /* Key-value blocks */
+  .kv {
+    display: grid;
+    grid-template-columns: 110px 1fr;
+    gap: 4px 14px;
+    font-size: 14px;
+    margin: 8px 0;
+  }
+  .kv dt { color: var(--muted); font-weight: 500; }
+  .kv dd { margin: 0; }
+
+  /* Struct/enum boxes (replaces Mermaid classDiagram for §4.3) */
+  .struct-pair {
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    gap: 24px;
+    flex-wrap: wrap;
+    background: white;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 20px;
+    margin: 16px 0;
+  }
+  .struct-box {
+    background: #fafaf6;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    min-width: 280px;
+    overflow: hidden;
+    font-family: "JetBrains Mono", "Menlo", "Consolas", monospace;
+    font-size: 13px;
+  }
+  .struct-title {
+    background: var(--accent-soft);
+    color: var(--accent);
+    font-weight: 700;
+    padding: 8px 14px;
+    border-bottom: 1px solid var(--border);
+    text-align: center;
+  }
+  .struct-row {
+    padding: 6px 14px;
+    border-bottom: 1px dashed #e0ddd6;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .struct-row:last-of-type { border-bottom: none; }
+  .vis {
+    color: var(--green);
+    font-weight: 700;
+    width: 12px;
+  }
+  .ftype {
+    color: #6b6b6b;
+    min-width: 70px;
+  }
+  .fname {
+    color: #1a1a1a;
+    font-weight: 600;
+    flex: 1;
+  }
+  .annot {
+    color: var(--accent);
+    font-size: 11px;
+  }
+  .enum-row {
+    color: #2a2a2a;
+    font-weight: 500;
+    padding-left: 22px;
+    position: relative;
+  }
+  .enum-row::before {
+    content: "·";
+    position: absolute;
+    left: 12px;
+    color: var(--muted);
+  }
+  .struct-note {
+    background: #f4ecd6;
+    color: #6e5800;
+    padding: 8px 14px;
+    font-size: 12px;
+    font-family: -apple-system, "PingFang SC", sans-serif;
+    border-top: 1px solid #e0ddd6;
+  }
+  .struct-arrow {
+    color: var(--accent);
+    font-size: 22px;
+    align-self: center;
+  }
+
+  /* Footer */
+  footer {
+    margin-top: 60px;
+    padding: 24px;
+    border-top: 1px solid var(--border);
+    color: var(--muted);
+    font-size: 13px;
+    text-align: center;
+  }
+  footer a { color: var(--link); text-decoration: none; }
+  footer a:hover { text-decoration: underline; }
+
+  /* Banner */
+  .banner {
+    background: var(--green-soft);
+    border-left: 4px solid var(--green);
+    padding: 12px 18px;
+    margin: 12px 0;
+    border-radius: 4px;
+    font-size: 14px;
+  }
+  .banner.warn {
+    background: var(--yellow-soft);
+    border-left-color: var(--yellow);
+  }
+  .banner.danger {
+    background: var(--red-soft);
+    border-left-color: var(--red);
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+<header>
+  <h1>VIXL Simulator Fetch / Decode / Dispatch 深度分析与预解码缓存设计</h1>
+  <p class="subtitle">Gaby-VM 预解码缓存方向的可视化工作文档</p>
+  <div class="meta">
+    <strong>跟同目录下其他 doc 的分工：</strong>
+    本页是 <a href="./vixl-fetch-decode-dispatch-deep-dive.md">vixl-fetch-decode-dispatch-deep-dive.md</a>
+    的可视化版本，重点是流程图、瓶颈热力、缓存设计图、风险卡片墙。
+    要看每段函数体的精确引用请配合 <a href="./vixl-decode-dispatch-pattern.md">vixl-decode-dispatch-pattern.md</a>，
+    要看 simulator 整体表面去 <a href="./vixl-aarch64-simulator-architecture.md">vixl-aarch64-simulator-architecture.md</a>。
+  </div>
+</header>
+
+<nav class="toc">
+  <strong>目录</strong>
+  <ol>
+    <li><a href="#arch">1. 整体架构总图</a></li>
+    <li><a href="#trace">2. 一条 ADD 的旅程（时序图）</a></li>
+    <li><a href="#hotspot">3. 性能瓶颈热力</a></li>
+    <li><a href="#cache">4. 缓存设计图</a></li>
+    <li><a href="#risk">5. 风险卡片墙（R1–R12）</a></li>
+  </ol>
+</nav>
+
+<!-- =================================================================== -->
+<section id="arch">
+  <h2>1. 整体架构总图</h2>
+  <p>
+    一条 32-bit AArch64 指令字从 <code>RunFrom</code> 进入到改完寄存器/PC 出来，
+    完整路径如下。每个节点右侧的 <span class="ref">file:line</span> 是当前
+    <code>../vixl/src/aarch64/</code> 源码里的位置，方便对照。
+  </p>
+
+  <div class="mermaid">
+flowchart TD
+    A["Simulator::RunFrom(first_pc)<br/><span style='color:#c84630;font-size:11px'>simulator-aarch64.cc:840</span>"] --> B
+    B["Simulator::Run()<br/><span style='color:#c84630;font-size:11px'>simulator-aarch64.cc:816</span>"] --> C{"IsSimulationFinished?<br/><span style='color:#c84630;font-size:11px'>simulator-aarch64.h:1362<br/>pc_ == NULL</span>"}
+    C -- "no" --> D["ExecuteInstruction()<br/><span style='color:#c84630;font-size:11px'>simulator-aarch64.h:1401</span>"]
+    C -- "yes" --> Z["Run() returns"]
+    D --> D1["pc_modified_ = false<br/>BType / guarded page check<br/><span style='color:#c84630;font-size:11px'>simulator-aarch64.h:1404, 1408-1418</span>"]
+    D1 --> E["Decoder::Decode(pc_)<br/><span style='color:#c84630;font-size:11px'>decoder-aarch64.cc:39</span>"]
+    E --> F["CompiledDecodeNode::Decode<br/>(树游走 ~3 层)<br/><span style='color:#c84630;font-size:11px'>decoder-aarch64.cc:1354</span>"]
+    F -. "leaf hit" .-> G["Decoder::VisitNamedInstruction<br/>+ Metadata heap alloc<br/>+ form name hash<br/><span style='color:#c84630;font-size:11px'>decoder-aarch64.cc:137</span>"]
+    G --> H["visitor list 迭代<br/>(2~3 次虚函数)"]
+    H --> I["Simulator::Visit<br/>+ form name 再 hash<br/>+ unordered_map find<br/><span style='color:#c84630;font-size:11px'>simulator-aarch64.cc:2306</span>"]
+    I --> J["leaf: VisitAddSubImmediate / Simulate_*<br/><span style='color:#c84630;font-size:11px'>e.g. simulator-aarch64.cc:4182</span>"]
+    J --> K["位段重抽 + 寄存器读 + 算 + 寄存器写<br/>(可能调 WritePc 改 PC)"]
+    K --> L["last_instr_ = ReadPc()<br/>IncrementPc()<br/>UpdateBType()<br/>auditor assert<br/><span style='color:#c84630;font-size:11px'>simulator-aarch64.h:1436-1441</span>"]
+    L --> C
+
+    classDef hot fill:#fadcd9,stroke:#b3261e,stroke-width:2px
+    classDef warm fill:#f4ecd6,stroke:#b8860b,stroke-width:1.5px
+    classDef cool fill:#e1ecdc,stroke:#5a8f4f
+    class G,I hot
+    class F,H warm
+    class D1,K,L cool
+  </div>
+
+  <p style="font-size:13px; color: var(--muted);">
+    <span style="color: var(--red); font-weight:600;">■ 红</span> = 主要瓶颈（heap alloc、双重 hash、map find），
+    <span style="color: var(--yellow); font-weight:600;">■ 黄</span> = 次要瓶颈（树游走、虚函数链），
+    <span style="color: var(--green); font-weight:600;">■ 绿</span> = 已经够轻或不可摊销。
+  </p>
+</section>
+
+<!-- =================================================================== -->
+<section id="trace">
+  <h2>2. 一条 <code>ADD x0, x1, #4</code> 的旅程</h2>
+  <p>
+    用具体指令把抽象步骤串起来。下面这条时序图覆盖一个完整 fetch → decode → dispatch
+    → leaf → 后处理周期。
+  </p>
+
+  <div class="mermaid">
+sequenceDiagram
+    autonumber
+    participant SR as Simulator::Run
+    participant EX as ExecuteInstruction
+    participant DC as Decoder
+    participant CN as CompiledDecodeNode
+    participant SV as Simulator::Visit
+    participant LF as VisitAddSubImmediate
+
+    SR ->> EX: 一轮循环开始
+    Note over EX: pc_modified_ = false<br/>BType 检查<br/>simulator-aarch64.h:1404, 1408
+    EX ->> DC: decoder_->Decode(pc_)<br/>decoder-aarch64.cc:39
+    DC ->> CN: compiled_decoder_root_->Decode<br/>decoder-aarch64.cc:45
+    Note over CN: Root 采样 10 bits<br/>查 1024-entry 表
+    CN ->> CN: 中间节点 _xxxxx<br/>2~3 层 bit_extract + 表查
+    CN ->> DC: VisitNamedInstruction(instr,"add_64_addsub_imm")<br/>decoder-aarch64.cc:137
+    Note over DC: Metadata m heap alloc<br/>Hash(name) 第一次<br/>form_to_unalloc_ 查询
+    DC ->> SV: Visit(&m, instr)<br/>simulator-aarch64.cc:2306
+    Note over SV: Hash(name) 第二次<br/>unordered_map.find<br/>form_hash_ = hash
+    SV ->> LF: (it->second)(this, instr)<br/>simulator-aarch64.cc:4182
+    Note over LF: GetImmAddSub() / GetImmAddSubShift()<br/>→ AddSubHelper (simulator-aarch64.cc:4129)<br/>SixtyFourBits/FlagsUpdate/Rn/Rd<br/>→ ReadRegister + AddWithCarry<br/>→ WriteRegister
+    LF -->> EX: return
+    Note over EX: last_instr_ = ReadPc()<br/>IncrementPc() (simulator-aarch64.h:1379)<br/>UpdateBType()<br/>auditor assert (simulator-aarch64.h:1441)
+    EX ->> SR: 回到循环头
+  </div>
+
+  <p>
+    一条 ADD 触发 <strong>~3 次 member-fn-ptr 调用</strong>（树游走），
+    <strong>~2~3 次虚函数调用</strong>（visitor 链），
+    <strong>1 次 heap 分配</strong>（Metadata），
+    <strong>2 次同名字符串 hash</strong>（decoder + simulator），
+    <strong>~8 次位段重抽</strong>（leaf 内部）。
+    实际改了状态的只有一次寄存器读 + 一次加法 + 一次寄存器写。
+  </p>
+</section>
+
+<!-- =================================================================== -->
+<section id="hotspot">
+  <h2>3. 性能瓶颈热力</h2>
+  <p>
+    每行一个执行阶段，给每条 ADD 的近似 cycle 估计、是否可摊销、缓存后剩多少。
+    精度只到 order-of-magnitude，硬掰反而误导。
+  </p>
+
+  <table class="heat">
+    <thead>
+      <tr>
+        <th style="width:30%">阶段</th>
+        <th style="width:18%">单条 ADD cycle</th>
+        <th style="width:20%">摊销可能性</th>
+        <th style="width:20%">缓存命中后剩余</th>
+        <th style="width:12%">优先级</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>VisitNamedInstruction</code><br/>(heap alloc + 双重 hash + visitor 链)</td>
+        <td>~150–300</td>
+        <td><span class="pill green">完全可消除</span></td>
+        <td>0</td>
+        <td><span class="pill red">P0</span></td>
+      </tr>
+      <tr>
+        <td>CompiledDecodeNode 树游走 (~3 层)</td>
+        <td>~30–50</td>
+        <td><span class="pill green">完全可消除</span></td>
+        <td>0</td>
+        <td><span class="pill red">P0</span></td>
+      </tr>
+      <tr>
+        <td><code>Simulator::Visit</code> (form_hash + map find + indirect call)</td>
+        <td>~50–100</td>
+        <td><span class="pill green">完全可消除</span></td>
+        <td>0</td>
+        <td><span class="pill red">P0</span></td>
+      </tr>
+      <tr>
+        <td>Leaf 内部位段重抽 (~8 次)</td>
+        <td>~30–80</td>
+        <td><span class="pill yellow">V2 可消除</span></td>
+        <td>~30–80（V1 保留）</td>
+        <td><span class="pill yellow">P1</span></td>
+      </tr>
+      <tr>
+        <td>BType / guarded page check</td>
+        <td>~5</td>
+        <td><span class="pill gray">runtime state</span></td>
+        <td>~5</td>
+        <td><span class="pill gray">P3</span></td>
+      </tr>
+      <tr>
+        <td><code>IncrementPc</code> + <code>UpdateBType</code></td>
+        <td>~3</td>
+        <td><span class="pill gray">runtime state</span></td>
+        <td>~3</td>
+        <td><span class="pill gray">P3</span></td>
+      </tr>
+      <tr>
+        <td>CPUFeaturesAuditor.Visit + assert</td>
+        <td>~30</td>
+        <td><span class="pill yellow">region 级预验证</span></td>
+        <td>0（预验证后）/ ~30（保留）</td>
+        <td><span class="pill yellow">P1</span></td>
+      </tr>
+      <tr>
+        <td>Leaf 实际语义（add + 寄存器写）</td>
+        <td>~5–10</td>
+        <td><span class="pill gray">不可摊销</span></td>
+        <td>~5–10</td>
+        <td><span class="pill green">—</span></td>
+      </tr>
+      <tr>
+        <td><strong>合计</strong></td>
+        <td><strong>~300–500</strong></td>
+        <td>—</td>
+        <td><strong>~40–120</strong></td>
+        <td>—</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="banner">
+    <strong>结论：</strong>V1 缓存（仅 dispatch 层摊销，不动 leaf）就能把 dispatch
+    overhead 从 <code>300–500 cycle</code> 压到 <code>40–120 cycle</code>，
+    leaf 真实工作占比从 <code>~3%</code> 提升到 <code>~10–25%</code>。
+    V2 加 operand pre-extraction 可以再砍 30–80 cycle。
+  </div>
+
+  <h3>3.1 二级效应</h3>
+  <ul>
+    <li><strong>BTB 压力：</strong>每条指令 5~7 次间接调用，多种类指令的 BTB 容量
+      压力大；缓存后压成 1 次，BTB 压力降一个量级。</li>
+    <li><strong>I-cache 压力：</strong>decoder + decoder-constants + visitor + leaf
+      helper 加起来几十 KB 热路径；缓存后只剩 leaf，I-cache 命中率显著提升。</li>
+    <li><strong>D-cache 压力：</strong>decode_table_ / form_to_visitor_fn_map_ /
+      visitor list 节点都不再热；D-cache 留给 guest data。</li>
+    <li><strong>Allocator 抖动：</strong>每条指令一次 unordered_map heap alloc
+      消失；长跑测试的 RSS 增长曲线会平整。</li>
+  </ul>
+</section>
+
+<!-- =================================================================== -->
+<section id="cache">
+  <h2>4. 缓存设计</h2>
+
+  <h3>4.1 关键前提</h3>
+  <p>
+    <code>pc_</code> 是宿主指针（<span class="ref">simulator-aarch64.h:5348</span>），
+    <code>GetNextInstruction()</code> 是 <code>this + 4</code> 指针算术
+    （<span class="ref">instructions-aarch64.h:734</span>）——
+    所以缓存可以直接以 <code>const Instruction*</code> 为 key，无需任何翻译。
+  </p>
+
+  <h3>4.2 命中 vs 失效路径</h3>
+  <div class="mermaid">
+flowchart LR
+    A["pc_<br/>(host pointer)"] --> B{"PageBucket<br/>Lookup"}
+    B -- "hit + valid" --> C["form_hash_ = slot.form_hash"]
+    C --> D["slot.leaf_fn(this, pc_)"]
+    D --> E["IncrementPc / UpdateBType / ..."]
+
+    B -- "miss / empty" --> F["Slow Path:<br/>decoder_->Decode(pc_)"]
+    F --> G["Visit chain runs as before<br/>(populates form_hash_, calls leaf)"]
+    G --> H["Capture (form_hash_, fn_ptr)<br/>into slot"]
+    H --> E
+
+    classDef hot fill:#e1ecdc,stroke:#5a8f4f,stroke-width:2px
+    classDef cold fill:#f4ecd6,stroke:#b8860b
+    class C,D hot
+    class F,G,H cold
+  </div>
+
+  <h3>4.3 Slot 结构</h3>
+  <div class="struct-pair">
+    <div class="struct-box">
+      <div class="struct-title">struct DecodedSlot</div>
+      <div class="struct-row"><span class="vis">+</span><span class="ftype">LeafFn</span><span class="fname">leaf_fn</span></div>
+      <div class="struct-row"><span class="vis">+</span><span class="ftype">uint32_t</span><span class="fname">form_hash</span></div>
+      <div class="struct-row"><span class="vis">+</span><span class="ftype">uint8_t</span><span class="fname">state</span><span class="annot">→ enum State</span></div>
+      <div class="struct-note">V2 可在末尾追加 per-form 联合体，预存 Rd / Rn / Imm 等位段</div>
+    </div>
+    <div class="struct-arrow">▶</div>
+    <div class="struct-box">
+      <div class="struct-title">enum State</div>
+      <div class="struct-row enum-row">kEmpty</div>
+      <div class="struct-row enum-row">kValid</div>
+      <div class="struct-row enum-row">kUnallocated</div>
+      <div class="struct-row enum-row">kUnimplemented</div>
+      <div class="struct-row enum-row">kFallback</div>
+    </div>
+  </div>
+
+  <h3>4.4 存储形态：per-page bucket（推荐）</h3>
+  <div class="mermaid">
+flowchart TB
+    PT["page_table<br/>(unordered_map / radix tree)"] -- "key: pc_page" --> B0
+    PT --> B1
+    PT --> B2
+    B0["PageBucket #0<br/>DecodedSlot × 1024"]
+    B1["PageBucket #1<br/>DecodedSlot × 1024"]
+    B2["PageBucket #N<br/>DecodedSlot × 1024"]
+
+    PC["pc_"] --> SPLIT["pc_page = pc AND ~0xFFF<br/>idx = (pc AND 0xFFF) / 4"]
+    SPLIT --> PT
+    SPLIT --> IDX["idx → slot in bucket"]
+    B0 --> IDX
+  </div>
+
+  <p>
+    Lookup 是 <strong>两次 load + 一次乘移</strong>，跟 PC 算术天然 1:1 对齐，
+    cache friendly，回收时直接 <code>free</code> 整个 page bucket。
+  </p>
+
+  <h3>4.5 热路径伪代码</h3>
+  <pre><code>void Simulator::ExecuteInstructionCached() {
+  VIXL_ASSERT(IsWordAligned(pc_));
+  pc_modified_ = false;
+  MaybeBTypeCheck();  // runtime state machine, 不能 cache
+
+  bool last_instr_was_movprfx = ...;
+
+  DecodedSlot* slot = predecode_cache_.LookupOrInsertEmpty(pc_);
+  if (VIXL_LIKELY(slot->state == DecodedSlot::kValid)) {
+    form_hash_ = slot->form_hash;          // R1: load-bearing
+    slot->leaf_fn(this, pc_);
+  } else {
+    SlowPathDecodeAndPopulate(pc_, slot);  // 走完整 decoder，回填 slot
+  }
+
+  if (last_instr_was_movprfx) { /* MOVPRFX 校验 */ }
+
+  last_instr_ = ReadPc();
+  IncrementPc();
+  // LogAllWrittenRegisters / UpdateBType / auditor check
+}</code></pre>
+
+  <h3>4.6 V2 拓展（不在 V1 范围）</h3>
+  <p>
+    V1 命中后还要走一次 leaf 内部的 8 次位段重抽。V2 可以在 slot 里加 per-form
+    联合体，把 Rd/Rn/Imm 等预先抽好，每个 leaf 写一个 fast-path 版本。
+    成本：每个 leaf 双份代码；好处：再省 30–80 cycle。
+  </p>
+</section>
+
+<!-- =================================================================== -->
+<section id="risk">
+  <h2>5. 风险卡片墙（R1–R12）</h2>
+  <p>
+    按踩中后修复成本从高到低排序。点击展开看触发条件、缓解策略、源码引用。
+  </p>
+
+  <div class="risk-grid">
+
+    <details class="risk-card" open>
+      <summary>R1 · <code>form_hash_</code> 必须在调 leaf 前还原</summary>
+      <div class="card-body">
+        <p><strong>问题：</strong>共享 <code>Simulate_*</code> 入口的 leaf 会读
+          <code>form_hash_</code> 选行为；缓存路径调 leaf 前忘了写就会跑错分支。</p>
+        <p><strong>缓解：</strong><code>form_hash</code> 进 slot，
+          <code>form_hash_ = slot->form_hash</code> 必须在 <code>leaf_fn(...)</code> 之前。
+          覆盖共享 leaf 的多个 form 写测试。</p>
+        <p><strong>引用：</strong><span class="ref">simulator-aarch64.cc:2306-2323</span> +
+          <span class="ref">simulator-aarch64.cc:2325 (Simulate_PdT_PgZ_ZnT_ZmT)</span></p>
+      </div>
+    </details>
+
+    <details class="risk-card">
+      <summary>R2 · MOVPRFX 链式校验</summary>
+      <div class="card-body">
+        <p><strong>问题：</strong>SVE MOVPRFX 要求紧跟一条「能合并的指令」，
+          ExecuteInstruction 末尾会校验上一条 form_hash。</p>
+        <p><strong>缓解：</strong>跨缓存命中也要正确传递 <code>last_instr_</code> 和
+          <code>form_hash_</code>；不要省掉 <code>last_instr_was_movprfx</code> 提前计算。</p>
+        <p><strong>引用：</strong><span class="ref">simulator-aarch64.h:1420-1421</span> +
+          <span class="ref">simulator-aarch64.h:1431-1434</span></p>
+      </div>
+    </details>
+
+    <details class="risk-card">
+      <summary>R3 · CPU Features Auditor 必须满足</summary>
+      <div class="card-body">
+        <p><strong>问题：</strong>ExecuteInstruction 末尾
+          <code>VIXL_CHECK(cpu_features_auditor_.InstructionIsAvailable())</code>
+          会 abort。绕过 visitor 链就绕过了 auditor。</p>
+        <p><strong>缓解（任选）：</strong></p>
+        <p>① Region 级预验证：populate 时跑一次 auditor，结果存 slot；
+          ② 保留 auditor 调用，用预构造 Metadata 不每次重 alloc；
+          ③ 关掉 auditor（破坏安全契约，不推荐）。</p>
+        <p><strong>引用：</strong><span class="ref">simulator-aarch64.h:1441</span> +
+          <span class="ref">cpu-features-auditor-aarch64.h:107-118</span></p>
+      </div>
+    </details>
+
+    <details class="risk-card">
+      <summary>R4 · trace / debugger / 自定义 visitor</summary>
+      <div class="card-body">
+        <p><strong>问题：</strong>开 LOG_DISASM 必须先调 PrintDisassembler，
+          debugger 启用要查 breakpoint，第三方 AppendVisitor 注册的也要被调。
+          缓存路径默认绕过 visitor 链。</p>
+        <p><strong>缓解：</strong>SetTraceParameters / SetDebuggerEnabled / AppendVisitor
+          时设全局 fallback flag；命中路径开头判 flag 为 true 就走原 decoder。</p>
+        <p><strong>引用：</strong><span class="ref">simulator-aarch64.h:1423-1428</span> +
+          <span class="ref">decoder-aarch64.cc:90-135</span></p>
+      </div>
+    </details>
+
+    <details class="risk-card">
+      <summary>R5 · BType / Guarded Page</summary>
+      <div class="card-body">
+        <p><strong>问题：</strong>BType 是 runtime state（每条指令推进），
+          PcIsInGuardedPage 是配置查询。不能 cache 到 slot。</p>
+        <p><strong>缓解：</strong>循环开头继续执行
+          <code>MaybeBTypeCheck()</code>。开销可忽略。</p>
+        <p><strong>引用：</strong><span class="ref">simulator-aarch64.h:1408-1418</span> +
+          <span class="ref">simulator-aarch64.h:1396 (PcIsInGuardedPage)</span></p>
+      </div>
+    </details>
+
+    <details class="risk-card">
+      <summary>R6 · Self-Modifying Code</summary>
+      <div class="card-body">
+        <p><strong>问题：</strong>VIXL 直接读宿主内存做 fetch；guest 改写 code page
+          后缓存项就 stale。</p>
+        <p><strong>V1 缓解：</strong>明确假设「guest code immutable」，提供
+          <code>InvalidateCacheRegion(begin, end)</code>。</p>
+        <p><strong>V2 缓解：</strong>Memory::Write 命中 code region 时自动失效
+          对应 slot（要求 code region 边界已知）。</p>
+        <p><strong>引用：</strong><span class="ref">simulator-aarch64.h:393-411 (Memory::Read)</span></p>
+      </div>
+    </details>
+
+    <details class="risk-card">
+      <summary>R7 · 多实例 / 共享内存</summary>
+      <div class="card-body">
+        <p><strong>问题：</strong>Gaby-VM 计划支持多 Simulator 实例；
+          全局 cache 要锁 / lock-free，per-instance cache 重复 populate。</p>
+        <p><strong>V1 推荐：</strong>per-instance cache。populate 在 cold path 影响小。</p>
+        <p><strong>V2：</strong>跨实例共享只读的 (form_hash, leaf_fn) 部分，
+          仍要解决无锁查表。</p>
+        <p><strong>引用：</strong>架构 doc「Threading and determinism」段</p>
+      </div>
+    </details>
+
+    <details class="risk-card">
+      <summary>R8 · Cache 大小失控</summary>
+      <div class="card-body">
+        <p><strong>问题：</strong>1MB code → 4MB cache，10MB → 40MB，100MB → 400MB。</p>
+        <p><strong>缓解：</strong>per-page bucket 自带 region 粒度回收；
+          mprotect / unmap 时清桶；上限 + LRU 替换；暴露
+          <code>FlushPredecodeCache()</code>。</p>
+      </div>
+    </details>
+
+    <details class="risk-card">
+      <summary>R9 · iOS / no-JIT 合规</summary>
+      <div class="card-body">
+        <p><strong>问题：</strong>iOS 不允许 RWX 页 / runtime codegen。
+          预解码缓存看似「生成了什么」要明确不是 codegen。</p>
+        <p><strong>结论：</strong>缓存项是 ordinary data，
+          <code>leaf_fn</code> 是 .text 段已存在的函数指针。
+          不分配 executable memory，不调 mprotect(PROT_EXEC)。
+          完全合规。</p>
+      </div>
+    </details>
+
+    <details class="risk-card">
+      <summary>R10 · 正确性回归</summary>
+      <div class="card-body">
+        <p><strong>问题：</strong>缓存路径必须 byte-identical 复现非缓存路径的所有副作用
+          （regs、PSTATE/NZCV、内存、PC、btype_、ffr_register_）。</p>
+        <p><strong>缓解：</strong>开发期开 <strong>shadow mode</strong>——同时跑
+          cache 路径和 reference decoder，每条指令后 diff 全部状态，差异即 abort。
+          性能差 100×，但跑 testsuite 正合适。</p>
+      </div>
+    </details>
+
+    <details class="risk-card">
+      <summary>R11 · BR / RET / 间接跳转</summary>
+      <div class="card-body">
+        <p><strong>问题：</strong>缓存只能加速「已经 fetch 过的 PC」。
+          BR x0 / RET / BLR x0 第一次目标必走慢路径。</p>
+        <p><strong>影响：</strong>典型 hot loop 直接跳转居多，命中率高；
+          函数调用边界的 BLR / RET 二次访问命中。</p>
+        <p><strong>结论：</strong>V1 不解决。V2 考虑 indirect-target predictor 或
+          basic-block linking。</p>
+      </div>
+    </details>
+
+    <details class="risk-card">
+      <summary>R12 · unallocated / unimplemented 编码</summary>
+      <div class="card-body">
+        <p><strong>问题：</strong>Decoder 通过 <code>form_to_unalloc_</code> 检查
+          + <code>VisitUnimplemented</code> 处理。如果缓存把它们当普通 form 缓存
+          会跑错。</p>
+        <p><strong>缓解：</strong>slot.state 引入 <code>kUnallocated</code> /
+          <code>kUnimplemented</code>，命中后强制走对应路径，不调 leaf_fn。</p>
+        <p><strong>引用：</strong><span class="ref">simulator-aarch64.cc:3915 (VisitUnallocated)</span> +
+          <span class="ref">simulator-aarch64.cc:3907 (VisitUnimplemented)</span> +
+          <span class="ref">simulator-aarch64.cc:3896 (VisitReserved)</span></p>
+      </div>
+    </details>
+
+  </div>
+</section>
+
+<footer>
+  配套 markdown 文档：<a href="./vixl-fetch-decode-dispatch-deep-dive.md">vixl-fetch-decode-dispatch-deep-dive.md</a><br/>
+  事实参考：<a href="./vixl-decode-dispatch-pattern.md">vixl-decode-dispatch-pattern.md</a> ·
+  <a href="./vixl-aarch64-simulator-architecture.md">vixl-aarch64-simulator-architecture.md</a><br/>
+  改动规划：<a href="./gaby-vm-modification-sketch.md">gaby-vm-modification-sketch.md</a> ·
+  <a href="./vixl-extraction-map.md">vixl-extraction-map.md</a>
+</footer>
+
+</div>
+
+<script>
+  mermaid.initialize({
+    startOnLoad: true,
+    theme: 'neutral',
+    flowchart: { curve: 'basis', useMaxWidth: true },
+    sequence: { mirrorActors: false, useMaxWidth: true },
+    themeVariables: {
+      fontFamily: '-apple-system, "PingFang SC", "Microsoft YaHei", sans-serif',
+      fontSize: '14px'
+    }
+  });
+</script>
+
+</body>
+</html>

@@ -43,7 +43,7 @@ for trace, and a `SimStack::Allocated` for the guest stack
 Public execution entry points:
 
 - `void Run()` — the main loop (`simulator-aarch64.h:1298`,
-  body at `simulator-aarch64.cc:821-836`). Calls `ExecuteInstruction()`
+  body at `simulator-aarch64.cc:816-837`). Calls `ExecuteInstruction()`
   until `IsSimulationFinished()` returns true.
 - `void RunFrom(const Instruction* first)` — sets PC and calls `Run()`
   (`simulator-aarch64.h:1299`, `cc:840-843`).
@@ -66,9 +66,9 @@ VIXL stores guest registers in three fixed-size arrays plus a few
 specialized types:
 
 ```cpp
-SimRegister  registers_[kNumberOfRegisters];   // simulator-aarch64.h:5288
-SimVRegister vregisters_[kNumberOfVRegisters]; //                    :5291
-SimPRegister pregisters_[kNumberOfPRegisters]; //                    :5294
+SimRegister  registers_[kNumberOfRegisters];   // simulator-aarch64.h:5292
+SimVRegister vregisters_[kNumberOfVRegisters]; //                    :5295
+SimPRegister pregisters_[kNumberOfPRegisters]; //                    :5298
 ```
 
 `SimRegisterBase<kMaxSizeInBits>` (`simulator-aarch64.h:494`) is the
@@ -102,8 +102,8 @@ selecting from the array (`simulator-aarch64.cc:1591-1592`).
 System registers — only NZCV and FPCR are tracked in the V1 simulator:
 
 ```cpp
-SimSystemRegister nzcv_;  // simulator-aarch64.h:5305
-SimSystemRegister fpcr_;  //                    :5308
+SimSystemRegister nzcv_;  // simulator-aarch64.h:5309
+SimSystemRegister fpcr_;  //                    :5312
 ```
 
 `SimSystemRegister` itself (`simulator-aarch64.h:1158-1214`) is a
@@ -115,8 +115,8 @@ Accessors for NZCV/FPCR are at `h:2186, 2204` (`ReadNzcv`, `ReadFpcr`).
 PC and BType (Branch Target Identification state):
 
 ```cpp
-const Instruction* pc_;          // simulator-aarch64.h:5344
-bool pc_modified_;               //                    :5343
+const Instruction* pc_;          // simulator-aarch64.h:5348
+bool pc_modified_;               //                    :5347
 BType btype_, next_btype_;       // see WriteNextBType / UpdateBType
 ```
 
@@ -128,8 +128,8 @@ auto-advance for branches.
 SVE first-fault and predicate-all-true:
 
 ```cpp
-SimFFRRegister ffr_register_;          // simulator-aarch64.h:5297
-SimPRegister   pregister_all_true_;    //                    :5300
+SimFFRRegister ffr_register_;          // simulator-aarch64.h:5301
+SimPRegister   pregister_all_true_;    //                    :5304
 ```
 
 ## Memory model
@@ -198,19 +198,19 @@ guest code branches to a chosen address. Two declarations matter:
 
 Registration goes through the templated
 `RegisterBranchInterception<R, P...>(R (*function)(P...), InterceptionCallback callback = nullptr)`
-(`simulator-aarch64.h:3209`), which adds an entry to
+(`simulator-aarch64.h:3213`), which adds an entry to
 `meta_data_.branch_interceptions` (h:365-366), keyed on the host
 function address.
 
 When guest code branches to that address, the simulator routes to
-`DoRuntimeCall(instr)` (`simulator-aarch64.h:5275`,
+`DoRuntimeCall(instr)` (`simulator-aarch64.h:5279`,
 `simulator-aarch64.cc:7347`), which uses VIXL's ABI machinery to copy
 guest register state into a C++ argument tuple, call the host function,
 and copy the return value back. The templated
-`DoRuntimeCall<R, P...>` (h:3023-3050) provides the wrappers.
+`DoRuntimeCall<R, P...>` (h:3027-3055) provides the wrappers.
 
 A `RuntimeCallVoid` / `RuntimeCallNonVoid` distinction determines
-whether the result is read back (h:3031-3050).
+whether the result is read back (h:3035-3055).
 
 The exit condition for `Run()` is also wired through this mechanism:
 `ResetRegisters()` writes `kEndOfSimAddress` (`NULL`) into LR
@@ -231,7 +231,7 @@ Two helpers model exclusive accesses:
   not actually track addresses; `IsExclusive()` returns true on most
   calls and randomly false (1-in-8) to model contention.
 
-Both are members of `Simulator` (`simulator-aarch64.h:5280-5281`).
+Both are members of `Simulator` (`simulator-aarch64.h:5284-5285`).
 
 The verbatim header for the global monitor explains the design intent
 (h:1262-1264):
@@ -297,8 +297,9 @@ with the features they require.
 
 `src/aarch64/disasm-aarch64.h:46` defines `Disassembler`; the
 streaming subclass `PrintDisassembler` (h:211) is the one the Simulator
-uses. The Simulator owns a `PrintDisassembler*` (h:5285) constructed
-on its output stream (`simulator-aarch64.cc:666`):
+uses. The Simulator owns a `PrintDisassembler*`
+(`simulator-aarch64.h:5289`) constructed on its output stream
+(`simulator-aarch64.cc:666`):
 
 ```cpp
 print_disasm_ = new PrintDisassembler(stream_);
@@ -314,9 +315,10 @@ unconditionally creates one.
 
 ## Debugger
 
-`src/aarch64/debugger-aarch64.h:50` defines `Debugger`. The Simulator
-holds it via `std::unique_ptr<Debugger> debugger_` (h:5496) and starts
-it disabled (`simulator-aarch64.cc:704-705`):
+`src/aarch64/debugger-aarch64.h:191` defines `Debugger`. The Simulator
+holds it via `std::unique_ptr<Debugger> debugger_`
+(`simulator-aarch64.h:5500`) and starts it disabled
+(`simulator-aarch64.cc:704-705`):
 
 ```cpp
 SetDebuggerEnabled(false);
@@ -330,11 +332,13 @@ tier-3.
 
 ## Tracing and runtime-call mechanism
 
-Trace flags live in `simulator-aarch64.cc:15112-15114` and are bitwise:
-`LOG_NONE`, `LOG_WRITE`, `LOG_REGS`, `LOG_VREGS`, `LOG_SYSREGS`,
-`LOG_BRANCH`, `LOG_DISASM`. They are read and written through
-`Get/SetTraceParameters` (`simulator-aarch64.h:2816-2840`). Default
-after construction is `LOG_NONE` (`cc:680`).
+Trace flags live in `simulator-constants-aarch64.h:123-135` (the
+`TraceParameters` enum) and are bitwise: `LOG_DISASM`, `LOG_REGS`,
+`LOG_VREGS`, `LOG_SYSREGS`, `LOG_WRITE`, `LOG_BRANCH`, plus the
+composite `LOG_NONE` / `LOG_STATE` / `LOG_ALL`. They are read and
+written through `Get/SetTraceParameters`
+(`simulator-aarch64.h:2816-2840`). Default after construction is
+`LOG_NONE` (`cc:680`).
 
 When trace is on:
 
@@ -367,7 +371,7 @@ includes:
 
 - All register arrays (`registers_`, `vregisters_`, `pregisters_`).
 - PC, BType, NZCV, FPCR, exclusive-monitor state.
-- The output stream pointer `stream_` (h:5284).
+- The output stream pointer `stream_` (h:5288).
 - The deterministic PRNG `rand_gen_`
   (`std::linear_congruential_engine`, h:5476-5480), seeded with a
   fixed constant `(11 + (22 << 16) + (33 << 32))`
@@ -377,7 +381,7 @@ includes:
 
 There is no static (program-wide) state that would prevent multiple
 Simulator instances from coexisting in one process — the only static
-tables are the read-only `xreg_names`, `wreg_names`, etc. (h:5361-5369).
+tables are the read-only `xreg_names`, `wreg_names`, etc. (h:5365-5369).
 However, see [`gaby-vm-modification-sketch.md`](./gaby-vm-modification-sketch.md)
 for the audit Gaby-VM still owes around shared `FILE*` outputs and
 `placeholder_pipe_fd_`.

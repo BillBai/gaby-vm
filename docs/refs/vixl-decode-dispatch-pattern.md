@@ -216,7 +216,7 @@ from `kDecodeMapping` entries (defined in
 
 Two classes form the dispatch tree:
 
-- `class DecodeNode` (`decoder-aarch64.h:528-800+`) — source
+- `class DecodeNode` (`decoder-aarch64.h:528-708`) — source
   representation: a name, a list of sampled bit positions, and a list
   of `(pattern, handler_name)` pairs. Each `DecodeNode` owns its
   `CompiledDecodeNode*` after compilation.
@@ -362,7 +362,7 @@ to declare every `VisitXXX` member function on `Simulator`.
 
 ## 8. The Instruction wrapper
 
-`Instruction` (`src/aarch64/instructions-aarch64.h:228-327`) is a
+`Instruction` (`src/aarch64/instructions-aarch64.h:228-766`) is a
 zero-byte class (no members of its own); methods are called on an
 `Instruction*` pointing directly at the 32-bit guest code word.
 `GetInstructionBits()` (h:230):
