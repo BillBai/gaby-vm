@@ -136,7 +136,7 @@ void run_nesting_case(NestMode mode, const char* label_suffix) {
 
   bool observer_fired = false;
   bool nested_once = false;
-  sim.SetMemoryWriteObserver([&](const gaby_vm::Simulator::MemoryWrite&) {
+  sim.SetMemoryWriteObserver([&](const gaby_vm::Simulator::MemoryWriteEvent&) {
     observer_fired = true;
     if (nested_once) {
       return;  // nest exactly once

@@ -23,7 +23,37 @@
 #include "aarch64/simulator-aarch64.h"
 
 namespace gaby_vm {
+
+// kMinStackSize must stay at least as large as the imported
+// vixl::aarch64::SimStack defaults — limit_guard_size_ + usable_size_ in
+// src/aarch64/simulator-aarch64.h (currently 4 KiB + 8 KiB = 12 KiB at
+// lines 192-193). Those fields are private with no getters, so this assert
+// spot-checks the concrete number rather than the upstream constants
+// directly: a future VIXL re-import that bumps the SimStack defaults MUST
+// also bump Simulator::kMinStackSize and this assert in lockstep.
+static_assert(Simulator::kMinStackSize >= 12 * 1024,
+              "kMinStackSize must cover at least the VIXL SimStack default "
+              "limit_guard_size_ + usable_size_");
+
 namespace {
+
+// Abort the Simulator constructor when the embedder hands us a stack buffer
+// smaller than kMinStackSize. Called from the constructor's initializer list
+// so the failure path runs before any Impl allocation. Returns stack_size
+// unchanged on success, letting the call site forward it to make_unique.
+[[nodiscard]] size_t CheckStackSize(size_t stack_size) {
+  if (stack_size < Simulator::kMinStackSize) {
+    char msg[160];
+    std::snprintf(msg,
+                  sizeof(msg),
+                  "gaby_vm::Simulator: stack_size %zu is below the minimum "
+                  "kMinStackSize=%zu (see include/gaby_vm/simulator.h)",
+                  stack_size,
+                  Simulator::kMinStackSize);
+    VIXL_ABORT_WITH_MSG(msg);
+  }
+  return stack_size;
+}
 
 // RAII guard for one Simulator execution call. The single imported
 // vixl::aarch64::Simulator is shared by both tracks and by nested calls; this
@@ -93,7 +123,7 @@ class ForwardingWriteSink : public vixl::aarch64::MemoryWriteSink {
               uint64_t value_lo,
               uint64_t value_hi) override {
     if (observer) {
-      observer(Simulator::MemoryWrite{addr, size, value_lo, value_hi});
+      observer(Simulator::MemoryWriteEvent{addr, size, value_lo, value_hi});
     }
   }
 
@@ -141,9 +171,26 @@ class Simulator::Impl {
     // Wire the predecode cache into the imported Simulator (null is fine — a
     // null-cache Simulator simply has no cache track).
     vsim.SetPredecodeCache(cache);
-    // The debug track audits every instruction and aborts on a feature the
-    // auditor rejects; All() keeps it from rejecting baseline instructions,
-    // matching how a bare vixl::aarch64::Simulator is configured to execute.
+    // TODO(simulator-cpu-features): narrow to an EL0 user-mode subset.
+    //
+    // Why All() today. Both tracks consult the imported CPUFeaturesAuditor —
+    // the debug track audits every instruction before its leaf runs, and the
+    // cache track's PredecodeCache::RegisterCodeRange pre-screens every
+    // 4-byte word against the same auditor. During V1 bring-up the
+    // correctness suite covers the full A64 baseline, so any narrower set
+    // would make legitimate baseline encodings get rejected by one track or
+    // the other.
+    //
+    // Why it must narrow. AGENTS.md «Scope» pins V1 at EL0 user-mode. With
+    // All() the cache-track pre-screen accepts non-user-mode encodings that
+    // cannot legitimately occur in a guest binary — predecoding them wastes
+    // work and lets misconfigured guests reach instruction families this
+    // project does not promise to support.
+    //
+    // Follow-up. A separate change owns enumerating the user-mode feature
+    // subset, plumbing it through both tracks, and producing a diagnostic
+    // when an out-of-set encoding is encountered. The kebab tag above is
+    // unique — grep for it to land back at this call site.
     vsim.SetCPUFeatures(vixl::CPUFeatures::All());
     // Point the guest stack pointer at the top of the embedder's buffer,
     // 16-byte aligned down per AAPCS64. That buffer IS the guest stack; the
@@ -174,7 +221,9 @@ class Simulator::Impl {
 Simulator::Simulator(PredecodeCache* cache,
                      void* stack_buffer,
                      size_t stack_size)
-    : impl_(std::make_unique<Impl>(cache, stack_buffer, stack_size)) {}
+    : impl_(std::make_unique<Impl>(cache,
+                                   stack_buffer,
+                                   CheckStackSize(stack_size))) {}
 
 Simulator::~Simulator() = default;
 

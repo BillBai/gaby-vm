@@ -37,6 +37,14 @@ class PredecodeCache;
 
 class Simulator {
  public:
+  // Minimum size of the embedder-supplied stack buffer, in bytes. The
+  // constructor aborts when stack_size is below this floor. The value tracks
+  // the imported vixl::aarch64::SimStack defaults
+  // (limit_guard_size_ + usable_size_ in src/aarch64/simulator-aarch64.h),
+  // which is what VIXL itself treats as a reasonably-sized guest stack. A
+  // static_assert in simulator.cc keeps the two in lockstep.
+  static constexpr size_t kMinStackSize = 12 * 1024;
+
   // Construct a Simulator.
   //
   //   cache        — the PredecodeCache backing the cache track. May be null;
@@ -45,7 +53,10 @@ class Simulator {
   //   stack_buffer — embedder-owned memory the guest uses as its stack. The
   //                  initial SP is set to the (16-byte-aligned) top of this
   //                  buffer. Must outlive the Simulator.
-  //   stack_size   — size of stack_buffer in bytes.
+  //   stack_size   — size of stack_buffer in bytes. MUST be at least
+  //                  kMinStackSize; a smaller value aborts the constructor
+  //                  with a diagnostic that names the rejected size and the
+  //                  floor.
   Simulator(PredecodeCache* cache, void* stack_buffer, size_t stack_size);
   ~Simulator();
 
@@ -169,8 +180,9 @@ class Simulator {
 
   // --- Memory-write observation ----------------------------------------------
 
-  // A single guest memory write.
-  struct MemoryWrite {
+  // Payload delivered to a MemoryWriteObserver — a single guest memory write
+  // event, by value. Lifetime is the observer callback itself.
+  struct MemoryWriteEvent {
     uintptr_t address;
     size_t size;        // bytes: 1, 2, 4, 8, or 16
     uint64_t value_lo;  // low 64 bits of the stored value
@@ -186,7 +198,7 @@ class Simulator {
   // StepOnce(entry_pc) or DebugStepOnce(entry_pc), the forms that seat the
   // nested entry point safely (see the PC-case note on
   // Write(GpRegister, uint64_t)).
-  using MemoryWriteObserver = std::function<void(const MemoryWrite&)>;
+  using MemoryWriteObserver = std::function<void(const MemoryWriteEvent&)>;
   void SetMemoryWriteObserver(MemoryWriteObserver observer);
 
  private:

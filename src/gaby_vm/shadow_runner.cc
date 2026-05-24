@@ -66,10 +66,12 @@ class ShadowRunner::Impl {
         ref_(nullptr, stack_buffer, stack_size) {
     // Capture each step's memory writes into per-track lists; RunFrom clears
     // them before every step, so each list holds just that step's writes.
-    fast_.SetMemoryWriteObserver(
-        [this](const Simulator::MemoryWrite& w) { fast_writes_.push_back(w); });
-    ref_.SetMemoryWriteObserver(
-        [this](const Simulator::MemoryWrite& w) { ref_writes_.push_back(w); });
+    fast_.SetMemoryWriteObserver([this](const Simulator::MemoryWriteEvent& w) {
+      fast_writes_.push_back(w);
+    });
+    ref_.SetMemoryWriteObserver([this](const Simulator::MemoryWriteEvent& w) {
+      ref_writes_.push_back(w);
+    });
   }
 
   // Initial register state is mirrored to both Simulators so they start equal.
@@ -223,10 +225,10 @@ class ShadowRunner::Impl {
     for (size_t i = 0; i < n; ++i) {
       const bool fast_has = i < fast_writes_.size();
       const bool ref_has = i < ref_writes_.size();
-      const Simulator::MemoryWrite fw =
-          fast_has ? fast_writes_[i] : Simulator::MemoryWrite{0, 0, 0, 0};
-      const Simulator::MemoryWrite rw =
-          ref_has ? ref_writes_[i] : Simulator::MemoryWrite{0, 0, 0, 0};
+      const Simulator::MemoryWriteEvent fw =
+          fast_has ? fast_writes_[i] : Simulator::MemoryWriteEvent{0, 0, 0, 0};
+      const Simulator::MemoryWriteEvent rw =
+          ref_has ? ref_writes_[i] : Simulator::MemoryWriteEvent{0, 0, 0, 0};
       if ((fw.address != rw.address) || (fw.size != rw.size) ||
           (fw.value_lo != rw.value_lo) || (fw.value_hi != rw.value_hi)) {
         report->kind = DivergenceReport::Kind::MemoryWrite;
@@ -268,8 +270,8 @@ class ShadowRunner::Impl {
 
   Simulator fast_;
   Simulator ref_;
-  std::vector<Simulator::MemoryWrite> fast_writes_;
-  std::vector<Simulator::MemoryWrite> ref_writes_;
+  std::vector<Simulator::MemoryWriteEvent> fast_writes_;
+  std::vector<Simulator::MemoryWriteEvent> ref_writes_;
   DivergenceHandler handler_;  // empty -> DefaultDivergenceHandler
 };
 

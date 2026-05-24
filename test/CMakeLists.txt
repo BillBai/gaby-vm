@@ -85,3 +85,14 @@ target_link_libraries(typed_register_io_abort_test PRIVATE gaby_vm::gaby_vm)
 gaby_vm_apply_compile_flags(typed_register_io_abort_test)
 
 add_test(NAME typed_register_io_abort COMMAND typed_register_io_abort_test)
+
+# Simulator constructor stack-size contract: the constructor MUST abort when
+# stack_size is below Simulator::kMinStackSize. Same fork-and-check-for-signal
+# pattern as typed_register_io_abort_test, for the same reason (WILL_FAIL does
+# not invert SIGABRT outcomes). Also verifies the boundary case
+# stack_size == kMinStackSize constructs successfully.
+add_executable(simulator_constructor_stack_test simulator_constructor_stack_test.cc)
+target_link_libraries(simulator_constructor_stack_test PRIVATE gaby_vm::gaby_vm)
+gaby_vm_apply_compile_flags(simulator_constructor_stack_test)
+
+add_test(NAME simulator_constructor_stack COMMAND simulator_constructor_stack_test)
