@@ -38,15 +38,32 @@ explicitly when they want the harness.
 ./build/release/bench/bench_baseline           # 5 seconds (default)
 ./build/release/bench/bench_baseline --seconds 10
 ./build/release/bench/bench_smoke  --seconds 0.2
+./build/release/bench/bench_baseline --help    # usage block, exit 0
+./build/release/bench/bench_baseline -h        # short alias for --help
 ```
 
-The single CLI option is `--seconds <float>`, mirroring upstream
-`BenchCLI::kDefaultRunTime`. Each invocation prints one observation as
-`key: value` lines on stdout:
+Supported flags:
+
+- `--seconds <float>` — timed-loop target duration. Default `5.0`,
+  mirroring upstream `BenchCLI::kDefaultRunTime`. Values strictly less
+  than `0.001` (1 ms) are rejected with an error on stderr and exit
+  status `2`; the minimum exists to guarantee the timed loop sees at
+  least a few `RunFrom` iterations even on the smoke workload.
+- `--help`, `-h` — print a usage block to stdout listing the flags and
+  defaults, then exit with status `0`. Recognized at any argument
+  position; short-circuits all other parsing so that
+  `bench_smoke --seconds bogus --help` prints help instead of failing on
+  `bogus` first.
+
+Unknown arguments produce an error on stderr that names the offending
+argument and points the user at `--help`, then exit status `2`.
+
+Each invocation prints one observation as `key: value` lines on stdout:
 
 | Key | Meaning |
 |-----|---------|
 | `workload` | Short identifier (`mixed` or `smoke`). |
+| `build_type` | The CMake configuration that compiled the runner (`Release`, `Debug`, `RelWithDebInfo`, `MinSizeRel`, ...). The string `Unknown` is emitted when no configuration is selected (rare; can happen with single-config generators invoked without `-DCMAKE_BUILD_TYPE`). |
 | `workload_generator_tag` | Provenance string from the workload header — upstream commit + seed + buffer size for `mixed`; `llvm-mc` version + source digest for `smoke`. |
 | `static_words_in_buffer` | Number of 4-byte instruction words physically present in the workload header's array. |
 | `dynamic_instructions_per_iteration` | Number of guest instructions actually executed by one `Simulator::RunFrom` over the buffer. For `mixed`, captured offline once during workload generation; for `smoke` (branch-free), equals the static count by construction. |

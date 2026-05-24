@@ -11,10 +11,15 @@ message(STATUS "Building gaby-vm benchmarks")
 # compiled with so the header view is consistent.
 add_library(bench_runner OBJECT runner.cc)
 target_include_directories(bench_runner PRIVATE ${PROJECT_SOURCE_DIR}/src)
+# GABY_VM_BENCH_BUILD_TYPE: $<CONFIG> is a generator expression that resolves
+# at build time to the active configuration name (Release, Debug, ...). It is
+# the right idiom across both single- and multi-config generators; see
+# openspec/changes/bench-runner-enhancements/design.md decision 1.
 target_compile_definitions(bench_runner PRIVATE
   VIXL_INCLUDE_TARGET_A64
   VIXL_INCLUDE_SIMULATOR_AARCH64
-  $<$<CONFIG:Debug>:VIXL_DEBUG>)
+  $<$<CONFIG:Debug>:VIXL_DEBUG>
+  GABY_VM_BENCH_BUILD_TYPE="$<CONFIG>")
 target_link_libraries(bench_runner PUBLIC gaby_vm::gaby_vm)
 gaby_vm_apply_compile_flags(bench_runner)
 

@@ -7,6 +7,7 @@
 namespace gaby_vm_bench {
 
 int RunBenchmark(const char* workload_name,
+                 const char* workload_description,
                  const char* generator_tag,
                  const uint32_t* code,
                  std::size_t static_word_count,
