@@ -72,6 +72,6 @@ target_compile_definitions(gaby_vm PRIVATE
   VIXL_INCLUDE_SIMULATOR_AARCH64
   $<$<CONFIG:Debug>:VIXL_DEBUG>)
 
-target_compile_features(gaby_vm PUBLIC cxx_std_17)
+target_compile_features(gaby_vm PUBLIC cxx_std_20)
 
 gaby_vm_apply_compile_flags(gaby_vm)

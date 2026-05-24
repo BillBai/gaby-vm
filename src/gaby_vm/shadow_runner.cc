@@ -74,30 +74,31 @@ class ShadowRunner::Impl {
 
   // Initial register state is mirrored to both Simulators so they start equal.
   void WriteXRegister(unsigned code, uint64_t value) {
-    fast_.WriteXRegister(code, value);
-    ref_.WriteXRegister(code, value);
+    const GpRegister reg = static_cast<GpRegister>(code);
+    fast_.Write(reg, value);
+    ref_.Write(reg, value);
   }
   uint64_t ReadXRegister(unsigned code) const {
-    return fast_.ReadXRegister(code);
+    return fast_.Read(static_cast<GpRegister>(code));
   }
   void WriteSp(uint64_t value) {
-    fast_.WriteSp(value);
-    ref_.WriteSp(value);
+    fast_.Write(GpRegister::SP, value);
+    ref_.Write(GpRegister::SP, value);
   }
-  uint64_t ReadSp() const { return fast_.ReadSp(); }
+  uint64_t ReadSp() const { return fast_.Read(GpRegister::SP); }
 
   void SetDivergenceHandler(DivergenceHandler handler) {
     handler_ = std::move(handler);
   }
 
   void RunFrom(uintptr_t entry_pc) {
-    fast_.WritePc(entry_pc);
-    ref_.WritePc(entry_pc);
+    fast_.Write(GpRegister::PC, entry_pc);
+    ref_.Write(GpRegister::PC, entry_pc);
     for (;;) {
       // At the loop top the two tracks agree (the previous step compared
       // equal, or this is the first step), so either PC is the instruction
       // about to run.
-      const uintptr_t pc = fast_.ReadPc();
+      const uintptr_t pc = static_cast<uintptr_t>(fast_.Read(GpRegister::PC));
       fast_writes_.clear();
       ref_writes_.clear();
       const bool fast_alive = fast_.StepOnce();
@@ -132,8 +133,9 @@ class ShadowRunner::Impl {
   bool CompareStep(uintptr_t pc, DivergenceReport* report) {
     // General-purpose registers X0..X30.
     for (unsigned i = 0; i <= 30; ++i) {
-      const uint64_t f = fast_.ReadXRegister(i);
-      const uint64_t r = ref_.ReadXRegister(i);
+      const GpRegister reg = static_cast<GpRegister>(i);
+      const uint64_t f = fast_.Read(reg);
+      const uint64_t r = ref_.Read(reg);
       if (f != r) {
         char name[8];
         std::snprintf(name, sizeof(name), "X%u", i);
@@ -143,8 +145,8 @@ class ShadowRunner::Impl {
     }
     // Stack pointer.
     {
-      const uint64_t f = fast_.ReadSp();
-      const uint64_t r = ref_.ReadSp();
+      const uint64_t f = fast_.Read(GpRegister::SP);
+      const uint64_t r = ref_.Read(GpRegister::SP);
       if (f != r) {
         FillRegReport(report, pc, -1, "SP", f, 0, r, 0);
         return true;
@@ -152,8 +154,9 @@ class ShadowRunner::Impl {
     }
     // FP/SIMD registers V0..V31, compared over their full 128 bits.
     for (unsigned i = 0; i <= 31; ++i) {
-      const VRegisterValue f = fast_.ReadVRegister(i);
-      const VRegisterValue r = ref_.ReadVRegister(i);
+      const VRegister reg = static_cast<VRegister>(i);
+      const VRegisterValue f = fast_.Read(reg);
+      const VRegisterValue r = ref_.Read(reg);
       if ((f.lo != r.lo) || (f.hi != r.hi)) {
         char name[8];
         std::snprintf(name, sizeof(name), "V%u", i);
@@ -169,53 +172,45 @@ class ShadowRunner::Impl {
       }
     }
     // PC, flags, and control state.
-    if (fast_.ReadPc() != ref_.ReadPc()) {
-      FillRegReport(report, pc, -1, "PC", fast_.ReadPc(), 0, ref_.ReadPc(), 0);
-      return true;
+    {
+      const uint64_t fpc = fast_.Read(GpRegister::PC);
+      const uint64_t rpc = ref_.Read(GpRegister::PC);
+      if (fpc != rpc) {
+        FillRegReport(report, pc, -1, "PC", fpc, 0, rpc, 0);
+        return true;
+      }
     }
-    if (fast_.ReadNzcv() != ref_.ReadNzcv()) {
-      FillRegReport(report,
-                    pc,
-                    -1,
-                    "NZCV",
-                    fast_.ReadNzcv(),
-                    0,
-                    ref_.ReadNzcv(),
-                    0);
-      return true;
+    {
+      const uint32_t f = fast_.Read(SysRegister::NZCV);
+      const uint32_t r = ref_.Read(SysRegister::NZCV);
+      if (f != r) {
+        FillRegReport(report, pc, -1, "NZCV", f, 0, r, 0);
+        return true;
+      }
     }
-    if (fast_.ReadFpcr() != ref_.ReadFpcr()) {
-      FillRegReport(report,
-                    pc,
-                    -1,
-                    "FPCR",
-                    fast_.ReadFpcr(),
-                    0,
-                    ref_.ReadFpcr(),
-                    0);
-      return true;
+    {
+      const uint32_t f = fast_.Read(SysRegister::FPCR);
+      const uint32_t r = ref_.Read(SysRegister::FPCR);
+      if (f != r) {
+        FillRegReport(report, pc, -1, "FPCR", f, 0, r, 0);
+        return true;
+      }
     }
-    if (fast_.ReadFpsr() != ref_.ReadFpsr()) {
-      FillRegReport(report,
-                    pc,
-                    -1,
-                    "FPSR",
-                    fast_.ReadFpsr(),
-                    0,
-                    ref_.ReadFpsr(),
-                    0);
-      return true;
+    {
+      const uint32_t f = fast_.Read(SysRegister::FPSR);
+      const uint32_t r = ref_.Read(SysRegister::FPSR);
+      if (f != r) {
+        FillRegReport(report, pc, -1, "FPSR", f, 0, r, 0);
+        return true;
+      }
     }
-    if (fast_.ReadBType() != ref_.ReadBType()) {
-      FillRegReport(report,
-                    pc,
-                    -1,
-                    "BType",
-                    fast_.ReadBType(),
-                    0,
-                    ref_.ReadBType(),
-                    0);
-      return true;
+    {
+      const uint32_t f = fast_.Read(SysRegister::BType);
+      const uint32_t r = ref_.Read(SysRegister::BType);
+      if (f != r) {
+        FillRegReport(report, pc, -1, "BType", f, 0, r, 0);
+        return true;
+      }
     }
     // Memory writes performed by this instruction.
     return CompareMemoryWrites(pc, report);

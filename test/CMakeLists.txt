@@ -64,3 +64,24 @@ target_include_directories(workload_shadow_test PRIVATE ${PROJECT_SOURCE_DIR}/be
 gaby_vm_apply_compile_flags(workload_shadow_test)
 
 add_test(NAME workload_shadow COMMAND workload_shadow_test)
+
+# Typed register-I/O acceptance: covers the simulator-register-io-api change's
+# new public surface — enum-keyed Read/Write, RegisterFile snapshot, ReadAll /
+# WriteAll, and the std::span<RegisterWrite> batch entry point. Public-API
+# only; no privileged build.
+add_executable(typed_register_io_test typed_register_io_test.cc)
+target_link_libraries(typed_register_io_test PRIVATE gaby_vm::gaby_vm)
+gaby_vm_apply_compile_flags(typed_register_io_test)
+
+add_test(NAME typed_register_io COMMAND typed_register_io_test)
+
+# Typed register-I/O fail-fast: exercises the span-write abort path on a
+# deliberately out-of-range GpRegister value. The test program forks a child
+# that triggers the abort and asserts in the parent that the child died from
+# a signal, so the parent exits 0/1 the normal way — no WILL_FAIL needed
+# (and that property doesn't invert SIGABRT outcomes anyway).
+add_executable(typed_register_io_abort_test typed_register_io_abort_test.cc)
+target_link_libraries(typed_register_io_abort_test PRIVATE gaby_vm::gaby_vm)
+gaby_vm_apply_compile_flags(typed_register_io_abort_test)
+
+add_test(NAME typed_register_io_abort COMMAND typed_register_io_abort_test)

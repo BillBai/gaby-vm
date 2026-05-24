@@ -8,6 +8,9 @@
 #include <cstdint>
 #include <functional>
 #include <memory>
+#include <span>
+
+#include "gaby_vm/registers.h"
 
 // gaby_vm::Simulator — the dual-track AArch64 user-mode interpreter.
 //
@@ -31,14 +34,6 @@
 namespace gaby_vm {
 
 class PredecodeCache;
-
-// The full 128-bit value of one FP/SIMD (V) register, split into two 64-bit
-// halves. Returned by Simulator::ReadVRegister so callers — notably
-// ShadowRunner — can compare V registers over their entire width.
-struct VRegisterValue {
-  uint64_t lo;  // bits [63:0]
-  uint64_t hi;  // bits [127:64]
-};
 
 class Simulator {
  public:
@@ -69,12 +64,13 @@ class Simulator {
   // Execute exactly one instruction on the cache track. Returns false once the
   // simulation has terminated (nothing was executed), true otherwise.
   //
-  // The no-argument form continues from the current PC — pair it with WritePc
-  // to drive a top-level single-stepping loop. The entry_pc form seats the PC
-  // and steps in one call: it is the form a re-entrant caller (one stepping
-  // from inside a memory-write observer) must use, because it seats the PC
-  // inside the re-entrancy guard. Seating it with a bare WritePc first would
-  // corrupt the enclosing run — see WritePc.
+  // The no-argument form continues from the current PC — pair it with a
+  // Write(GpRegister::PC, …) to drive a top-level single-stepping loop. The
+  // entry_pc form seats the PC and steps in one call: it is the form a
+  // re-entrant caller (one stepping from inside a memory-write observer) must
+  // use, because it seats the PC inside the re-entrancy guard. Seating it with
+  // a bare PC write first would corrupt the enclosing run — see the PC-case
+  // note on Write(GpRegister, uint64_t).
   bool StepOnce();
   bool StepOnce(uintptr_t entry_pc);
 
@@ -92,41 +88,75 @@ class Simulator {
   bool DebugStepOnce();
   bool DebugStepOnce(uintptr_t entry_pc);
 
-  // --- Guest register / PC access (shared by both tracks) --------------------
-
-  // General-purpose registers X0..X30 (`code` in [0, 30]).
-  void WriteXRegister(unsigned code, uint64_t value);
-  uint64_t ReadXRegister(unsigned code) const;
-
-  // Stack pointer. VIXL models SP separately from the XZR encoding of code 31,
-  // so it gets its own accessors.
-  void WriteSp(uint64_t value);
-  uint64_t ReadSp() const;
-
-  // Program counter as a host address.
+  // --- Typed register I/O (shared by both tracks) ----------------------------
   //
-  // WritePc only seats the PC; it does not execute. Use it to seed a top-level
-  // run before a StepOnce() / DebugStepOnce() loop. It is NOT a safe way to
-  // seat a *nested* step from inside a leaf: it mutates the PC before any
-  // execution call can snapshot the enclosing run's cursor, so the enclosing
-  // run would resume at the wrong PC. A re-entrant caller seats its entry point
-  // through RunFrom / StepOnce(entry_pc) / DebugStepOnce(entry_pc) instead,
-  // which all seat the PC inside the re-entrancy guard.
-  void WritePc(uintptr_t pc);
-  uintptr_t ReadPc() const;
+  // Typed enum-keyed Read/Write surface. A V-register code cannot reach an
+  // X-register accessor (or vice versa) because the parameter types differ.
+  // Each Write updates the same backing slot the corresponding instruction
+  // semantics would reach; each Read returns the current value of that slot.
+  // Constructing an enum value via `static_cast` from an out-of-range integer
+  // and passing it here aborts with a diagnostic.
 
-  // FP/SIMD register V0..V31 (`code` in [0, 31]), full 128 bits.
-  VRegisterValue ReadVRegister(unsigned code) const;
+  // General-purpose / SP / PC register access. Routing inside the simulator:
+  //   X0..X30 — the corresponding X-register slot (`LR` aliases `X30`).
+  //   SP      — the dedicated stack-pointer slot (distinct from the XZR
+  //             encoding of code 31).
+  //   PC      — the program counter, as a host address.
+  //
+  // PC case re-entrancy hazard. A Write(GpRegister::PC, …) only seats the PC;
+  // it does not execute. Use it to seed a top-level run before a StepOnce() /
+  // DebugStepOnce() loop. It is NOT a safe way to seat a *nested* step from
+  // inside a leaf: it mutates the PC before any execution call can snapshot
+  // the enclosing run's cursor, so the enclosing run would resume at the wrong
+  // PC. A re-entrant caller seats its entry point through RunFrom,
+  // StepOnce(entry_pc), or DebugStepOnce(entry_pc) instead, all of which seat
+  // the PC inside the re-entrancy guard.
+  void Write(GpRegister reg, uint64_t value);
+  uint64_t Read(GpRegister reg) const;
 
-  // Condition flags (N, Z, C, V) packed in the architectural NZCV layout.
-  uint32_t ReadNzcv() const;
+  // FP/SIMD register V0..V31, full 128 bits.
+  void Write(VRegister reg, VRegisterValue value);
+  VRegisterValue Read(VRegister reg) const;
 
-  // Floating-point control / status registers.
-  uint32_t ReadFpcr() const;
-  uint32_t ReadFpsr() const;
+  // System register access. NZCV is packed in the architectural N,Z,C,V
+  // layout. FPCR / FPSR are the floating-point control / status registers.
+  // BType carries the BTI tracking state; a Write here promotes the value so
+  // it is observable on the next Read (matching the typed-API round-trip
+  // contract). The imported simulator does not model FPSR; the typed surface
+  // keeps a slot for it so Write/Read round-trips behave like every other
+  // sysreg.
+  void Write(SysRegister reg, uint32_t value);
+  uint32_t Read(SysRegister reg) const;
 
-  // Branch-type register, used for BTI tracking.
-  uint32_t ReadBType() const;
+  // --- Bulk register I/O -----------------------------------------------------
+
+  // Snapshot the full guest architectural state into a RegisterFile. Every
+  // field of the returned RegisterFile is populated from the current value of
+  // the corresponding register slot.
+  RegisterFile ReadAll() const;
+
+  // Restore the full guest architectural state from a RegisterFile. Every
+  // slot is updated from the corresponding field; the observable effect
+  // equals a sequence of individual typed Writes covering each slot exactly
+  // once.
+  //
+  // WriteAll is a top-level state-restore entry point. It MUST NOT be called
+  // from inside a leaf executed by an enclosing run: like a bare
+  // Write(GpRegister::PC, …), it mutates the PC outside the re-entrancy
+  // guard, which would corrupt the enclosing run's cursor.
+  void WriteAll(const RegisterFile& file);
+
+  // Apply a sequence of partial writes in span order. Each element's variant
+  // alternative selects the matching typed Write; the call is observably
+  // equivalent to invoking those single-element Writes in order. There is no
+  // atomic-commit guarantee — an element that aborts (e.g. one carrying an
+  // out-of-range enum value) leaves entries before it applied.
+  //
+  // This entry point is a C++ ergonomic convenience: `std::variant` and
+  // `std::span` are not ABI-stable across stdlib versions, so FFI consumers
+  // should drive partial writes through the individual typed Write overloads
+  // or restore full state through WriteAll instead.
+  void Write(std::span<const RegisterWrite> writes);
 
   // --- Debug-track configuration ---------------------------------------------
   // These affect only the debug track. On the cache track they are silently
@@ -154,7 +184,8 @@ class Simulator {
   // which stores incur no observation overhead). The observer MAY make
   // re-entrant execution calls on this Simulator — via RunFrom,
   // StepOnce(entry_pc) or DebugStepOnce(entry_pc), the forms that seat the
-  // nested entry point safely (see WritePc).
+  // nested entry point safely (see the PC-case note on
+  // Write(GpRegister, uint64_t)).
   using MemoryWriteObserver = std::function<void(const MemoryWrite&)>;
   void SetMemoryWriteObserver(MemoryWriteObserver observer);
 

@@ -33,6 +33,7 @@ function(gaby_vm_apply_imported_compile_flags)
       # -Wno-* relaxations are added below as the import surfaces them.
       # Each line MUST name the warning class it is silencing.
       -Wno-deprecated-literal-operator # decoder-constants-aarch64.h: `operator"" _b` (C++14 syntax, deprecated in C++23)
+      -Wno-deprecated-enum-enum-conversion # constants-aarch64.h / instructions-aarch64.h: bitwise ops between distinct NEON*/Logical* enum types (C++20-deprecated)
     )
     set_source_files_properties(${ARGN}
       PROPERTIES

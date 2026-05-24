@@ -111,7 +111,8 @@ bool expect_eq_u8(TestState& s,
 
 // AArch64 NZCV.Z bit (bit 30 of the architectural flag layout).
 uint8_t nzcv_z(const gaby_vm::Simulator& sim) {
-  return static_cast<uint8_t>((sim.ReadNzcv() >> 30) & 1u);
+  return static_cast<uint8_t>((sim.Read(gaby_vm::SysRegister::NZCV) >> 30) &
+                              1u);
 }
 
 // -------- Embedder-owned guest stack --------
@@ -192,11 +193,14 @@ void run_arithmetic_tests(TestState& s) {
         code,
         2,
         [=](gaby_vm::Simulator& sim) {
-          sim.WriteXRegister(1, a);
-          sim.WriteXRegister(2, b);
+          sim.Write(gaby_vm::GpRegister::X1, a);
+          sim.Write(gaby_vm::GpRegister::X2, b);
         },
         [=, &s](gaby_vm::Simulator& sim) {
-          expect_eq_u64(s, sim.ReadXRegister(0), a + b, "X0 = X1 + X2");
+          expect_eq_u64(s,
+                        sim.Read(gaby_vm::GpRegister::X0),
+                        a + b,
+                        "X0 = X1 + X2");
         });
   }
 
@@ -214,11 +218,14 @@ void run_arithmetic_tests(TestState& s) {
         code,
         2,
         [=](gaby_vm::Simulator& sim) {
-          sim.WriteXRegister(1, a);
-          sim.WriteXRegister(2, b);
+          sim.Write(gaby_vm::GpRegister::X1, a);
+          sim.Write(gaby_vm::GpRegister::X2, b);
         },
         [=, &s](gaby_vm::Simulator& sim) {
-          expect_eq_u64(s, sim.ReadXRegister(0), a - b, "X0 = X1 - X2");
+          expect_eq_u64(s,
+                        sim.Read(gaby_vm::GpRegister::X0),
+                        a - b,
+                        "X0 = X1 - X2");
         });
   }
 
@@ -236,12 +243,12 @@ void run_arithmetic_tests(TestState& s) {
         code,
         2,
         [=](gaby_vm::Simulator& sim) {
-          sim.WriteXRegister(1, a);
-          sim.WriteXRegister(2, b);
+          sim.Write(gaby_vm::GpRegister::X1, a);
+          sim.Write(gaby_vm::GpRegister::X2, b);
         },
         [=, &s](gaby_vm::Simulator& sim) {
           expect_eq_u64(s,
-                        sim.ReadXRegister(0),
+                        sim.Read(gaby_vm::GpRegister::X0),
                         a * b,
                         "X0 = (X1 * X2) low 64 bits");
         });
@@ -257,8 +264,8 @@ void run_logical_tests(TestState& s) {
   const uint64_t a = 0xAAAAAAAAAAAAAAAAULL;
   const uint64_t b = 0xCCCCCCCCCCCCCCCCULL;
   const SetupFn setup = [=](gaby_vm::Simulator& sim) {
-    sim.WriteXRegister(1, a);
-    sim.WriteXRegister(2, b);
+    sim.Write(gaby_vm::GpRegister::X1, a);
+    sim.Write(gaby_vm::GpRegister::X2, b);
   };
 
   {
@@ -272,7 +279,10 @@ void run_logical_tests(TestState& s) {
              2,
              setup,
              [=, &s](gaby_vm::Simulator& sim) {
-               expect_eq_u64(s, sim.ReadXRegister(0), a & b, "X0 = X1 & X2");
+               expect_eq_u64(s,
+                             sim.Read(gaby_vm::GpRegister::X0),
+                             a & b,
+                             "X0 = X1 & X2");
              });
   }
   {
@@ -286,7 +296,10 @@ void run_logical_tests(TestState& s) {
              2,
              setup,
              [=, &s](gaby_vm::Simulator& sim) {
-               expect_eq_u64(s, sim.ReadXRegister(0), a | b, "X0 = X1 | X2");
+               expect_eq_u64(s,
+                             sim.Read(gaby_vm::GpRegister::X0),
+                             a | b,
+                             "X0 = X1 | X2");
              });
   }
   {
@@ -300,7 +313,10 @@ void run_logical_tests(TestState& s) {
              2,
              setup,
              [=, &s](gaby_vm::Simulator& sim) {
-               expect_eq_u64(s, sim.ReadXRegister(0), a ^ b, "X0 = X1 ^ X2");
+               expect_eq_u64(s,
+                             sim.Read(gaby_vm::GpRegister::X0),
+                             a ^ b,
+                             "X0 = X1 ^ X2");
              });
   }
 }
@@ -330,11 +346,12 @@ void run_loadstore_tests(TestState& s) {
         [&](gaby_vm::Simulator& sim) {
           buf.fill(0);
           std::memcpy(buf.data() + 16, &ldr_pattern, sizeof(ldr_pattern));
-          sim.WriteXRegister(1, reinterpret_cast<uint64_t>(buf.data()));
+          sim.Write(gaby_vm::GpRegister::X1,
+                    reinterpret_cast<uint64_t>(buf.data()));
         },
         [&](gaby_vm::Simulator& sim) {
           expect_eq_u64(s,
-                        sim.ReadXRegister(0),
+                        sim.Read(gaby_vm::GpRegister::X0),
                         ldr_pattern,
                         "X0 = mem[buf+16]");
         });
@@ -354,12 +371,13 @@ void run_loadstore_tests(TestState& s) {
         [&](gaby_vm::Simulator& sim) {
           buf.fill(0);
           std::memcpy(buf.data() + 16, &ldr_pattern, sizeof(ldr_pattern));
-          sim.WriteXRegister(1, reinterpret_cast<uint64_t>(buf.data()));
-          sim.WriteXRegister(2, 16ULL);
+          sim.Write(gaby_vm::GpRegister::X1,
+                    reinterpret_cast<uint64_t>(buf.data()));
+          sim.Write(gaby_vm::GpRegister::X2, 16ULL);
         },
         [&](gaby_vm::Simulator& sim) {
           expect_eq_u64(s,
-                        sim.ReadXRegister(0),
+                        sim.Read(gaby_vm::GpRegister::X0),
                         ldr_pattern,
                         "X0 = mem[buf + X2(16)]");
         });
@@ -378,8 +396,9 @@ void run_loadstore_tests(TestState& s) {
         2,
         [&](gaby_vm::Simulator& sim) {
           buf.fill(0);
-          sim.WriteXRegister(0, str_value);
-          sim.WriteXRegister(1, reinterpret_cast<uint64_t>(buf.data()));
+          sim.Write(gaby_vm::GpRegister::X0, str_value);
+          sim.Write(gaby_vm::GpRegister::X1,
+                    reinterpret_cast<uint64_t>(buf.data()));
         },
         [&](gaby_vm::Simulator& /*sim*/) {
           uint64_t read_back = 0;
@@ -401,9 +420,10 @@ void run_loadstore_tests(TestState& s) {
         2,
         [&](gaby_vm::Simulator& sim) {
           buf.fill(0);
-          sim.WriteXRegister(0, str_value);
-          sim.WriteXRegister(1, reinterpret_cast<uint64_t>(buf.data()));
-          sim.WriteXRegister(2, 24ULL);
+          sim.Write(gaby_vm::GpRegister::X0, str_value);
+          sim.Write(gaby_vm::GpRegister::X1,
+                    reinterpret_cast<uint64_t>(buf.data()));
+          sim.Write(gaby_vm::GpRegister::X2, 24ULL);
         },
         [&](gaby_vm::Simulator& /*sim*/) {
           uint64_t read_back = 0;
@@ -436,12 +456,12 @@ void run_branch_tests(TestState& s) {
         code,
         3,
         [=](gaby_vm::Simulator& sim) {
-          sim.WriteXRegister(0, sentinel_a);
-          sim.WriteXRegister(1, 0ULL);
+          sim.Write(gaby_vm::GpRegister::X0, sentinel_a);
+          sim.Write(gaby_vm::GpRegister::X1, 0ULL);
         },
         [=, &s](gaby_vm::Simulator& sim) {
           expect_eq_u64(s,
-                        sim.ReadXRegister(0),
+                        sim.Read(gaby_vm::GpRegister::X0),
                         sentinel_a,
                         "X0 == sentinel_a (CBZ taken)");
         });
@@ -451,12 +471,12 @@ void run_branch_tests(TestState& s) {
         code,
         3,
         [=](gaby_vm::Simulator& sim) {
-          sim.WriteXRegister(0, sentinel_a);
-          sim.WriteXRegister(1, 1ULL);
+          sim.Write(gaby_vm::GpRegister::X0, sentinel_a);
+          sim.Write(gaby_vm::GpRegister::X1, 1ULL);
         },
         [=, &s](gaby_vm::Simulator& sim) {
           expect_eq_u64(s,
-                        sim.ReadXRegister(0),
+                        sim.Read(gaby_vm::GpRegister::X0),
                         sentinel_b,
                         "X0 == sentinel_b (CBZ not-taken; MOV ran)");
         });
@@ -475,12 +495,12 @@ void run_branch_tests(TestState& s) {
         code,
         3,
         [=](gaby_vm::Simulator& sim) {
-          sim.WriteXRegister(0, sentinel_a);
-          sim.WriteXRegister(1, 1ULL);
+          sim.Write(gaby_vm::GpRegister::X0, sentinel_a);
+          sim.Write(gaby_vm::GpRegister::X1, 1ULL);
         },
         [=, &s](gaby_vm::Simulator& sim) {
           expect_eq_u64(s,
-                        sim.ReadXRegister(0),
+                        sim.Read(gaby_vm::GpRegister::X0),
                         sentinel_a,
                         "X0 == sentinel_a (CBNZ taken)");
         });
@@ -490,12 +510,12 @@ void run_branch_tests(TestState& s) {
         code,
         3,
         [=](gaby_vm::Simulator& sim) {
-          sim.WriteXRegister(0, sentinel_a);
-          sim.WriteXRegister(1, 0ULL);
+          sim.Write(gaby_vm::GpRegister::X0, sentinel_a);
+          sim.Write(gaby_vm::GpRegister::X1, 0ULL);
         },
         [=, &s](gaby_vm::Simulator& sim) {
           expect_eq_u64(s,
-                        sim.ReadXRegister(0),
+                        sim.Read(gaby_vm::GpRegister::X0),
                         sentinel_b,
                         "X0 == sentinel_b (CBNZ not-taken; MOV ran)");
         });
@@ -515,12 +535,12 @@ void run_branch_tests(TestState& s) {
         code,
         4,
         [=](gaby_vm::Simulator& sim) {
-          sim.WriteXRegister(0, sentinel_a);
-          sim.WriteXRegister(1, 42ULL);
+          sim.Write(gaby_vm::GpRegister::X0, sentinel_a);
+          sim.Write(gaby_vm::GpRegister::X1, 42ULL);
         },
         [=, &s](gaby_vm::Simulator& sim) {
           expect_eq_u64(s,
-                        sim.ReadXRegister(0),
+                        sim.Read(gaby_vm::GpRegister::X0),
                         sentinel_a,
                         "X0 == sentinel_a (B.EQ taken)");
           expect_eq_u8(s, nzcv_z(sim), 1, "NZCV.Z == 1 (post SUBS X1,X1)");
@@ -539,13 +559,13 @@ void run_branch_tests(TestState& s) {
         code,
         4,
         [=](gaby_vm::Simulator& sim) {
-          sim.WriteXRegister(0, sentinel_a);
-          sim.WriteXRegister(1, 10ULL);
-          sim.WriteXRegister(2, 3ULL);
+          sim.Write(gaby_vm::GpRegister::X0, sentinel_a);
+          sim.Write(gaby_vm::GpRegister::X1, 10ULL);
+          sim.Write(gaby_vm::GpRegister::X2, 3ULL);
         },
         [=, &s](gaby_vm::Simulator& sim) {
           expect_eq_u64(s,
-                        sim.ReadXRegister(0),
+                        sim.Read(gaby_vm::GpRegister::X0),
                         sentinel_b,
                         "X0 == sentinel_b (B.EQ not-taken; MOV ran)");
           expect_eq_u8(s, nzcv_z(sim), 0, "NZCV.Z == 0 (post SUBS X1,X2)");
@@ -586,7 +606,7 @@ void run_call_return_tests(TestState& s) {
         [](gaby_vm::Simulator& /*sim*/) {},
         [&s](gaby_vm::Simulator& sim) {
           expect_eq_u64(s,
-                        sim.ReadXRegister(0),
+                        sim.Read(gaby_vm::GpRegister::X0),
                         0xC011AB1EULL,
                         "X0 == 0xC011AB1E (callee ran AND outer RET reached)");
         });

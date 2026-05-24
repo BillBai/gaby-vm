@@ -5,7 +5,7 @@ project(gaby_vm
   DESCRIPTION "Embeddable AArch64 instruction interpreter built on VIXL semantics"
   LANGUAGES CXX)
 
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 

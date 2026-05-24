@@ -145,7 +145,7 @@ void run_nesting_case(NestMode mode, const char* label_suffix) {
     // Set X30 = 0: a run-to-termination nested call needs it so the inner RET
     // hits the end-of-sim sentinel, and the enclosing run needs it so its own
     // trailing RET terminates.
-    sim.WriteXRegister(30, 0);
+    sim.Write(gaby_vm::GpRegister::X30, 0);
     switch (mode) {
       case NestMode::kCacheRun:
         sim.RunFrom(inner_entry);  // <-- nested call
@@ -161,10 +161,11 @@ void run_nesting_case(NestMode mode, const char* label_suffix) {
     }
   });
 
-  sim.WriteXRegister(0, 100);  // inner ADD takes this to 101
-  sim.WriteXRegister(1, reinterpret_cast<uint64_t>(&store_target));
-  sim.WriteXRegister(2, 0xfeedfaceu);  // value the outer STR writes
-  sim.WriteXRegister(3, 7);            // outer ADD takes this to 8
+  sim.Write(gaby_vm::GpRegister::X0, 100);  // inner ADD takes this to 101
+  sim.Write(gaby_vm::GpRegister::X1, reinterpret_cast<uint64_t>(&store_target));
+  sim.Write(gaby_vm::GpRegister::X2,
+            0xfeedfaceu);                 // value the outer STR writes
+  sim.Write(gaby_vm::GpRegister::X3, 7);  // outer ADD takes this to 8
 
   sim.RunFrom(reinterpret_cast<uintptr_t>(outer));
 
@@ -180,14 +181,14 @@ void run_nesting_case(NestMode mode, const char* label_suffix) {
                 "nesting (%s): X0 == 101 — nested run's register write flowed "
                 "back",
                 label_suffix);
-  check(sim.ReadXRegister(0) == 101, label);
+  check(sim.Read(gaby_vm::GpRegister::X0) == 101, label);
 
   std::snprintf(label,
                 sizeof(label),
                 "nesting (%s): X3 == 8 — enclosing run resumed past the nested "
                 "call",
                 label_suffix);
-  check(sim.ReadXRegister(3) == 8, label);
+  check(sim.Read(gaby_vm::GpRegister::X3) == 8, label);
 
   std::snprintf(label,
                 sizeof(label),
