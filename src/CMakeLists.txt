@@ -46,6 +46,19 @@ set(GABY_VM_IMPORTED_SOURCES
 target_sources(gaby_vm PRIVATE ${GABY_VM_IMPORTED_SOURCES})
 gaby_vm_apply_imported_compile_flags(${GABY_VM_IMPORTED_SOURCES})
 
+# Project-authored gaby_vm sources: the predecode/dispatch cache, the dual-track
+# gaby_vm::Simulator, and the ShadowRunner oracle. Unlike the imported VIXL
+# sources above, these are governed by the strict project warning policy
+# (gaby_vm_apply_compile_flags, applied target-wide below) and get no
+# imported-source relaxation. They reach imported VIXL headers through the
+# PRIVATE src/ include and VIXL_* defines this target already carries.
+set(GABY_VM_SOURCES
+  gaby_vm/predecode_cache.cc
+  gaby_vm/simulator.cc
+  gaby_vm/shadow_runner.cc
+)
+target_sources(gaby_vm PRIVATE ${GABY_VM_SOURCES})
+
 target_include_directories(gaby_vm
   PUBLIC  $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>
   PRIVATE ${PROJECT_SOURCE_DIR}/src)

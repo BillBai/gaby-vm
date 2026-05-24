@@ -1,0 +1,19 @@
+# Re-enable clang-format for project-authored code under src/gaby_vm/.
+#
+# clang-format resolves the nearest-ancestor .clang-format per file. Without
+# this file, src/gaby_vm/ would inherit src/.clang-format (DisableFormat:
+# true), which exists to keep VIXL-derived sources byte-identical to upstream.
+# Project-authored code needs the opposite: the normal root style plus the
+# project brace convention.
+#
+# `BasedOnStyle: InheritParentConfig` builds on the inheritance chain so the
+# root Google-based config is reused; only the keys that must differ for
+# project code are overridden below. `DisableFormat` / `SortIncludes` undo
+# src/.clang-format; the three brace keys mirror the root config.
+
+BasedOnStyle: InheritParentConfig
+DisableFormat: false
+SortIncludes: CaseSensitive
+InsertBraces: true
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLoopsOnASingleLine: false

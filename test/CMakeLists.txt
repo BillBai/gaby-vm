@@ -25,18 +25,42 @@ gaby_vm_apply_compile_flags(simulator_smoke)
 
 add_test(NAME simulator_smoke COMMAND simulator_smoke)
 
-# Simulator correctness: drives hand-encoded AArch64 sequences through
-# Simulator::RunFrom and asserts on post-run register / memory state. Reuses
-# the privileged build pattern simulator_smoke uses (PRIVATE include of src/,
-# same three VIXL compile definitions); see
-# openspec/changes/baseline-correctness-test/{design.md (D10), specs/aarch64-simulator/spec.md}.
+# Simulator correctness: the dual-path harness. Drives hand-encoded AArch64
+# sequences through gaby_vm::Simulator::RunFrom (cache track) and DebugRunFrom
+# (decoder track) and asserts both reach the precomputed expected state. It
+# consumes only gaby_vm:: public types, so — unlike simulator_smoke — it needs
+# no privileged build pattern: no PRIVATE src/ include, no VIXL_* defines.
 add_executable(simulator_correctness simulator_correctness.cc)
 target_link_libraries(simulator_correctness PRIVATE gaby_vm::gaby_vm)
-target_include_directories(simulator_correctness PRIVATE ${PROJECT_SOURCE_DIR}/src)
-target_compile_definitions(simulator_correctness PRIVATE
-  VIXL_INCLUDE_TARGET_A64
-  VIXL_INCLUDE_SIMULATOR_AARCH64
-  $<$<CONFIG:Debug>:VIXL_DEBUG>)
 gaby_vm_apply_compile_flags(simulator_correctness)
 
 add_test(NAME simulator_correctness COMMAND simulator_correctness)
+
+# Re-entrancy + dual-track termination: drives the gaby_vm::Simulator public API
+# only (no imported VIXL headers), so it needs no privileged build pattern —
+# just the public include directory that linking gaby_vm::gaby_vm provides.
+add_executable(reentrancy_test reentrancy_test.cc)
+target_link_libraries(reentrancy_test PRIVATE gaby_vm::gaby_vm)
+gaby_vm_apply_compile_flags(reentrancy_test)
+
+add_test(NAME reentrancy COMMAND reentrancy_test)
+
+# ShadowRunner self-test: verifies the oracle reports zero divergence on a
+# matching run AND — via a deliberately injected cache-track defect — that a
+# divergence is actually detected. Public-API only; no privileged build.
+add_executable(shadow_runner_test shadow_runner_test.cc)
+target_link_libraries(shadow_runner_test PRIVATE gaby_vm::gaby_vm)
+gaby_vm_apply_compile_flags(shadow_runner_test)
+
+add_test(NAME shadow_runner COMMAND shadow_runner_test)
+
+# Workload shadow acceptance: runs ShadowRunner over every committed benchmark
+# workload and asserts zero divergence (design doc 4.5 acceptance #3). The
+# PRIVATE bench/ include is only for the pure-data workload headers under
+# bench/workloads/ — it is not the privileged VIXL build pattern.
+add_executable(workload_shadow_test workload_shadow_test.cc)
+target_link_libraries(workload_shadow_test PRIVATE gaby_vm::gaby_vm)
+target_include_directories(workload_shadow_test PRIVATE ${PROJECT_SOURCE_DIR}/bench)
+gaby_vm_apply_compile_flags(workload_shadow_test)
+
+add_test(NAME workload_shadow COMMAND workload_shadow_test)

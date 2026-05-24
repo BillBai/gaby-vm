@@ -46,6 +46,15 @@
 
 #ifdef VIXL_INCLUDE_SIMULATOR_AARCH64
 
+// gaby-vm:
+// 引入预解码缓存的 PredecodedEntry / CodeRange 类型。Simulator 的
+// cache 命中路径 ExecuteInstructionCached 要内联做「cur_range_ 查界
+// → 取 entry」，这两个类型必须在 Simulator 类定义里可见。
+// gaby_vm/predecode_cache.h 是 public API 头，不含任何 vixl:: 符号、
+// 也不 include 任何 imported VIXL 头，imported 代码反向依赖它是安全的。
+// 详见 docs/refs/gaby-vm-predecode-cache-design.md §4.2、§6.1、§6.3。
+#include "gaby_vm/predecode_cache.h"
+
 // These are only used for the ABI feature, and depend on checks performed for
 // it.
 #ifdef VIXL_HAS_ABI_SUPPORT
@@ -1285,6 +1294,29 @@ class Debugger;
 template <uint32_t mode>
 uint64_t CryptoOp(uint64_t x, uint64_t y, uint64_t z);
 
+// gaby-vm BEGIN:
+// ShadowRunner 用这个 sink 抓 Simulator 每一步的内存写。
+// ShadowRunner 让 cache 路径和 decoder 路径在同一段 stack 上
+// lockstep 跑、逐指令对比；内存写不像寄存器那样有「终态」可比，
+// 必须在写发生的当下记下来。默认 write_sink_ 为 nullptr，非
+// ShadowRunner 场景下热路径只多一次「指针判空」分支。
+// 放在 vixl::aarch64 namespace（而不是 gaby_vm）是因为 hook 点
+// 在 Simulator::MemWrite 里、跟 imported 类型紧耦合——反过来让
+// imported Simulator 依赖 gaby_vm 类型才不干净。
+// 详见 docs/refs/gaby-vm-predecode-cache-design.md §4.4.2、§5.7。
+class MemoryWriteSink {
+ public:
+  virtual ~MemoryWriteSink() = default;
+
+  // 记录一次内存写：地址、字节数、值。size 取值 1/2/4/8/16。128-bit 的 SIMD
+  // 写按低/高 64 位拆进 value_lo / value_hi；窄于 64 位的写 value_hi 恒为 0。
+  virtual void Record(uintptr_t addr,
+                      size_t size,
+                      uint64_t value_lo,
+                      uint64_t value_hi) = 0;
+};
+// gaby-vm END
+
 class Simulator : public DecoderVisitor {
  public:
   explicit Simulator(Decoder* decoder,
@@ -1440,6 +1472,162 @@ class Simulator : public DecoderVisitor {
 
     VIXL_CHECK(cpu_features_auditor_.InstructionIsAvailable());
   }
+
+  // gaby-vm BEGIN:
+  // cache track 的接入与执行入口。SetPredecodeCache 把一个
+  // PredecodeCache 挂到本 Simulator 上（gaby_vm::Simulator 在
+  // 构造后调用）；ExecuteInstructionCached 是 cache 命中执行，
+  // 对应 RunFrom 这条 API track；StepOnce / DebugStepOnce 是给
+  // ShadowRunner 和 gaby_vm::Simulator 的 run 循环用的单步原语。
+  // 上游 ExecuteInstruction 原样不动、留给 DebugRunFrom——两条
+  // 循环各自独立、中途不切换，form_hash_ / last_instr_ / MOVPRFX
+  // 链这些 decoder-only 状态就不会在切换瞬间错位（deep-dive
+  // R1/R2）。
+  // 详见 docs/refs/gaby-vm-predecode-cache-design.md §3、§4.1、
+  // §6.1、§6.5。
+  void SetPredecodeCache(gaby_vm::PredecodeCache* cache) { cache_ = cache; }
+
+  // cache 命中执行。前后置步骤（pc_modified_、BType / guarded page 检查、
+  // last_instr_、IncrementPc、LogAllWrittenRegisters、UpdateBType）跟
+  // ExecuteInstruction 完全一致；唯一省掉的是末尾的 cpu_features_auditor_
+  // 强校验——RegisterCodeRange 在 predecode 阶段已用 CPUFeaturesAuditor 把整段
+  // range 审过一遍，运行期不再重复。中间那一段，上游是 decoder_->Decode(pc_)，
+  // 这里换成「查 cache → 调 leaf」。
+  void ExecuteInstructionCached() {
+    // The program counter should always be aligned.
+    VIXL_ASSERT(IsWordAligned(pc_));
+    // cache track 只对非空 cache 的 Simulator 开放，gaby_vm::Simulator 在
+    // API 层已挡掉空 cache 的调用；这里再断言一次记录该不变量。
+    VIXL_ASSERT(cache_ != nullptr);
+    pc_modified_ = false;
+
+    // On guarded pages, if BType is not zero, take an exception on any
+    // instruction other than BTI, PACI[AB]SP, HLT or BRK.
+    if (PcIsInGuardedPage() && (ReadBType() != DefaultBType)) {
+      if (pc_->IsPAuth()) {
+        Instr i = pc_->Mask(SystemPAuthMask);
+        if ((i != PACIASP) && (i != PACIBSP)) {
+          VIXL_ABORT_WITH_MSG(
+              "Executing non-BTI instruction with wrong BType.");
+        }
+      } else if (!pc_->IsBti() && !pc_->IsException()) {
+        VIXL_ABORT_WITH_MSG("Executing non-BTI instruction with wrong BType.");
+      }
+    }
+
+    bool last_instr_was_movprfx =
+        (form_hash_ == "movprfx_z_z"_h) || (form_hash_ == "movprfx_z_p_z"_h);
+
+    // PC 直接是宿主指针，cache lookup 拿它做地址算术。先命中本 Simulator 的
+    // cur_range_（无锁）；未命中再走 PredecodeCache::FindRange 慢路径（shared
+    // lock + 二分）并刷新 cur_range_。落在所有已注册 range 之外直接 abort，
+    // 不静默回退到 decoder（design doc §4.3.1）。
+    const uintptr_t pc_addr = reinterpret_cast<uintptr_t>(pc_);
+    const gaby_vm::CodeRange* range = cur_range_;
+    if ((range == nullptr) ||
+        ((pc_addr - range->start) >= range->size_bytes)) {
+      range = cache_->FindRange(pc_addr);
+      if (range == nullptr) {
+        std::ostringstream oss;
+        oss << "cache-track PC 0x" << std::hex << pc_addr
+            << " is not in any registered code range ";
+        VIXL_ABORT_WITH_MSG(oss.str().c_str());
+      }
+      cur_range_ = range;
+    }
+    const gaby_vm::PredecodedEntry* entry =
+        &range->entries[(pc_addr - range->start) >> kInstructionSizeLog2];
+
+    // form_hash_ 必须在调 leaf 之前写好：共享的 Simulate_* 入口靠它选分支
+    // (deep-dive R1)。leaf 是个不透明指针，predecode 阶段由
+    // Simulator::ResolvePredecodeLeaf 解析、指向 FormToVisitorFnMap 里那个
+    // 进程级静态的 std::function。
+    form_hash_ = entry->form_hash;
+    (*static_cast<const FormToVisitorFnMap::mapped_type*>(entry->leaf))(this,
+                                                                        pc_);
+
+    if (last_instr_was_movprfx) {
+      VIXL_ASSERT(last_instr_ != NULL);
+      VIXL_CHECK(pc_->CanTakeSVEMovprfx(form_hash_, last_instr_));
+    }
+
+    last_instr_ = ReadPc();
+    IncrementPc();
+    LogAllWrittenRegisters();
+    UpdateBType();
+    // 此处刻意不做 ExecuteInstruction 末尾的
+    // VIXL_CHECK(cpu_features_auditor_.InstructionIsAvailable())。
+  }
+
+  // 单步执行原语。返回 true 表示执行了一条指令，false 表示模拟已经结束
+  // （这一步什么都没做）。StepOnce 走 cache 路径、DebugStepOnce 走 decoder
+  // 路径；两者都先判 IsSimulationFinished()，所以执行完终止指令（如 RET 到
+  // 空 LR）的那一步返回 true，再下一次调用才返回 false。
+  bool StepOnce() {
+    if (IsSimulationFinished()) return false;
+    ExecuteInstructionCached();
+    return true;
+  }
+
+  bool DebugStepOnce() {
+    if (IsSimulationFinished()) return false;
+    ExecuteInstruction();
+    return true;
+  }
+  // gaby-vm END
+
+  // gaby-vm BEGIN:
+  // design.md OQ1 的落地——predecode 阶段把 form_hash 解析成
+  // leaf dispatcher 的转发器。form_hash → leaf 的真表是
+  // GetFormToVisitorFnMap()，它是 private static；PredecodeCache
+  // 的 populate pass 需要它，但让 cache friend 整个 Simulator、
+  // 或让 imported 头反向 include gaby_vm 头都不干净。这个 public
+  // static 转发器返回一个不透明指针（指向 FormToVisitorFnMap 里
+  // 那个进程级静态的 std::function），cache 原样存进
+  // PredecodedEntry::leaf，ExecuteInstructionCached 再 cast 回来
+  // 调用。form 不在表里（unimplemented 编码）时返回 nullptr，
+  // 由 cache 换成会 abort 的哨兵 leaf。
+  // 详见 docs/refs/gaby-vm-predecode-cache-design.md §5.1、§7。
+  static const void* ResolvePredecodeLeaf(uint32_t form_hash) {
+    const FormToVisitorFnMap* fv = GetFormToVisitorFnMap();
+    FormToVisitorFnMap::const_iterator it = fv->find(form_hash);
+    if (it == fv->end()) return nullptr;
+    return &it->second;
+  }
+  // gaby-vm END
+
+  // gaby-vm BEGIN:
+  // 执行调用的可重入支持。一个 leaf 里的 native bridge callback
+  // 可以在同一个 Simulator 上再发起一次 RunFrom；嵌套调用据此
+  // 先存档、返回时还原「解释器游标」——也就是「跑到哪了」这组
+  // 运行期状态：pc_、cache 的 cur_range_、form_hash_、
+  // last_instr_、pc_modified_。游标刻意不含寄存器堆：寄存器要
+  // 跨嵌套调用透传（参数进、返回值出），跟真实调用边界一致。
+  // 这两个方法是 Simulator 成员，所以能直接读写上面那些
+  // protected / private 字段；嵌套与否的判断、RAII 包装在
+  // gaby_vm::Simulator 那侧。游标字段含义见
+  // docs/refs/gaby-vm-predecode-cache-design.md §3、§4.1；
+  // 可重入决策见 predecode-cache-core change 的 design.md D10。
+  struct GabyInterpreterCursor {
+    const Instruction* pc;
+    const gaby_vm::CodeRange* cur_range;
+    uint32_t form_hash;
+    const Instruction* last_instr;
+    bool pc_modified;
+  };
+
+  GabyInterpreterCursor GabySaveCursor() const {
+    return {pc_, cur_range_, form_hash_, last_instr_, pc_modified_};
+  }
+
+  void GabyRestoreCursor(const GabyInterpreterCursor& cursor) {
+    pc_ = cursor.pc;
+    cur_range_ = cursor.cur_range;
+    form_hash_ = cursor.form_hash;
+    last_instr_ = cursor.last_instr;
+    pc_modified_ = cursor.pc_modified;
+  }
+  // gaby-vm END
 
   virtual void Visit(Metadata* metadata,
                      const Instruction* instr) VIXL_OVERRIDE;
@@ -2078,10 +2266,48 @@ class Simulator : public DecoderVisitor {
     return memory_.Read<T>(address, pc);
   }
 
+  // gaby-vm BEGIN:
+  // ShadowRunner 的内存写观察器接入。SetMemoryWriteSink 让
+  // ShadowRunner 在每步前后挂上 / 取下 sink；NotifyShadowMemoryWrite
+  // 是下面 MemWrite hook 调用的小 helper，按 ≤64 位 / 128 位把
+  // 写入值拆成 lo / hi 两段。默认 write_sink_ 为 nullptr，
+  // 热路径只多一次判空。
+  // 详见 docs/refs/gaby-vm-predecode-cache-design.md §4.4.2、§5.7。
+  void SetMemoryWriteSink(MemoryWriteSink* sink) { write_sink_ = sink; }
+
+  template <typename T>
+  void NotifyShadowMemoryWrite(uintptr_t addr, const T& value) const {
+    if (write_sink_ == nullptr) return;
+    VIXL_STATIC_ASSERT(sizeof(T) <= 2 * sizeof(uint64_t));
+    uint64_t lo = 0;
+    uint64_t hi = 0;
+    if constexpr (sizeof(T) > sizeof(uint64_t)) {
+      memcpy(&lo, &value, sizeof(uint64_t));
+      memcpy(&hi,
+             reinterpret_cast<const char*>(&value) + sizeof(uint64_t),
+             sizeof(T) - sizeof(uint64_t));
+    } else {
+      memcpy(&lo, &value, sizeof(T));
+    }
+    write_sink_->Record(addr, sizeof(T), lo, hi);
+  }
+  // gaby-vm END
+
   template <typename T, typename A>
   bool MemWrite(A address, T value) const {
     Instruction const* pc = ReadPc();
-    return memory_.Write(address, value, pc);
+    // gaby-vm BEGIN:
+    // ShadowRunner 内存写 hook。上游 memcpy 写入逻辑原样保留，
+    // 只是把直接 return 拆成「先写、写成功了再把这次写补记给
+    // sink」。memory_.Write 返回 false（写失败，比如越界）时
+    // 不能记——否则 ShadowRunner 会收到一笔根本没落地的幻影写。
+    // 详见 docs/refs/gaby-vm-predecode-cache-design.md §4.4.2。
+    bool gaby_write_ok = memory_.Write(address, value, pc);
+    if (gaby_write_ok) {
+      NotifyShadowMemoryWrite(static_cast<uintptr_t>(address), value);
+    }
+    return gaby_write_ok;
+    // gaby-vm END
   }
 
   template <typename A>
@@ -2096,7 +2322,20 @@ class Simulator : public DecoderVisitor {
 
   template <typename A>
   bool MemWrite(int size_in_bytes, A address, uint64_t value) const {
-    return memory_.Write(size_in_bytes, address, value);
+    // gaby-vm BEGIN:
+    // ShadowRunner 内存写 hook。这是 size 在运行期决定的重载
+    // （size_in_bytes 取 1/2/4/8），值已经是 uint64_t。同样
+    // 只在写成功后才补记给 sink；写失败就跳过，避免幻影写。
+    // 详见 docs/refs/gaby-vm-predecode-cache-design.md §4.4.2。
+    bool gaby_write_ok = memory_.Write(size_in_bytes, address, value);
+    if (gaby_write_ok && (write_sink_ != nullptr)) {
+      write_sink_->Record(static_cast<uintptr_t>(address),
+                          static_cast<size_t>(size_in_bytes),
+                          value,
+                          0);
+    }
+    return gaby_write_ok;
+    // gaby-vm END
   }
 
   bool LoadLane(LogicVRegister dst,
@@ -5357,6 +5596,23 @@ class Simulator : public DecoderVisitor {
   // Global flag for enabling guarded pages.
   // TODO: implement guarding at page granularity, rather than globally.
   bool guard_pages_;
+
+  // gaby-vm BEGIN:
+  // 预解码缓存 / ShadowRunner 的接入字段，都是 per-Simulator
+  // 的本地状态，跟 pc_ / btype_ 一样每实例一份。
+  //   write_sink_ —— ShadowRunner 的内存写观察器，默认 nullptr。
+  //   cache_      —— 本 Simulator 走 cache track 时用的 PredecodeCache，可为
+  //                  nullptr（那种 Simulator 只能走 DebugRunFrom）。
+  //   cur_range_  —— ExecuteInstructionCached 快路径缓存的「当前 CodeRange」。
+  //                  cache 本身是 shared / 只读的，但 cur_range_ 是随 PC 移动
+  //                  的可变状态，所以挂在 Simulator 上、每实例一份，命中时
+  //                  无锁。CodeRange 记录在 cache 里稳定存储、永不重定位，
+  //                  这个指针在 cache 生命周期内不会悬空。
+  //   详见 docs/refs/gaby-vm-predecode-cache-design.md §4.2.2、§4.2.3、§4.4.2。
+  MemoryWriteSink* write_sink_ = nullptr;
+  gaby_vm::PredecodeCache* cache_ = nullptr;
+  const gaby_vm::CodeRange* cur_range_ = nullptr;
+  // gaby-vm END
 
   static const char* xreg_names[];
   static const char* wreg_names[];
