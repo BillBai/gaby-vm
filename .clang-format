@@ -38,6 +38,15 @@ BinPackParameters: false
 PenaltyBreakBeforeFirstCallParameter: 500
 PenaltyBreakString: 100
 
+# Project brace convention: every single-statement control-flow body gets
+# braces and its own line. `InsertBraces` adds the braces; the two `AllowShort*`
+# keys keep the body off the control line. See docs/conventions.md. Imported
+# VIXL sources are exempt — they resolve to src/.clang-format (DisableFormat:
+# true) — so these keys never reach them.
+InsertBraces: true
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLoopsOnASingleLine: false
+
 # Do not format comments that contain the `NOLINT` pragma for `cpplint.py`.
 CommentPragmas: NOLINT
 

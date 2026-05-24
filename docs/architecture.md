@@ -70,12 +70,14 @@ bounded subset is imported into this repository.
 - **Layout** mirrors upstream byte-for-byte under `src/`: shared root files
   (e.g. `utils-vixl.h`, `cpu-features.h`) at `src/`; AArch64-specific files
   at `src/aarch64/`. There's no `third_party/vixl/` tree.
-- **Marker convention** is how we record drift from upstream content. Either
-  a single-line `// gaby-vm: <reason>` immediately above the changed line,
-  or a multi-line `// gaby-vm BEGIN: <reason>` … `// gaby-vm END` block.
-  The token `gaby-vm` is lowercase; the goal is that
-  `git grep gaby-vm src/` enumerates every drift, so reviewers can audit
-  modifications cheaply. Detailed scenarios are in
+- **Marker convention** is how we record drift from upstream content. The
+  marker token sits alone on its line; the reason follows on the next
+  ordinary `//` comment lines. There are two forms: a single-line
+  `// gaby-vm:` marker immediately above the changed line, or a multi-line
+  `// gaby-vm BEGIN:` … `// gaby-vm END` block. The token `gaby-vm` is
+  lowercase; the goal is that `git grep -nE 'gaby-vm( BEGIN| END|:)' src/`
+  enumerates every drift, so reviewers can audit modifications cheaply.
+  Detailed scenarios are in
   [`../openspec/specs/aarch64-simulator/spec.md`](../openspec/specs/aarch64-simulator/spec.md).
 
 ## Namespace and dispatch structure

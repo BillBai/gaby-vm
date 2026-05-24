@@ -26,7 +26,10 @@
 
 #include "instructions-aarch64.h"
 
-// gaby-vm BEGIN: tier-0 assembler header — only the four Instruction::Set*Target / SetImmLLiteral helpers below need it, and they are gated out (not called from imported simulator code).
+// gaby-vm BEGIN:
+// tier-0 assembler header — only the four Instruction::Set*Target /
+// SetImmLLiteral helpers below need it, and they are gated out (not called
+// from imported simulator code).
 // #include "assembler-aarch64.h"
 // gaby-vm END
 
@@ -959,7 +962,11 @@ int Instruction::GetImmBranch() const {
 }
 
 
-// gaby-vm BEGIN: tier-0 instruction-encoding patch helpers — these four Instruction::Set* functions are assembler/macro-assembler-only (they call Assembler::Imm* helpers from the un-imported assembler-aarch64). They are not invoked by any imported simulator code; declarations remain in instructions-aarch64.h.
+// gaby-vm BEGIN:
+// tier-0 instruction-encoding patch helpers — these four Instruction::Set*
+// functions are assembler/macro-assembler-only (they call Assembler::Imm*
+// helpers from the un-imported assembler-aarch64). They are not invoked by
+// any imported simulator code; declarations remain in instructions-aarch64.h.
 #if 0
 void Instruction::SetImmPCOffsetTarget(const Instruction* target) {
   if (IsPCRelAddressing()) {
