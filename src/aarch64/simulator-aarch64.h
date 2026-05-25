@@ -1523,7 +1523,7 @@ class Simulator : public DecoderVisitor {
     // lock + 二分）并刷新 cur_range_。落在所有已注册 range 之外直接 abort，
     // 不静默回退到 decoder（design doc §4.3.1）。
     const uintptr_t pc_addr = reinterpret_cast<uintptr_t>(pc_);
-    const gaby_vm::CodeRange* range = cur_range_;
+    const gaby_vm::PredecodeCache::CodeRange* range = cur_range_;
     if ((range == nullptr) ||
         ((pc_addr - range->start) >= range->size_bytes)) {
       range = cache_->FindRange(pc_addr);
@@ -1535,7 +1535,7 @@ class Simulator : public DecoderVisitor {
       }
       cur_range_ = range;
     }
-    const gaby_vm::PredecodedEntry* entry =
+    const gaby_vm::PredecodeCache::PredecodedEntry* entry =
         &range->entries[(pc_addr - range->start) >> kInstructionSizeLog2];
 
     // form_hash_ 必须在调 leaf 之前写好：共享的 Simulate_* 入口靠它选分支
@@ -1610,7 +1610,7 @@ class Simulator : public DecoderVisitor {
   // 可重入决策见 predecode-cache-core change 的 design.md D10。
   struct GabyInterpreterCursor {
     const Instruction* pc;
-    const gaby_vm::CodeRange* cur_range;
+    const gaby_vm::PredecodeCache::CodeRange* cur_range;
     uint32_t form_hash;
     const Instruction* last_instr;
     bool pc_modified;
@@ -5611,7 +5611,7 @@ class Simulator : public DecoderVisitor {
   //   详见 docs/refs/gaby-vm-predecode-cache-design.md §4.2.2、§4.2.3、§4.4.2。
   MemoryWriteSink* write_sink_ = nullptr;
   gaby_vm::PredecodeCache* cache_ = nullptr;
-  const gaby_vm::CodeRange* cur_range_ = nullptr;
+  const gaby_vm::PredecodeCache::CodeRange* cur_range_ = nullptr;
   // gaby-vm END
 
   static const char* xreg_names[];

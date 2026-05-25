@@ -27,6 +27,14 @@
 namespace gaby_vm {
 namespace {
 
+// File-local aliases for the PredecodeCache nested types so the
+// implementation reads with one-word names. Anonymous-namespace scope keeps
+// these names from leaking past this translation unit.
+using RegistrationStatus = PredecodeCache::RegistrationStatus;
+using RegistrationError = PredecodeCache::RegistrationError;
+using PredecodedEntry = PredecodeCache::PredecodedEntry;
+using CodeRange = PredecodeCache::CodeRange;
+
 // The type a PredecodedEntry::leaf opaque handle really points at. It must
 // match vixl::aarch64::Simulator's private FormToVisitorFnMap::mapped_type:
 // the predecode pass stores a pointer to one of these (a process-lifetime
@@ -105,7 +113,7 @@ class PredecodeCache::Impl {
   Impl(const Impl&) = delete;
   Impl& operator=(const Impl&) = delete;
 
-  RegisterStatus RegisterCodeRange(const void* start, size_t size_bytes);
+  RegistrationStatus RegisterCodeRange(const void* start, size_t size_bytes);
 
   // Slow-path PC -> range lookup: takes the table's shared lock and binary-
   // searches the start-sorted range map. The per-instruction fast path (a hit
@@ -130,13 +138,13 @@ class PredecodeCache::Impl {
     return nullptr;
   }
 
-  const ErrorDetail* last_error() const { return &last_error_; }
+  const RegistrationError* last_error() const { return &last_error_; }
 
  private:
   // Record a failed-registration diagnostic. `reason` must be a static string.
-  // `missing` is copied into cache-owned storage so ErrorDetail can hand back
-  // a const char* that stays valid until the next failed call.
-  void SetError(RegisterStatus status,
+  // `missing` is copied into cache-owned storage so RegistrationError can hand
+  // back a const char* that stays valid until the next failed call.
+  void SetError(RegistrationStatus status,
                 uintptr_t pc,
                 const char* reason,
                 std::string missing) {
@@ -158,13 +166,13 @@ class PredecodeCache::Impl {
   mutable std::shared_mutex table_mutex_;
   std::map<uintptr_t, RangeRecord> ranges_;
 
-  ErrorDetail last_error_{RegisterStatus::Ok, 0, "", ""};
+  RegistrationError last_error_{RegistrationStatus::Ok, 0, "", ""};
   std::string missing_features_;
 };
 
 
-RegisterStatus PredecodeCache::Impl::RegisterCodeRange(const void* start,
-                                                       size_t size_bytes) {
+RegistrationStatus PredecodeCache::Impl::RegisterCodeRange(const void* start,
+                                                           size_t size_bytes) {
   const unsigned kInsnSize = vixl::aarch64::kInstructionSize;
   const uintptr_t start_addr = reinterpret_cast<uintptr_t>(start);
 
@@ -181,18 +189,18 @@ RegisterStatus PredecodeCache::Impl::RegisterCodeRange(const void* start,
 
   // --- input validation ---
   if ((size_bytes == 0) || ((size_bytes % kInsnSize) != 0)) {
-    SetError(RegisterStatus::InvalidArgument,
+    SetError(RegistrationStatus::InvalidArgument,
              0,
              "size must be a non-zero multiple of the 4-byte instruction size",
              "");
-    return RegisterStatus::InvalidArgument;
+    return RegistrationStatus::InvalidArgument;
   }
   if ((start_addr % kInsnSize) != 0) {
-    SetError(RegisterStatus::InvalidArgument,
+    SetError(RegistrationStatus::InvalidArgument,
              start_addr,
              "start address must be 4-byte (instruction) aligned",
              "");
-    return RegisterStatus::InvalidArgument;
+    return RegistrationStatus::InvalidArgument;
   }
 
   // --- overlap check: any overlap with an existing range is rejected ---
@@ -200,11 +208,11 @@ RegisterStatus PredecodeCache::Impl::RegisterCodeRange(const void* start,
   for (const auto& kv : ranges_) {
     const CodeRange& r = kv.second.info;
     if ((start_addr < (r.start + r.size_bytes)) && (r.start < end_addr)) {
-      SetError(RegisterStatus::OverlappingRange,
+      SetError(RegistrationStatus::OverlappingRange,
                start_addr,
                "range overlaps an already-registered range",
                "");
-      return RegisterStatus::OverlappingRange;
+      return RegistrationStatus::OverlappingRange;
     }
   }
 
@@ -214,11 +222,11 @@ RegisterStatus PredecodeCache::Impl::RegisterCodeRange(const void* start,
   try {
     entries = std::make_unique<PredecodedEntry[]>(num_entries);
   } catch (const std::bad_alloc&) {
-    SetError(RegisterStatus::OutOfMemory,
+    SetError(RegistrationStatus::OutOfMemory,
              start_addr,
              "could not allocate predecoded-entry storage for the range",
              "");
-    return RegisterStatus::OutOfMemory;
+    return RegistrationStatus::OutOfMemory;
   }
 
   // --- predecode pass: decode every word, audit it, resolve its leaf ---
@@ -232,20 +240,20 @@ RegisterStatus PredecodeCache::Impl::RegisterCodeRange(const void* start,
     if (!auditor_.InstructionIsAvailable()) {
       std::ostringstream oss;
       oss << auditor_.GetInstructionFeatures();
-      SetError(RegisterStatus::UnsupportedFeature,
+      SetError(RegistrationStatus::UnsupportedFeature,
                insn_addr,
                "instruction requires a CPU feature the cache auditor rejects",
                oss.str());
       // `entries` is freed here; the range map is untouched — nothing
       // registered (all-or-nothing).
-      return RegisterStatus::UnsupportedFeature;
+      return RegistrationStatus::UnsupportedFeature;
     }
     if (capture_visitor_.unallocated()) {
-      SetError(RegisterStatus::InvalidArgument,
+      SetError(RegistrationStatus::InvalidArgument,
                insn_addr,
                "range contains an unallocated instruction encoding",
                "");
-      return RegisterStatus::InvalidArgument;
+      return RegistrationStatus::InvalidArgument;
     }
 
     const uint32_t form_hash = capture_visitor_.form_hash();
@@ -269,13 +277,13 @@ RegisterStatus PredecodeCache::Impl::RegisterCodeRange(const void* start,
     record.storage = std::move(entries);
     record.info = CodeRange{start_addr, size_bytes, record.storage.get()};
   } catch (const std::bad_alloc&) {
-    SetError(RegisterStatus::OutOfMemory,
+    SetError(RegistrationStatus::OutOfMemory,
              start_addr,
              "could not allocate a range-table node",
              "");
-    return RegisterStatus::OutOfMemory;
+    return RegistrationStatus::OutOfMemory;
   }
-  return RegisterStatus::Ok;
+  return RegistrationStatus::Ok;
 }
 
 
@@ -283,12 +291,12 @@ PredecodeCache::PredecodeCache() : impl_(std::make_unique<Impl>()) {}
 
 PredecodeCache::~PredecodeCache() = default;
 
-RegisterStatus PredecodeCache::RegisterCodeRange(const void* start,
-                                                 size_t size_bytes) {
+RegistrationStatus PredecodeCache::RegisterCodeRange(const void* start,
+                                                     size_t size_bytes) {
   return impl_->RegisterCodeRange(start, size_bytes);
 }
 
-const ErrorDetail* PredecodeCache::GetLastErrorDetail() const {
+const RegistrationError* PredecodeCache::GetLastRegistrationError() const {
   return impl_->last_error();
 }
 

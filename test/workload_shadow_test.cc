@@ -42,10 +42,11 @@ bool shadow_workload(const char* name,
                      const uint32_t* code,
                      size_t word_count) {
   gaby_vm::PredecodeCache cache;
-  const gaby_vm::RegisterStatus status =
+  const gaby_vm::PredecodeCache::RegistrationStatus status =
       cache.RegisterCodeRange(code, word_count * sizeof(uint32_t));
-  if (status != gaby_vm::RegisterStatus::Ok) {
-    const gaby_vm::ErrorDetail* detail = cache.GetLastErrorDetail();
+  if (status != gaby_vm::PredecodeCache::RegistrationStatus::Ok) {
+    const gaby_vm::PredecodeCache::RegistrationError* detail =
+        cache.GetLastRegistrationError();
     std::fprintf(stderr,
                  "  %s: RegisterCodeRange failed: %s\n",
                  name,

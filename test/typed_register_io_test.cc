@@ -143,7 +143,7 @@ void test_pc_seating_executes_at_entry() {
 
   gaby_vm::PredecodeCache cache;
   check(cache.RegisterCodeRange(code, sizeof(code)) ==
-            gaby_vm::RegisterStatus::Ok,
+            gaby_vm::PredecodeCache::RegistrationStatus::Ok,
         "PC-seating: code range registers Ok");
 
   StackBuffer stack;
@@ -199,7 +199,7 @@ void test_read_all_write_all_round_trip() {
 
   gaby_vm::PredecodeCache cache;
   check(cache.RegisterCodeRange(code, sizeof(code)) ==
-            gaby_vm::RegisterStatus::Ok,
+            gaby_vm::PredecodeCache::RegistrationStatus::Ok,
         "ReadAll/WriteAll: code range registers Ok");
 
   StackBuffer stack;

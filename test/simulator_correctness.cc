@@ -146,9 +146,9 @@ void run_dual(TestState& s,
   {
     s.track = "cache";
     gaby_vm::PredecodeCache cache;
-    gaby_vm::RegisterStatus status =
+    gaby_vm::PredecodeCache::RegistrationStatus status =
         cache.RegisterCodeRange(code, code_words * sizeof(uint32_t));
-    if (status != gaby_vm::RegisterStatus::Ok) {
+    if (status != gaby_vm::PredecodeCache::RegistrationStatus::Ok) {
       s.total += 1;
       std::fprintf(stderr,
                    "[FAIL] %s / %s / cache track: RegisterCodeRange failed\n",

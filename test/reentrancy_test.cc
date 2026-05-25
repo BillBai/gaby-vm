@@ -71,7 +71,7 @@ void test_nop_ret_terminates() {
 
   gaby_vm::PredecodeCache cache;
   check(cache.RegisterCodeRange(code, sizeof(code)) ==
-            gaby_vm::RegisterStatus::Ok,
+            gaby_vm::PredecodeCache::RegistrationStatus::Ok,
         "NOP;RET range registers Ok");
 
   // Cache track. Reaching the line after RunFrom means the run terminated
@@ -122,9 +122,9 @@ void run_nesting_case(NestMode mode, const char* label_suffix) {
 
   gaby_vm::PredecodeCache cache;
   bool ok_outer = cache.RegisterCodeRange(outer, sizeof(outer)) ==
-                  gaby_vm::RegisterStatus::Ok;
+                  gaby_vm::PredecodeCache::RegistrationStatus::Ok;
   bool ok_inner = cache.RegisterCodeRange(inner, sizeof(inner)) ==
-                  gaby_vm::RegisterStatus::Ok;
+                  gaby_vm::PredecodeCache::RegistrationStatus::Ok;
   check(ok_outer && ok_inner, "nesting: outer + inner ranges register Ok");
 
   StackBuffer stack;

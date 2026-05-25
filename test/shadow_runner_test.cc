@@ -61,7 +61,7 @@ void test_matching_workload_reports_no_divergence() {
       uint32_t code[] = {kAddX0X0_1, kOrrX1X1X2, kSubX3X3_5, kRet};
   gaby_vm::PredecodeCache cache;
   check(cache.RegisterCodeRange(code, sizeof(code)) ==
-            gaby_vm::RegisterStatus::Ok,
+            gaby_vm::PredecodeCache::RegistrationStatus::Ok,
         "matching: code range registers Ok");
 
   StackBuffer stack;
@@ -94,7 +94,7 @@ void test_injected_defect_is_detected() {
   alignas(uint32_t) uint32_t code[] = {kOrrX0X0X1, kRet};
   gaby_vm::PredecodeCache cache;
   check(cache.RegisterCodeRange(code, sizeof(code)) ==
-            gaby_vm::RegisterStatus::Ok,
+            gaby_vm::PredecodeCache::RegistrationStatus::Ok,
         "injected: code range registers Ok");
 
   // Inject the defect: the predecode pass has already cached code[0] as ORR;
