@@ -1501,23 +1501,6 @@ class Simulator : public DecoderVisitor {
     VIXL_ASSERT(cache_ != nullptr);
     pc_modified_ = false;
 
-    // On guarded pages, if BType is not zero, take an exception on any
-    // instruction other than BTI, PACI[AB]SP, HLT or BRK.
-    if (PcIsInGuardedPage() && (ReadBType() != DefaultBType)) {
-      if (pc_->IsPAuth()) {
-        Instr i = pc_->Mask(SystemPAuthMask);
-        if ((i != PACIASP) && (i != PACIBSP)) {
-          VIXL_ABORT_WITH_MSG(
-              "Executing non-BTI instruction with wrong BType.");
-        }
-      } else if (!pc_->IsBti() && !pc_->IsException()) {
-        VIXL_ABORT_WITH_MSG("Executing non-BTI instruction with wrong BType.");
-      }
-    }
-
-    bool last_instr_was_movprfx =
-        (form_hash_ == "movprfx_z_z"_h) || (form_hash_ == "movprfx_z_p_z"_h);
-
     // PC 直接是宿主指针，cache lookup 拿它做地址算术。先命中本 Simulator 的
     // cur_range_（无锁）；未命中再走 PredecodeCache::FindRange 慢路径（shared
     // lock + 二分）并刷新 cur_range_。落在所有已注册 range 之外直接 abort，
@@ -1538,13 +1521,45 @@ class Simulator : public DecoderVisitor {
     const gaby_vm::PredecodeCache::PredecodedEntry* entry =
         &range->entries[(pc_addr - range->start) >> kInstructionSizeLog2];
 
+    // gaby-vm BEGIN:
+    // BType / guarded-page enforcement gated on the BTI-relevant bit the
+    // predecode pass wrote into entry->flags (bit 0). For non-BTI-relevant
+    // forms — the bulk of any real workload — the check is elided entirely,
+    // turning the original unconditional per-step work into a single
+    // predictable branch. The body inside the outer gate is byte-for-byte
+    // the imported VIXL check. See predecode-cache-hotpath-speedup
+    // design.md D3.
+    if ((entry->flags & 1u) != 0u) {
+      // On guarded pages, if BType is not zero, take an exception on any
+      // instruction other than BTI, PACI[AB]SP, HLT or BRK.
+      if (PcIsInGuardedPage() && (ReadBType() != DefaultBType)) {
+        if (pc_->IsPAuth()) {
+          Instr i = pc_->Mask(SystemPAuthMask);
+          if ((i != PACIASP) && (i != PACIBSP)) {
+            VIXL_ABORT_WITH_MSG(
+                "Executing non-BTI instruction with wrong BType.");
+          }
+        } else if (!pc_->IsBti() && !pc_->IsException()) {
+          VIXL_ABORT_WITH_MSG(
+              "Executing non-BTI instruction with wrong BType.");
+        }
+      }
+    }
+    // gaby-vm END
+
+    bool last_instr_was_movprfx =
+        (form_hash_ == "movprfx_z_z"_h) || (form_hash_ == "movprfx_z_p_z"_h);
+
     // form_hash_ 必须在调 leaf 之前写好：共享的 Simulate_* 入口靠它选分支
     // (deep-dive R1)。leaf 是个不透明指针，predecode 阶段由
     // Simulator::ResolvePredecodeLeaf 解析、指向 FormToVisitorFnMap 里那个
-    // 进程级静态的 std::function。
+    // 进程级静态存储的 pointer-to-member-function；这里 cast 回来解引用拿到
+    // pmf 本体，然后 (this->*pmf)(pc_) 直接调一次成员函数（Itanium ABI 下大致
+    // 是一次取址 + 一次间接 call，比 std::function 的类型擦除间接调用更短）。
     form_hash_ = entry->form_hash;
-    (*static_cast<const FormToVisitorFnMap::mapped_type*>(entry->leaf))(this,
-                                                                        pc_);
+    const FormToVisitorFnMap::mapped_type pmf =
+        *static_cast<const FormToVisitorFnMap::mapped_type*>(entry->leaf);
+    (this->*pmf)(pc_);
 
     if (last_instr_was_movprfx) {
       VIXL_ASSERT(last_instr_ != NULL);
@@ -1583,11 +1598,14 @@ class Simulator : public DecoderVisitor {
   // 的 populate pass 需要它，但让 cache friend 整个 Simulator、
   // 或让 imported 头反向 include gaby_vm 头都不干净。这个 public
   // static 转发器返回一个不透明指针（指向 FormToVisitorFnMap 里
-  // 那个进程级静态的 std::function），cache 原样存进
+  // 那个进程级静态存储的 pointer-to-member-function——
+  // FormToVisitorFnMap::mapped_type，即
+  // void (Simulator::*)(const Instruction*)），cache 原样存进
   // PredecodedEntry::leaf，ExecuteInstructionCached 再 cast 回来
   // 调用。form 不在表里（unimplemented 编码）时返回 nullptr，
   // 由 cache 换成会 abort 的哨兵 leaf。
-  // 详见 docs/refs/gaby-vm-predecode-cache-design.md §5.1、§7。
+  // 详见 docs/refs/gaby-vm-predecode-cache-design.md §5.1、§7，
+  // 以及 predecode-cache-hotpath-speedup change 的 D1/D5。
   static const void* ResolvePredecodeLeaf(uint32_t form_hash) {
     const FormToVisitorFnMap* fv = GetFormToVisitorFnMap();
     FormToVisitorFnMap::const_iterator it = fv->find(form_hash);
@@ -5625,9 +5643,27 @@ class Simulator : public DecoderVisitor {
   static const char* preg_names[];
 
  private:
+  // gaby-vm BEGIN:
+  // 把 mapped_type 从 std::function<...> 换成裸的 pointer-to-member-function。
+  // 这个 map 里的每一项本来就是 &Simulator::SimulateXxx，std::function 只是
+  // 在 cache 命中路径上多压了一层类型擦除间接调用——拿掉之后
+  // ExecuteInstructionCached 就只剩 (this->*pmf)(pc_) 一次间接调用，
+  // 是 predecode-cache-hotpath-speedup change 的 D1 决议。
+  // 旁边的 static_assert 是 ABI-drift 触发线：Itanium ABI 下 pmf 是 16 字节
+  // 的双字结构（this 调整 + 函数指针/虚表偏移），后续工具链或新增 ABI 改了
+  // 大小，编译就会立刻失败、提示这里要重新评估。
+  // 原行（保留以便 review）：
+  //   using FormToVisitorFnMap =
+  //       std::unordered_map<uint32_t,
+  //                          std::function<void(Simulator*, const Instruction*)>>;
   using FormToVisitorFnMap =
       std::unordered_map<uint32_t,
-                         std::function<void(Simulator*, const Instruction*)>>;
+                         void (Simulator::*)(const Instruction*)>;
+  static_assert(sizeof(FormToVisitorFnMap::mapped_type) == 2 * sizeof(void*),
+                "FormToVisitorFnMap::mapped_type must stay an Itanium-ABI "
+                "pointer-to-member-function (this-adjust + function-pointer); "
+                "predecode-cache hot path relies on this layout");
+  // gaby-vm END
   static const FormToVisitorFnMap* GetFormToVisitorFnMap();
 
   uint32_t form_hash_{};

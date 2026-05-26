@@ -715,3 +715,49 @@ V1 不做的事，列在这里避免被 scope creep 拽进去：
   VIXL import boundary 三段。
 - `AGENTS.md` / `CLAUDE.md` — agent rules，含 VIXL boundary 政策（已放宽）和中文
   表达风格。
+
+## 附录：实测 dispatch 数字
+
+每次 cache hot-path 改动都把测量结果追加在这里。`bench_baseline` 用 mixed
+workload（VIXL 生成器，seed=42，~65k 静态 word），`bench_smoke` 用 32-word 的
+branch-free 序列，跑 Release，Apple Silicon，单次 run，未做 pinning / 重复取
+中位。所以这里的数字是定性的「一个量级」，不是承诺。
+
+### A.1 baseline — `predecode-cache-benchmark`（archive `2026-05-26`）
+
+| workload | engine  | iters/sec | ns/insn | cache/decoder |
+|---|---|---|---|---|
+| mixed    | decoder | 68        | —       | —             |
+| mixed    | cache   | 272       | —       | ~4.0×         |
+| smoke    | decoder | 221 k     | —       | —             |
+| smoke    | cache   | 3.3 M     | —       | ~14.6×        |
+
+来源：`predecode-cache-benchmark` 提案文本。
+
+### A.2 `predecode-cache-hotpath-speedup`（本 change）
+
+跑法：`bench/bench_baseline --engine <decoder|cache> --seconds 1.0`、
+`bench/bench_smoke --engine <decoder|cache> --seconds 0.2`，两组 engine
+紧挨着跑一次，记录原始 key/value 输出。
+
+| workload | engine  | iters/sec   | ns/insn  | cache/decoder |
+|---|---|---|---|---|
+| mixed    | decoder | 69.14       | 223.74   | —             |
+| mixed    | cache   | 270.16      | 57.26    | ~3.9×         |
+| smoke    | decoder | 204 621     | 152.72   | —             |
+| smoke    | cache   | 3 478 372   | 8.98     | ~17×          |
+
+观察：
+
+- `bench_smoke` 上 cache vs decoder 从 baseline 的 ~14.6× 抬到 ~17×；
+  smoke 是 branch-free 序列，整段在 cache 路径上 dispatch overhead 占比
+  最高，所以 std::function → pmf 和 BType gate 这两条改动叠加的效果最明显
+  （cache ns/insn 从 baseline 推算的 ~10 ns 量级落到 9.0 ns）。
+- `bench_baseline`（mixed）cache 路径 ns/insn 从 baseline 的 ~58 ns 量级
+  到 57.3 ns，单次 run 之间的噪声范围内，cache/decoder 比也基本守在 ~4×。
+  mixed workload 的 per-instruction 成本主要在 leaf 本体（NEON / load /
+  store / branch 等），dispatch overhead 在总成本里占比小，所以 hot-path
+  侧的改动到 mixed 上的边际收益小是预期内的。
+- 两边都是单 run、无重复，只能作为定性判断。后续要做更严的对比，
+  应该把 bench harness 改成同进程多次重复 + 报告 min / median /
+  stddev——单独再起一个 change 推进。

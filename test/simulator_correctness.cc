@@ -611,6 +611,38 @@ void run_call_return_tests(TestState& s) {
                         "X0 == 0xC011AB1E (callee ran AND outer RET reached)");
         });
   }
+
+  // PACIASP + BTI j + RET — exercises the BTI-relevant classification the
+  // predecode pass writes to PredecodedEntry::flags bit 0 (predecode-cache-
+  // hotpath-speedup D3). PACIASP signs LR with SP, so the outer LR (the
+  // null-LR terminator) is saved to X19 before the prologue and restored
+  // before the RET so the outer terminator still fires. The sequence runs
+  // without guarded-page setup — current builds don't model it; the point is
+  // to confirm both tracks finish identically when the cache track runs the
+  // gated BType check on PACIASP and BTI j and skips it on the surrounding
+  // MOV / RET. A mis-classification would not produce an abort on these
+  // workloads (no guarded page) but ShadowRunner-style register/PC
+  // divergence between the two tracks would still surface.
+  {
+    uint32_t code[] = {
+        0xaa1e03f3,  // mov x19, lr      ; save outer LR (= null sentinel)
+        0xd503233f,  // paciasp          ; sign LR with SP modifier
+        0xd503249f,  // bti j            ; HINT — BTI landing pad
+        0xaa1303fe,  // mov lr,  x19     ; restore outer LR
+        0xd65f03c0,  // ret              ; outer terminator
+    };
+    run_dual(s,
+             "PACIASP + BTI j + RET (BTI-relevant classification on cache track)",
+             code,
+             5,
+             [](gaby_vm::Simulator& /*sim*/) {},
+             [&s](gaby_vm::Simulator& sim) {
+               expect_eq_u64(s,
+                             sim.Read(gaby_vm::GpRegister::X19),
+                             0ULL,
+                             "X19 == 0 (outer LR preserved via X19)");
+             });
+  }
 }
 
 }  // namespace

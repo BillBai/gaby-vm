@@ -38,33 +38,52 @@ using CodeRange = PredecodeCache::CodeRange;
 // The type a PredecodedEntry::leaf opaque handle really points at. It must
 // match vixl::aarch64::Simulator's private FormToVisitorFnMap::mapped_type:
 // the predecode pass stores a pointer to one of these (a process-lifetime
-// std::function — either an entry in VIXL's form->leaf map, or the
-// unimplemented sentinel below), and ExecuteInstructionCached casts the
-// opaque handle back to this exact type before calling it.
-using LeafFn = std::function<void(vixl::aarch64::Simulator*,
-                                  const vixl::aarch64::Instruction*)>;
+// pointer-to-member-function — either an entry in VIXL's form->leaf map, or
+// the unimplemented sentinel below), and ExecuteInstructionCached casts the
+// opaque handle back to this exact type before calling it as
+// (this->*pmf)(pc_). Keep the alias byte-compatible with Simulator's
+// mapped_type — D1 of predecode-cache-hotpath-speedup changed it from
+// std::function to a raw pmf to remove the type-erasure indirection.
+using LeafFn = void (vixl::aarch64::Simulator::*)(
+    const vixl::aarch64::Instruction*);
 
 // Sentinel leaf for an instruction whose encoding the VIXL decoder names but
 // for which the Simulator carries no leaf — an "unimplemented" form (design
 // doc R12). Registering a range that contains such an instruction still
-// succeeds; the abort fires only if the cache track actually reaches it. This
-// mirrors the imported Simulator::VisitUnimplemented, which prints the address
-// and encoding and then aborts.
+// succeeds; the abort fires only if the cache track actually reaches it.
 //
-// Held as a function-local static so the std::function has process lifetime
-// (PredecodedEntry::leaf points straight at it) without being a namespace-
-// scope global with a non-trivial constructor.
+// The imported Simulator::VisitUnimplemented already prints the address and
+// encoding and aborts via VIXL_UNIMPLEMENTED; using its address directly keeps
+// the sentinel byte-compatible with every other entry in
+// Simulator::FormToVisitorFnMap (each of which is a pmf) and removes the
+// duplicate std::function-wrapped lambda this file used to carry.
+//
+// Held as a function-local static so the pmf has process lifetime — the
+// PredecodedEntry::leaf opaque handle points straight at it.
 const LeafFn* UnimplementedSentinelLeaf() {
-  static const LeafFn sentinel = [](vixl::aarch64::Simulator*,
-                                    const vixl::aarch64::Instruction* instr) {
-    std::ostringstream oss;
-    oss << "cache track reached an unimplemented instruction form at "
-        << reinterpret_cast<const void*>(instr) << ": 0x" << std::hex
-        << std::setw(8) << std::setfill('0') << instr->GetInstructionBits()
-        << " ";
-    VIXL_ABORT_WITH_MSG(oss.str().c_str());
-  };
+  static const LeafFn sentinel =
+      &vixl::aarch64::Simulator::VisitUnimplemented;
   return &sentinel;
+}
+
+// Predecode-time BTI-relevance classifier, written to bit 0 of
+// PredecodedEntry::flags so the cache-track hot path can skip the
+// BType / guarded-page check on instructions whose outcome does not interact
+// with BType. The set of relevant forms — BTI, PACI[AB]SP, BRK, HLT, and the
+// exception-causing forms (SVC/HVC/SMC/DCPS1-3) — is exactly the set that the
+// imported runtime check in Simulator::ExecuteInstructionCached inspects, so
+// the classification mirrors that check via VIXL's existing
+// Instruction accessors:
+//   - IsBti()        — BTI, BTI_c, BTI_j, BTI_jc
+//   - IsPAuth()      — PACIASP/PACIBSP (and other PAuth forms; the runtime
+//                       check then narrows further on SystemPAuthMask)
+//   - IsException()  — BRK, HLT, SVC, HVC, SMC, DCPS1-3
+// The form_hash parameter is currently unused but kept on the signature for
+// the future per-form predecode work the `flags` slot is reserved for
+// (predecode-cache-hotpath-speedup design.md D2/D3).
+bool IsBtiRelevant(uint32_t /*form_hash*/,
+                   const vixl::aarch64::Instruction* insn) {
+  return insn->IsBti() || insn->IsPAuth() || insn->IsException();
 }
 
 // Decoder visitor used only by the predecode pass. For each decoded
@@ -264,7 +283,12 @@ RegistrationStatus PredecodeCache::Impl::RegisterCodeRange(const void* start,
       leaf = UnimplementedSentinelLeaf();
     }
     entries[i].form_hash = form_hash;
-    entries[i].reserved = 0;
+    // Bit 0 of `flags` marks the entry as BTI-relevant so the cache-track
+    // hot path can elide the BType / guarded-page check on forms whose
+    // outcome doesn't interact with BType. Remaining bits stay zero —
+    // future per-form predecode work (operand pre-extraction, etc.) lands
+    // in this slot. See predecode-cache-hotpath-speedup design.md D3/D4.
+    entries[i].flags = IsBtiRelevant(form_hash, insn) ? 1u : 0u;
     entries[i].leaf = leaf;
   }
 

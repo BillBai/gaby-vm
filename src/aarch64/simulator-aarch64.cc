@@ -2318,7 +2318,10 @@ void Simulator::Visit(Metadata* metadata, const Instruction* instr) {
   if (it == fv->end()) {
     VisitUnimplemented(instr);
   } else {
-    (it->second)(this, instr);
+    // gaby-vm:
+    // mapped_type 已经从 std::function 换成裸的 pointer-to-member-function
+    // (predecode-cache-hotpath-speedup D1)，这里跟着改成 pmf 调用。
+    (this->*(it->second))(instr);
   }
 }
 

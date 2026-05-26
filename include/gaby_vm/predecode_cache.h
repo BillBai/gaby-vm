@@ -96,9 +96,15 @@ class PredecodeCache {
     // writes it to Simulator::form_hash_ before invoking the leaf, because
     // shared Simulate_* leaves branch on form_hash_ (deep-dive R1).
     uint32_t form_hash;
-    // Padding today; reserved for the V2 per-form operand pre-extraction slot
-    // (design doc 4.6). Zero-initialised by the predecode pass.
-    uint32_t reserved;
+    // Per-entry hot-path classification bits computed once by the predecode
+    // pass and consumed per-instruction on the cache track. Bit 0 marks the
+    // entry as BTI-relevant (the cache-track BType / guarded-page check runs
+    // only when this bit is set; see the predecode-cache-hotpath-speedup
+    // change). Remaining bits are reserved for future per-form predecode work
+    // (e.g. operand pre-extraction; design doc §4.6). Always written by the
+    // predecode pass — embedders MUST treat the slot as opaque storage owned
+    // by the cache.
+    uint32_t flags;
     // Opaque handle to the leaf dispatcher. predecode_cache.cc resolves and
     // interprets this; a null value never appears in a populated entry (an
     // unimplemented form is given a sentinel dispatcher, design doc R12).
