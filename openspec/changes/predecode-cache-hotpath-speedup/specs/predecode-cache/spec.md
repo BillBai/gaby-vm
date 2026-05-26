@@ -47,11 +47,15 @@ determined by the encoding alone.
   `BTI` / `PACI[AB]SP` interaction
 - **THEN** no register, flag, PC, or memory-write divergence is reported
 
-#### Scenario: Predecoded entry layout is unchanged
+#### Scenario: Predecoded entry size and offsets are unchanged
 
 - **WHEN** the layout of `gaby_vm::PredecodeCache::PredecodedEntry` is
   inspected
-- **THEN** its size remains 16 bytes and its public-header field set
-  (form_hash, reserved, leaf) is unchanged — the optimization uses
-  bits within the existing `reserved` slot rather than adding a new
-  field
+- **THEN** its size remains 16 bytes and the offsets and types of its
+  three fields (`form_hash`, the 32-bit hot-path classification slot,
+  and `leaf`) are unchanged — the optimization uses bits within the
+  existing 32-bit slot rather than adding a new field
+- **AND** the 32-bit hot-path classification slot is named `flags`
+  rather than `reserved`, reflecting its real per-entry classification
+  role (the rename is the only public-header change introduced by
+  this optimization)

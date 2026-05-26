@@ -99,17 +99,42 @@ entire VIXL leaf surface. (c) Build a flat `[]` array of leaves
 indexed by form-hash — rejected: form-hashes are sparse 32-bit values;
 a flat array is wasteful and orthogonal to this change.
 
-### D2. Predecode-time BTI classification, encoded in `PredecodedEntry::reserved`
+### D2. Rename `PredecodedEntry::reserved` to `PredecodedEntry::flags`
 
-**Decision.** Each `PredecodedEntry` carries a 32-bit `reserved` slot
-(declared by predecode-cache-core D8, currently always zero). Use bit
-0 as a `bti_relevant` flag. The predecode pass classifies an
-instruction as BTI-relevant iff it is PACIASP, PACIBSP, BTI, BRK, HLT,
-or an exception-causing form (SVC/HVC/SMC/UDF/...). The runtime check
-becomes:
+**Decision.** Rename the 32-bit slot in `gaby_vm::PredecodeCache::
+PredecodedEntry` from `reserved` to `flags`. Same offset, same type,
+same `sizeof(PredecodedEntry) == 16`. Update the doc-comment to
+describe the slot's real role: hot-path classification bits computed
+once during the predecode pass and consumed per-instruction on the
+cache track.
+
+**Why.** `reserved` was an honest label when predecode-cache-core
+shipped the entry layout but had no per-form classification to put in
+the slot. With D3 below the slot now carries the BTI-relevance flag
+(and is the natural home for any future per-form bit the cache wants
+to amortize). Keeping `reserved` would lie about the field's purpose;
+adding a new field would break the 16-byte invariant. Same offset, so
+the rename has no layout effect — only call-site identifiers change.
+
+**Alternatives.** (a) Keep the name `reserved` and document the
+overload — rejected: makes the field's hot-path role invisible at the
+call site, which is exactly the kind of "magic memory slot" the cache
+spec asks us not to leave around. (b) Add a separate `flags` field
+next to `reserved` — rejected: blows the 16-byte invariant, doubles
+the static-assert burden, and `reserved` would then *actually* be
+unused. (c) `aux` / `hotpath_attrs` / `predecode_flags` — `flags` won
+the scoping vote for being the shortest accurate label; the bit-level
+layout lives in the doc-comment.
+
+### D3. Predecode-time BTI classification, stored in `flags` bit 0
+
+**Decision.** Bit 0 of the new `flags` slot is the `bti_relevant`
+classification. The predecode pass marks an instruction BTI-relevant
+iff it is PACIASP, PACIBSP, BTI, BRK, HLT, or an exception-causing
+form (SVC/HVC/SMC/UDF/...). The cache-track hot path becomes:
 
 ```cpp
-if (entry->reserved & 1) {
+if ((entry->flags & 1u) != 0u) {
   // existing PcIsInGuardedPage / ReadBType / IsBti / IsPAuth /
   // IsException dispatch
 }
@@ -118,12 +143,10 @@ if (entry->reserved & 1) {
 Everything else gets the check elided.
 
 **Why.** The check is meaningful only for instructions that interact
-with BType. The set of such instructions is fixed and small — the
-predecode pass already iterates every instruction to compute
-`form_hash`, so the classification is free at predecode time.
-Encoding it in the `reserved` slot rather than adding a new field
-keeps `sizeof(PredecodedEntry) == 16` and respects the existing
-public-header `static_assert` (`predecode_cache.h:108-109`).
+with BType. The set is fixed and small; the predecode pass already
+iterates every instruction to compute `form_hash`, so the
+classification is free at predecode time. Bit 0 of the renamed slot
+keeps the entry size stable.
 
 **Alternatives.** (a) Add a parallel `bool[]` array of classification
 bits — rejected: doubles cache-line pressure and complicates the
@@ -134,13 +157,13 @@ Decode the BTI relevance from the form_hash at runtime — rejected:
 form_hash is opaque to non-VIXL code; we'd be re-introducing a per-
 step decode pass exactly inverse to the cache's purpose.
 
-### D3. Classification runs inside the existing predecode pass
+### D4. Classification runs inside the existing predecode pass
 
 **Decision.** `predecode_cache.cc`'s populate loop already calls
 `Simulator::ResolvePredecodeLeaf(form_hash)` for each instruction.
 That same loop classifies BTI relevance — a single switch over the
 form-hash for the small relevant set, or a query through a static
-table. The classification writes bit 0 of `PredecodedEntry::reserved`.
+table. The classification writes bit 0 of `PredecodedEntry::flags`.
 
 **Why.** No new pass, no new public type. The predecode pass is
 already O(n) over the registered range; the classification adds a
@@ -153,7 +176,7 @@ passes for one O(n) job. (b) Compute the classification lazily on
 first hot-path execution — rejected: lazy bookkeeping in the hot path
 is exactly what we're trying to remove.
 
-### D4. `ResolvePredecodeLeaf` keeps its `const void*` opaque-handle contract
+### D5. `ResolvePredecodeLeaf` keeps its `const void*` opaque-handle contract
 
 **Decision.** The signature stays `static const void* Simulator::
 ResolvePredecodeLeaf(uint32_t form_hash)`. The returned pointer is now
@@ -177,7 +200,7 @@ established by `gaby-vm-predecode-cache-design.md` §5.1 and codified
 by `predecode-cache-core`. The pmf is opaque to the predecode pass;
 only `ExecuteInstructionCached` interprets it.
 
-### D5. Acceptance is the same dual-pass + benchmark posture as core
+### D6. Acceptance is the same dual-pass + benchmark posture as core
 
 **Decision.** Acceptance for this change is:
 
@@ -215,7 +238,7 @@ is the measurement instrument.
   `simulator-aarch64.cc` guards against silent ABI drift on a future
   toolchain change.
 
-- **The cache-line pressure of `PredecodedEntry::reserved` is 4 bytes
+- **The cache-line pressure of `PredecodedEntry::flags` is 4 bytes
   we now read on every step.** → Already in the same cache line as
   `form_hash` (entry is 16 bytes, aligned, both fields in the first
   8 bytes of the entry). No new cache-line cost.
@@ -235,10 +258,15 @@ is the measurement instrument.
 
 The change is binary-and-source compatible for embedders:
 
-- `gaby_vm::PredecodeCache` public API: unchanged.
-- `PredecodedEntry::reserved` field: documented behavior expands from
-  "zero" to "internally allocated", per the existing reserved-slot
-  contract in `include/gaby_vm/predecode_cache.h`.
+- `gaby_vm::PredecodeCache` public API: unchanged except for one
+  field rename — `PredecodedEntry::reserved` → `PredecodedEntry::
+  flags`. Same offset, same type, same 16-byte `static_assert`. No
+  embedder is reading the field today; any future embedder grep will
+  catch the rename mechanically.
+- `flags` field documented behavior: bit 0 = BTI-relevant
+  classification; remaining bits reserved for future per-form
+  predecode work. Embedders SHALL still treat the slot as opaque
+  storage owned by the cache.
 - Behavior: identical, per ShadowRunner.
 
 Rollback is a `git revert` of the change's commits. The change touches
@@ -247,6 +275,6 @@ restores the previous cache hot path with no data-format migration.
 
 ## Open Questions
 
-*(none — D1–D5 settle the implementation. The benchmark numbers
+*(none — D1–D6 settle the implementation. The benchmark numbers
 expected post-change will be measured during implementation and
 recorded in the design-doc appendix.)*

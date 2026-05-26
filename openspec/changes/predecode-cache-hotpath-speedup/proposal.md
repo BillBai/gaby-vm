@@ -49,9 +49,15 @@ predecode pass, not in the execution loop.
   to-member-function (`&Simulator::SimulateXyz`), so no value-shape
   conversion is required — only the type-erasure wrapper is removed.
 
-- **Gate the BType / guarded-page check at predecode time.** Each
-  `PredecodedEntry` already has a `reserved` 32-bit slot (cache-core
-  D8). Use one bit of it to flag whether the entry is BTI-relevant:
+- **Rename `PredecodedEntry::reserved` to `PredecodedEntry::flags`.**
+  The slot now has a real role (hot-path classification bits, starting
+  with the BTI-relevant flag below), so `reserved` no longer describes
+  it. The rename is the only public-header change in this proposal —
+  same offset, same type, same `sizeof(PredecodedEntry) == 16`
+  static-assert.
+
+- **Gate the BType / guarded-page check at predecode time.** Use bit 0
+  of the new `flags` slot to mark whether the entry is BTI-relevant:
   PACIASP, PACIBSP, BTI, BRK, HLT, and exception-causing forms get the
   bit set; everything else does not. `ExecuteInstructionCached` runs
   the BType / guarded-page check only when the bit is set. The
@@ -71,11 +77,13 @@ predecode pass, not in the execution loop.
 
 ### Non-Goals
 
-- The `gaby_vm` public API surface (`include/gaby_vm/`). The
-  `PredecodedEntry` struct layout is unchanged; the `reserved` field
-  was reserved precisely for this kind of follow-up.
-- New tests, new workloads, new public types, or a microbenchmark
-  framework.
+- A `PredecodedEntry` layout change. Size stays 16 bytes; field
+  offsets and types are unchanged. Only the slot's *name* changes
+  from `reserved` to `flags` to reflect its real use.
+- New public types, new accessors, or any other public surface beyond
+  the field rename.
+- New tests beyond the dual-track BTI sub-test required to cover the
+  new classification.
 - A hard performance target.
 - `movprfx` form-hash tracking (option (c) from the scoping
   discussion). That tangles with SVE semantics and is best handled in
@@ -108,9 +116,13 @@ predecode pass, not in the execution loop.
   convention), `src/gaby_vm/predecode_cache.cc` (predecode pass adds
   the BTI-relevant classification), `docs/refs/gaby-vm-predecode-cache-
   design.md` (appendix records the new measured numbers).
-- **Public API**: no surface change. `PredecodedEntry::reserved` is
-  documented in `include/gaby_vm/predecode_cache.h` as a reserved
-  slot — its internal use does not affect the embedder.
+- **Public API**: one field rename, `PredecodedEntry::reserved` →
+  `PredecodedEntry::flags`, in `include/gaby_vm/predecode_cache.h`.
+  Same offset, type, and `sizeof` invariant; only the identifier and
+  its doc-comment change. No embedder reads the field today, and the
+  field is documented as opaque hot-path storage in either form, so
+  the rename is mechanical for any future embedder grep. No other
+  public-API change.
 - **VIXL import boundary**: edits stay inside marker blocks
   (`// gaby-vm BEGIN`/`// gaby-vm END`); no upstream VIXL semantics are
   altered. The `FormToVisitorFnMap` value-type change is the most
