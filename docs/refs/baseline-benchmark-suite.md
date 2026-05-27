@@ -2,11 +2,21 @@
 
 > Methodology for measuring the upstream VIXL AArch64 simulator and
 > comparing it to Gaby-VM's cached-dispatch path. **This document
-> captures the methodology, not results.** The first baseline snapshot
-> taken under this methodology is in
-> [`baseline-benchmark-results-2026-05.md`](./baseline-benchmark-results-2026-05.md);
-> later runs land as sibling `baseline-benchmark-results-YYYY-MM.md`
-> files rather than edits to that document.
+> captures the methodology, not results.** Result snapshots land as
+> dated sibling files, never as edits to either this doc or each
+> other:
+>
+> - [`baseline-benchmark-results-2026-05.md`](./baseline-benchmark-results-2026-05.md)
+>   — first snapshot, decoder-only (pre-cache time-zero).
+> - [`baseline-benchmark-results-cache-2026-05.md`](./baseline-benchmark-results-cache-2026-05.md)
+>   — second snapshot, both engines, post-`predecode-cache-hotpath-speedup`.
+> - [`baseline-benchmark-results-cache-2026-05-neon-inline.md`](./baseline-benchmark-results-cache-2026-05-neon-inline.md)
+>   — third snapshot, both engines, post-`neon-format-helpers-constexpr-inline`
+>   (mixed cache 1.80× over previous; mixed decoder 1.14× bonus; smoke
+>   essentially flat with a layout-noise note on the decoder side).
+>
+> Future runs follow the same `baseline-benchmark-results-*-YYYY-MM.md`
+> pattern.
 >
 > Citations are paths inside `../vixl/`. The architectural references
 > live in

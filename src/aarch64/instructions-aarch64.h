@@ -781,15 +781,142 @@ VectorFormat ScalarFormatFromFormat(VectorFormat vform);
 VectorFormat SVEFormatFromLaneSizeInBits(int lane_size_in_bits);
 VectorFormat SVEFormatFromLaneSizeInBytes(int lane_size_in_bytes);
 VectorFormat SVEFormatFromLaneSizeInBytesLog2(int lane_size_in_bytes_log_2);
-unsigned RegisterSizeInBitsFromFormat(VectorFormat vform);
-unsigned RegisterSizeInBytesFromFormat(VectorFormat vform);
-bool IsSVEFormat(VectorFormat vform);
 // TODO: Make the return types of these functions consistent.
-unsigned LaneSizeInBitsFromFormat(VectorFormat vform);
-int LaneSizeInBytesFromFormat(VectorFormat vform);
 int LaneSizeInBytesLog2FromFormat(VectorFormat vform);
-int LaneCountFromFormat(VectorFormat vform);
 int MaxLaneCountFromFormat(VectorFormat vform);
+
+// gaby-vm BEGIN:
+// 下面 6 个 VectorFormat helper 从 instructions-aarch64.cc 的原位置（行
+// 1200 IsSVEFormat、1269 RegisterSizeInBitsFromFormat、1299
+// RegisterSizeInBytesFromFormat、1304 LaneSizeInBitsFromFormat、1340
+// LaneSizeInBytesFromFormat、1378 LaneCountFromFormat）上移到这里，并
+// 标 constexpr inline。改动原因：解释器 cache 路径 mixed workload
+// profile（见 docs/refs/gaby-vm-cache-hotpath-profile-2026-05-27.md §2）
+// 显示这一组 helper 单独占 ~46% 执行时间，每条 NEON leaf 调它们 5-10
+// 次；inline + constexpr 之后编译器能在 VectorFormat 是 compile-time
+// constant 的调用点折成立即数。switch body 跟原 .cc 定义 byte-
+// equivalent，VIXL_ASSERT / VIXL_UNREACHABLE 行为保留。openspec change
+// 见 openspec/changes/neon-format-helpers-constexpr-inline/。.cc 原位置
+// 留对应 marker 指回此处。
+//
+// 依赖顺序：IsSVEFormat 必须最先，被 RegisterSizeInBitsFromFormat 的
+// assert 调用；LaneSizeInBytesFromFormat 内部调 LaneSizeInBitsFromFormat；
+// RegisterSizeInBytesFromFormat 内部调 RegisterSizeInBitsFromFormat。
+// constexpr 要求被调函数的定义在调用点之前可见，所以顺序不能调换。
+constexpr inline bool IsSVEFormat(VectorFormat vform) {
+  switch (vform) {
+    case kFormatVnB:
+    case kFormatVnH:
+    case kFormatVnS:
+    case kFormatVnD:
+    case kFormatVnQ:
+    case kFormatVnO:
+      return true;
+    default:
+      return false;
+  }
+}
+
+constexpr inline unsigned LaneSizeInBitsFromFormat(VectorFormat vform) {
+  VIXL_ASSERT(vform != kFormatUndefined);
+  switch (vform) {
+    case kFormatB:
+    case kFormat8B:
+    case kFormat16B:
+    case kFormatVnB:
+      return 8;
+    case kFormatH:
+    case kFormat2H:
+    case kFormat4H:
+    case kFormat8H:
+    case kFormatVnH:
+      return 16;
+    case kFormatS:
+    case kFormat2S:
+    case kFormat4S:
+    case kFormatVnS:
+      return 32;
+    case kFormatD:
+    case kFormat1D:
+    case kFormat2D:
+    case kFormatVnD:
+      return 64;
+    case kFormat1Q:
+    case kFormatVnQ:
+      return 128;
+    case kFormatVnO:
+      return 256;
+    default:
+      VIXL_UNREACHABLE();
+      return 0;
+  }
+}
+
+constexpr inline int LaneSizeInBytesFromFormat(VectorFormat vform) {
+  return LaneSizeInBitsFromFormat(vform) / 8;
+}
+
+constexpr inline int LaneCountFromFormat(VectorFormat vform) {
+  VIXL_ASSERT(vform != kFormatUndefined);
+  switch (vform) {
+    case kFormat16B:
+      return 16;
+    case kFormat8B:
+    case kFormat8H:
+      return 8;
+    case kFormat4H:
+    case kFormat4S:
+      return 4;
+    case kFormat2H:
+    case kFormat2S:
+    case kFormat2D:
+      return 2;
+    case kFormat1D:
+    case kFormat1Q:
+    case kFormatB:
+    case kFormatH:
+    case kFormatS:
+    case kFormatD:
+      return 1;
+    default:
+      VIXL_UNREACHABLE();
+      return 0;
+  }
+}
+
+constexpr inline unsigned RegisterSizeInBitsFromFormat(VectorFormat vform) {
+  VIXL_ASSERT(vform != kFormatUndefined);
+  VIXL_ASSERT(!IsSVEFormat(vform));
+  switch (vform) {
+    case kFormatB:
+      return kBRegSize;
+    case kFormatH:
+      return kHRegSize;
+    case kFormatS:
+    case kFormat2H:
+      return kSRegSize;
+    case kFormatD:
+    case kFormat8B:
+    case kFormat4H:
+    case kFormat2S:
+    case kFormat1D:
+      return kDRegSize;
+    case kFormat16B:
+    case kFormat8H:
+    case kFormat4S:
+    case kFormat2D:
+    case kFormat1Q:
+      return kQRegSize;
+    default:
+      VIXL_UNREACHABLE();
+      return 0;
+  }
+}
+
+constexpr inline unsigned RegisterSizeInBytesFromFormat(VectorFormat vform) {
+  return RegisterSizeInBitsFromFormat(vform) / 8;
+}
+// gaby-vm END
 bool IsVectorFormat(VectorFormat vform);
 int64_t MaxIntFromFormat(VectorFormat vform);
 int64_t MinIntFromFormat(VectorFormat vform);

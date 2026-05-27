@@ -1197,19 +1197,11 @@ VectorFormat ScalarFormatFromLaneSize(int lane_size_in_bits) {
 }
 
 
-bool IsSVEFormat(VectorFormat vform) {
-  switch (vform) {
-    case kFormatVnB:
-    case kFormatVnH:
-    case kFormatVnS:
-    case kFormatVnD:
-    case kFormatVnQ:
-    case kFormatVnO:
-      return true;
-    default:
-      return false;
-  }
-}
+// gaby-vm BEGIN:
+// IsSVEFormat 的定义已上移到 instructions-aarch64.h 作为 constexpr
+// inline，理由见该 header 对应 marker block。openspec change：
+// neon-format-helpers-constexpr-inline。
+// gaby-vm END
 
 
 VectorFormat SVEFormatFromLaneSizeInBytes(int lane_size_in_bytes) {
@@ -1266,80 +1258,12 @@ VectorFormat ScalarFormatFromFormat(VectorFormat vform) {
 }
 
 
-unsigned RegisterSizeInBitsFromFormat(VectorFormat vform) {
-  VIXL_ASSERT(vform != kFormatUndefined);
-  VIXL_ASSERT(!IsSVEFormat(vform));
-  switch (vform) {
-    case kFormatB:
-      return kBRegSize;
-    case kFormatH:
-      return kHRegSize;
-    case kFormatS:
-    case kFormat2H:
-      return kSRegSize;
-    case kFormatD:
-    case kFormat8B:
-    case kFormat4H:
-    case kFormat2S:
-    case kFormat1D:
-      return kDRegSize;
-    case kFormat16B:
-    case kFormat8H:
-    case kFormat4S:
-    case kFormat2D:
-    case kFormat1Q:
-      return kQRegSize;
-    default:
-      VIXL_UNREACHABLE();
-      return 0;
-  }
-}
-
-
-unsigned RegisterSizeInBytesFromFormat(VectorFormat vform) {
-  return RegisterSizeInBitsFromFormat(vform) / 8;
-}
-
-
-unsigned LaneSizeInBitsFromFormat(VectorFormat vform) {
-  VIXL_ASSERT(vform != kFormatUndefined);
-  switch (vform) {
-    case kFormatB:
-    case kFormat8B:
-    case kFormat16B:
-    case kFormatVnB:
-      return 8;
-    case kFormatH:
-    case kFormat2H:
-    case kFormat4H:
-    case kFormat8H:
-    case kFormatVnH:
-      return 16;
-    case kFormatS:
-    case kFormat2S:
-    case kFormat4S:
-    case kFormatVnS:
-      return 32;
-    case kFormatD:
-    case kFormat1D:
-    case kFormat2D:
-    case kFormatVnD:
-      return 64;
-    case kFormat1Q:
-    case kFormatVnQ:
-      return 128;
-    case kFormatVnO:
-      return 256;
-    default:
-      VIXL_UNREACHABLE();
-      return 0;
-  }
-}
-
-
-int LaneSizeInBytesFromFormat(VectorFormat vform) {
-  return LaneSizeInBitsFromFormat(vform) / 8;
-}
+// gaby-vm BEGIN:
+// RegisterSizeInBitsFromFormat、RegisterSizeInBytesFromFormat、
+// LaneSizeInBitsFromFormat、LaneSizeInBytesFromFormat 的定义已上移到
+// instructions-aarch64.h 作为 constexpr inline，理由见该 header 对应
+// marker block。openspec change：neon-format-helpers-constexpr-inline。
+// gaby-vm END
 
 
 int LaneSizeInBytesLog2FromFormat(VectorFormat vform) {
@@ -1375,33 +1299,11 @@ int LaneSizeInBytesLog2FromFormat(VectorFormat vform) {
 }
 
 
-int LaneCountFromFormat(VectorFormat vform) {
-  VIXL_ASSERT(vform != kFormatUndefined);
-  switch (vform) {
-    case kFormat16B:
-      return 16;
-    case kFormat8B:
-    case kFormat8H:
-      return 8;
-    case kFormat4H:
-    case kFormat4S:
-      return 4;
-    case kFormat2H:
-    case kFormat2S:
-    case kFormat2D:
-      return 2;
-    case kFormat1D:
-    case kFormat1Q:
-    case kFormatB:
-    case kFormatH:
-    case kFormatS:
-    case kFormatD:
-      return 1;
-    default:
-      VIXL_UNREACHABLE();
-      return 0;
-  }
-}
+// gaby-vm BEGIN:
+// LaneCountFromFormat 的定义已上移到 instructions-aarch64.h 作为
+// constexpr inline，理由见该 header 对应 marker block。openspec
+// change：neon-format-helpers-constexpr-inline。
+// gaby-vm END
 
 
 int MaxLaneCountFromFormat(VectorFormat vform) {

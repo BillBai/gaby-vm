@@ -25,6 +25,27 @@ gaby_vm_apply_compile_flags(simulator_smoke)
 
 add_test(NAME simulator_smoke COMMAND simulator_smoke)
 
+# Constexpr smoke test for the 6 VectorFormat helpers promoted to constexpr
+# inline by the openspec change `neon-format-helpers-constexpr-inline`. The TU
+# carries a set of static_asserts; if the promotion is intact, the test
+# compiles. Runtime body is trivial. Uses the same privileged-build pattern as
+# simulator_smoke (PRIVATE src/ include + VIXL_* defines) so it can reach the
+# imported `aarch64/instructions-aarch64.h` directly.
+add_executable(instructions_aarch64_constexpr_smoke_test
+  instructions_aarch64_constexpr_smoke_test.cc)
+target_link_libraries(instructions_aarch64_constexpr_smoke_test
+  PRIVATE gaby_vm::gaby_vm)
+target_include_directories(instructions_aarch64_constexpr_smoke_test
+  PRIVATE ${PROJECT_SOURCE_DIR}/src)
+target_compile_definitions(instructions_aarch64_constexpr_smoke_test PRIVATE
+  VIXL_INCLUDE_TARGET_A64
+  VIXL_INCLUDE_SIMULATOR_AARCH64
+  $<$<CONFIG:Debug>:VIXL_DEBUG>)
+gaby_vm_apply_compile_flags(instructions_aarch64_constexpr_smoke_test)
+
+add_test(NAME instructions_aarch64_constexpr_smoke
+  COMMAND instructions_aarch64_constexpr_smoke_test)
+
 # Simulator correctness: the dual-path harness. Drives hand-encoded AArch64
 # sequences through gaby_vm::Simulator::RunFrom (cache track) and DebugRunFrom
 # (decoder track) and asserts both reach the precomputed expected state. It
