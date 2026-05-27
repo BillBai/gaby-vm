@@ -1180,21 +1180,11 @@ VectorFormat VectorFormatHalfLanes(VectorFormat vform) {
 }
 
 
-VectorFormat ScalarFormatFromLaneSize(int lane_size_in_bits) {
-  switch (lane_size_in_bits) {
-    case 8:
-      return kFormatB;
-    case 16:
-      return kFormatH;
-    case 32:
-      return kFormatS;
-    case 64:
-      return kFormatD;
-    default:
-      VIXL_UNREACHABLE();
-      return kFormatUndefined;
-  }
-}
+// gaby-vm BEGIN:
+// ScalarFormatFromLaneSize 的定义已上移到 instructions-aarch64.h 作为
+// constexpr inline，理由见该 header 对应 marker block。openspec change：
+// neon-clearforwrite-and-helpers-inline。
+// gaby-vm END
 
 
 // gaby-vm BEGIN:
@@ -1253,9 +1243,11 @@ VectorFormat SVEFormatFromLaneSizeInBytesLog2(int lane_size_in_bytes_log2) {
 }
 
 
-VectorFormat ScalarFormatFromFormat(VectorFormat vform) {
-  return ScalarFormatFromLaneSize(LaneSizeInBitsFromFormat(vform));
-}
+// gaby-vm BEGIN:
+// ScalarFormatFromFormat 的定义已上移到 instructions-aarch64.h 作为
+// constexpr inline，理由见该 header 对应 marker block。openspec change：
+// neon-clearforwrite-and-helpers-inline。
+// gaby-vm END
 
 
 // gaby-vm BEGIN:
@@ -1266,37 +1258,11 @@ VectorFormat ScalarFormatFromFormat(VectorFormat vform) {
 // gaby-vm END
 
 
-int LaneSizeInBytesLog2FromFormat(VectorFormat vform) {
-  VIXL_ASSERT(vform != kFormatUndefined);
-  switch (vform) {
-    case kFormatB:
-    case kFormat8B:
-    case kFormat16B:
-    case kFormatVnB:
-      return 0;
-    case kFormatH:
-    case kFormat2H:
-    case kFormat4H:
-    case kFormat8H:
-    case kFormatVnH:
-      return 1;
-    case kFormatS:
-    case kFormat2S:
-    case kFormat4S:
-    case kFormatVnS:
-      return 2;
-    case kFormatD:
-    case kFormat1D:
-    case kFormat2D:
-    case kFormatVnD:
-      return 3;
-    case kFormatVnQ:
-      return 4;
-    default:
-      VIXL_UNREACHABLE();
-      return 0;
-  }
-}
+// gaby-vm BEGIN:
+// LaneSizeInBytesLog2FromFormat 的定义已上移到 instructions-aarch64.h 作为
+// constexpr inline，理由见该 header 对应 marker block。openspec change：
+// neon-clearforwrite-and-helpers-inline。
+// gaby-vm END
 
 
 // gaby-vm BEGIN:
@@ -1306,61 +1272,12 @@ int LaneSizeInBytesLog2FromFormat(VectorFormat vform) {
 // gaby-vm END
 
 
-int MaxLaneCountFromFormat(VectorFormat vform) {
-  VIXL_ASSERT(vform != kFormatUndefined);
-  switch (vform) {
-    case kFormatB:
-    case kFormat8B:
-    case kFormat16B:
-      return 16;
-    case kFormatH:
-    case kFormat4H:
-    case kFormat8H:
-      return 8;
-    case kFormatS:
-    case kFormat2S:
-    case kFormat4S:
-      return 4;
-    case kFormatD:
-    case kFormat1D:
-    case kFormat2D:
-      return 2;
-    default:
-      VIXL_UNREACHABLE();
-      return 0;
-  }
-}
-
-
-// Does 'vform' indicate a vector format or a scalar format?
-bool IsVectorFormat(VectorFormat vform) {
-  VIXL_ASSERT(vform != kFormatUndefined);
-  switch (vform) {
-    case kFormatB:
-    case kFormatH:
-    case kFormatS:
-    case kFormatD:
-      return false;
-    default:
-      return true;
-  }
-}
-
-
-int64_t MaxIntFromFormat(VectorFormat vform) {
-  int lane_size = LaneSizeInBitsFromFormat(vform);
-  return static_cast<int64_t>(GetUintMask(lane_size) >> 1);
-}
-
-
-int64_t MinIntFromFormat(VectorFormat vform) {
-  return -MaxIntFromFormat(vform) - 1;
-}
-
-
-uint64_t MaxUintFromFormat(VectorFormat vform) {
-  return GetUintMask(LaneSizeInBitsFromFormat(vform));
-}
+// gaby-vm BEGIN:
+// 下面 5 个 helper（MaxLaneCountFromFormat、IsVectorFormat、MaxIntFromFormat、
+// MinIntFromFormat、MaxUintFromFormat）的定义已上移到 instructions-aarch64.h
+// 作为 constexpr inline，理由见该 header 对应 marker block。openspec change：
+// neon-clearforwrite-and-helpers-inline。
+// gaby-vm END
 
 }  // namespace aarch64
 }  // namespace vixl

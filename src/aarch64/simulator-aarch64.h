@@ -538,6 +538,23 @@ class SimRegisterBase {
     NotifyRegisterWrite();
   }
 
+  // gaby-vm BEGIN:
+  // ClearTail 是为 LogicVRegister::ClearForWrite 新增的一个内部 bulk-clear
+  // 入口：zero 出 value_[from..size_in_bytes_) 的 tail 字节，再一次性 set
+  // dirty flag。引入它是因为 cache 路径上 mixed workload profile（见
+  // docs/refs/gaby-vm-cache-hotpath-profile-2026-05-27.md §2）显示原版
+  // ClearForWrite 的 byte-by-byte SetUint loop 占了 ~12% 的 mixed cache
+  // 时间。把闭包封在 SimRegisterBase 上（而不是开放一个 mutable byte 指针）
+  // 是为了把权限粒度收窄——这个方法只能 zero、不能任意 write，且只能从
+  // 已写入区往后清。openspec change：neon-clearforwrite-and-helpers-inline。
+  void ClearTail(unsigned from) {
+    if (from < size_in_bytes_) {
+      memset(value_ + from, 0, size_in_bytes_ - from);
+      NotifyRegisterWrite();
+    }
+  }
+  // gaby-vm END
+
   // Insert a typed value into a register, leaving the rest of the register
   // unchanged. The lane parameter indicates where in the register the value
   // should be inserted, in the range [ 0, sizeof(value_) / sizeof(T) ), where
@@ -913,15 +930,23 @@ class LogicVRegister {
 
   // When setting a result in a register larger than the result itself, the top
   // bits of the register must be cleared.
+  // gaby-vm BEGIN:
+  // 函数体改写：原版 for 循环逐字节 SetUint(kFormat16B, i, 0)（对一个
+  // half-width 目的等同 8 次 dispatch + 8 次 byte write + 8 次 NotifyRegister
+  // Write 翻转）替换为一次 SimRegisterBase::ClearTail 调用——内部一次 memset
+  // tail bytes + 一次 NotifyRegisterWrite。NotifyRegisterWrite 由 N 次变 1 次
+  // 是 bool dirty flag（written_since_last_log_）的等价 set，VIXL trace log
+  // 只查"是否写过"，不计次数。Profile：docs/refs/gaby-vm-cache-hotpath-
+  // profile-2026-05-27.md §2 显示本函数占 mixed cache ~12%。openspec change：
+  // neon-clearforwrite-and-helpers-inline。
   void ClearForWrite(VectorFormat vform) const {
     // SVE destinations write whole registers, so we have nothing to clear.
     if (IsSVEFormat(vform)) return;
 
     unsigned size = RegisterSizeInBytesFromFormat(vform);
-    for (unsigned i = size; i < register_.GetSizeInBytes(); i++) {
-      SetUint(kFormat16B, i, 0);
-    }
+    register_.ClearTail(size);
   }
+  // gaby-vm END
 
   // Saturation state for each lane of a vector.
   enum Saturation {

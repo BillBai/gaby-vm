@@ -14,6 +14,11 @@
 >   — third snapshot, both engines, post-`neon-format-helpers-constexpr-inline`
 >   (mixed cache 1.80× over previous; mixed decoder 1.14× bonus; smoke
 >   essentially flat with a layout-noise note on the decoder side).
+> - [`baseline-benchmark-results-cache-2026-05-clearforwrite-helpers.md`](./baseline-benchmark-results-cache-2026-05-clearforwrite-helpers.md)
+>   — fourth snapshot, both engines, post-`neon-clearforwrite-and-helpers-inline`
+>   (mixed cache 1.93× cumulative over the original post-cache baseline;
+>   gate calibration discussion for the 7% B+C marginal win; decoder
+>   tracks took another small layout shift in the same shape A produced).
 >
 > Future runs follow the same `baseline-benchmark-results-*-YYYY-MM.md`
 > pattern.

@@ -72,11 +72,19 @@ constexpr size_t ArrayLength(const T (&)[n]) {
   return n;
 }
 
-inline uint64_t GetUintMask(unsigned bits) {
+// gaby-vm BEGIN:
+// GetUintMask 由 inline 提到 constexpr inline。下游的 MaxIntFromFormat /
+// MaxUintFromFormat（在 src/aarch64/instructions-aarch64.h 的 gaby-vm
+// marker block 内）调用本函数，constexpr 上下文要求被调函数也是 constexpr
+// 才能折成立即数。函数体本来就是 constant expression（一个 ternary +
+// 减一），加 constexpr 是 token 级改动，语义零变化。
+// openspec change：neon-clearforwrite-and-helpers-inline。
+constexpr inline uint64_t GetUintMask(unsigned bits) {
   VIXL_ASSERT(bits <= 64);
   uint64_t base = (bits >= 64) ? 0 : (UINT64_C(1) << bits);
   return base - 1;
 }
+// gaby-vm END
 
 inline uint64_t GetSignMask(unsigned bits) {
   VIXL_ASSERT(bits <= 64);

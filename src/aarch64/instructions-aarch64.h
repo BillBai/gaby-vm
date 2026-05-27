@@ -774,16 +774,12 @@ VectorFormat VectorFormatHalfWidth(VectorFormat vform);
 VectorFormat VectorFormatDoubleWidth(VectorFormat vform);
 VectorFormat VectorFormatDoubleLanes(VectorFormat vform);
 VectorFormat VectorFormatHalfLanes(VectorFormat vform);
-VectorFormat ScalarFormatFromLaneSize(int lane_size_in_bits);
 VectorFormat VectorFormatHalfWidthDoubleLanes(VectorFormat vform);
 VectorFormat VectorFormatFillQ(VectorFormat vform);
-VectorFormat ScalarFormatFromFormat(VectorFormat vform);
 VectorFormat SVEFormatFromLaneSizeInBits(int lane_size_in_bits);
 VectorFormat SVEFormatFromLaneSizeInBytes(int lane_size_in_bytes);
 VectorFormat SVEFormatFromLaneSizeInBytesLog2(int lane_size_in_bytes_log_2);
 // TODO: Make the return types of these functions consistent.
-int LaneSizeInBytesLog2FromFormat(VectorFormat vform);
-int MaxLaneCountFromFormat(VectorFormat vform);
 
 // gaby-vm BEGIN:
 // 下面 6 个 VectorFormat helper 从 instructions-aarch64.cc 的原位置（行
@@ -917,10 +913,130 @@ constexpr inline unsigned RegisterSizeInBytesFromFormat(VectorFormat vform) {
   return RegisterSizeInBitsFromFormat(vform) / 8;
 }
 // gaby-vm END
-bool IsVectorFormat(VectorFormat vform);
-int64_t MaxIntFromFormat(VectorFormat vform);
-int64_t MinIntFromFormat(VectorFormat vform);
-uint64_t MaxUintFromFormat(VectorFormat vform);
+
+// gaby-vm BEGIN:
+// 下面 8 个 VectorFormat helper 从 instructions-aarch64.cc 的原位置（行
+// 1183 ScalarFormatFromLaneSize、1256 ScalarFormatFromFormat、1269
+// LaneSizeInBytesLog2FromFormat、1309 MaxLaneCountFromFormat、1336
+// IsVectorFormat、1350 MaxIntFromFormat、1356 MinIntFromFormat、1361
+// MaxUintFromFormat）上移到这里，并标 constexpr inline。改动原因：
+// neon-format-helpers-constexpr-inline (archive: 2026-05-27) 落地之后剩余
+// 这 7 个 helper 在 mixed cache profile（docs/refs/gaby-vm-cache-hotpath-
+// profile-2026-05-27.md §2）里加总 ~3-5%；为了让 ScalarFormatFromFormat /
+// MaxInt / MaxUint 真正在 constexpr 上下文里折成立即数，依赖闭包还多带了
+// ScalarFormatFromLaneSize（被 ScalarFormatFromFormat 调）一起 inline，
+// 并把 src/utils-vixl.h:75 的 GetUintMask 从 inline 提到 constexpr inline。
+// switch body / VIXL_ASSERT / VIXL_UNREACHABLE 与 .cc 原定义 byte-equivalent。
+// openspec change：neon-clearforwrite-and-helpers-inline。
+//
+// 顺序：依赖独立的（ScalarFormatFromLaneSize、LaneSizeInBytesLog2FromFormat、
+// MaxLaneCountFromFormat、IsVectorFormat）放前面；依赖前面 + Lever A 的
+// （ScalarFormatFromFormat、MaxIntFromFormat、MaxUintFromFormat）放中段；
+// MinIntFromFormat 依赖 MaxIntFromFormat 放最后。
+constexpr inline VectorFormat ScalarFormatFromLaneSize(int lane_size_in_bits) {
+  switch (lane_size_in_bits) {
+    case 8:
+      return kFormatB;
+    case 16:
+      return kFormatH;
+    case 32:
+      return kFormatS;
+    case 64:
+      return kFormatD;
+    default:
+      VIXL_UNREACHABLE();
+      return kFormatUndefined;
+  }
+}
+
+constexpr inline int LaneSizeInBytesLog2FromFormat(VectorFormat vform) {
+  VIXL_ASSERT(vform != kFormatUndefined);
+  switch (vform) {
+    case kFormatB:
+    case kFormat8B:
+    case kFormat16B:
+    case kFormatVnB:
+      return 0;
+    case kFormatH:
+    case kFormat2H:
+    case kFormat4H:
+    case kFormat8H:
+    case kFormatVnH:
+      return 1;
+    case kFormatS:
+    case kFormat2S:
+    case kFormat4S:
+    case kFormatVnS:
+      return 2;
+    case kFormatD:
+    case kFormat1D:
+    case kFormat2D:
+    case kFormatVnD:
+      return 3;
+    case kFormatVnQ:
+      return 4;
+    default:
+      VIXL_UNREACHABLE();
+      return 0;
+  }
+}
+
+constexpr inline int MaxLaneCountFromFormat(VectorFormat vform) {
+  VIXL_ASSERT(vform != kFormatUndefined);
+  switch (vform) {
+    case kFormatB:
+    case kFormat8B:
+    case kFormat16B:
+      return 16;
+    case kFormatH:
+    case kFormat4H:
+    case kFormat8H:
+      return 8;
+    case kFormatS:
+    case kFormat2S:
+    case kFormat4S:
+      return 4;
+    case kFormatD:
+    case kFormat1D:
+    case kFormat2D:
+      return 2;
+    default:
+      VIXL_UNREACHABLE();
+      return 0;
+  }
+}
+
+// Does 'vform' indicate a vector format or a scalar format?
+constexpr inline bool IsVectorFormat(VectorFormat vform) {
+  VIXL_ASSERT(vform != kFormatUndefined);
+  switch (vform) {
+    case kFormatB:
+    case kFormatH:
+    case kFormatS:
+    case kFormatD:
+      return false;
+    default:
+      return true;
+  }
+}
+
+constexpr inline VectorFormat ScalarFormatFromFormat(VectorFormat vform) {
+  return ScalarFormatFromLaneSize(LaneSizeInBitsFromFormat(vform));
+}
+
+constexpr inline int64_t MaxIntFromFormat(VectorFormat vform) {
+  int lane_size = LaneSizeInBitsFromFormat(vform);
+  return static_cast<int64_t>(GetUintMask(lane_size) >> 1);
+}
+
+constexpr inline uint64_t MaxUintFromFormat(VectorFormat vform) {
+  return GetUintMask(LaneSizeInBitsFromFormat(vform));
+}
+
+constexpr inline int64_t MinIntFromFormat(VectorFormat vform) {
+  return -MaxIntFromFormat(vform) - 1;
+}
+// gaby-vm END
 
 
 // clang-format off
