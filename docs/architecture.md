@@ -2,9 +2,9 @@
 
 This document captures the durable architectural shape of gaby-vm — the bits
 that are stable design choices, not implementation details that move every
-release. Aspirational direction (e.g. the predecode/dispatch cache) lives in
-[`../AGENTS.md`](../AGENTS.md); detailed normative requirements live in the
-capability specs under [`../openspec/specs/`](../openspec/specs/).
+release. Aspirational direction lives in [`../AGENTS.md`](../AGENTS.md);
+detailed normative requirements live in the capability specs under
+[`../openspec/specs/`](../openspec/specs/).
 
 ## Memory model
 
@@ -28,7 +28,7 @@ Consequences for embedders:
 - A misbehaving guest is, by construction, a host-process bug.
 
 This shape suits the project's goals: it keeps the interpreter loop free of
-bounds checks (which matters for the cached dispatch path), and it lines up
+bounds checks (which matters for cache mode), and it lines up
 with environments like iOS where shared address space is what an embedder
 already has.
 
@@ -46,7 +46,7 @@ their own thread-context structure).
 
 Implication for things we add later:
 
-- New per-instance state (a future predecode cache, ancillary tables, etc.)
+- New per-instance state (the predecode cache, ancillary tables, etc.)
   should be cheap enough to duplicate per thread, or designed as
   shared-and-read-only / atomically-updated so that thread-local instances
   can refer to it safely.
@@ -90,8 +90,15 @@ bounded subset is imported into this repository.
   `Instruction` and friends keep their upstream member variables and method
   signatures; modifications and additions go inside marker regions so they
   stay reviewable.
-- No predecode cache, IR, or alternative dispatch path exists today. The
-  cached dispatch direction is described in [`../AGENTS.md`](../AGENTS.md).
+- gaby-vm runs in two execution modes (terminology in
+  [`conventions.md`](conventions.md#terminology)):
+  - **decoder mode** — drives the imported simulator along the upstream
+    flow above. This is the historic path and the bench harness default.
+  - **cache mode** — drives `gaby_vm::Simulator` over a `PredecodeCache`,
+    predecoding once at code-range registration and dispatching cached
+    entries on the steady-state loop. Normative behaviour lives in the
+    `predecode-cache` and `benchmark-harness` capability specs under
+    [`../openspec/specs/`](../openspec/specs/).
 
 ## Public API surface
 

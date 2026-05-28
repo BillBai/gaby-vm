@@ -131,3 +131,51 @@ free of imported VIXL types — they don't include imported VIXL headers or
 reference `vixl::*` symbols (including in forward declarations), so the
 public surface stays VIXL-free. When a public type needs to expose simulator
 state, a `gaby_vm`-namespaced wrapper is the usual approach.
+
+## Terminology
+
+gaby-vm has two execution paths through the simulator. They are referred
+to throughout the codebase by these names, and prose, code, CLI, output
+keys, and specs all use the same word:
+
+- **decoder mode** — execution drives the imported `vixl::aarch64::Simulator`
+  along upstream VIXL's `Decoder → VisitNamedInstruction → leaf` dispatch
+  path. This is the historic path and the bench harness default.
+- **cache mode** — execution drives `gaby_vm::Simulator` over a
+  `gaby_vm::PredecodeCache`: instructions are predecoded once at code-range
+  registration time, and the timed loop dispatches off cached entries
+  without re-walking the upstream decoder.
+
+The two labels (`decoder`, `cache`) and the noun (`mode`) are the
+canonical vocabulary. They double as the values of the bench harness's
+`--mode {decoder|cache}` flag and as the `mode:` key in benchmark output,
+so prose and tooling resolve to the same identifiers.
+
+### Identifiers stay in English
+
+The labels do **not** get translated when the surrounding prose is
+Chinese. Write "decoder 模式" and "cache 模式", not "解码器模式" or
+"缓存模式". The reason is mechanical: a reader (or a `git grep`)
+searching for `decoder` or `cache` should land on every relevant
+location regardless of which document layer or human language the
+location belongs to. Translating the identifier defeats that.
+
+The noun **mode** translates normally — it's a description, not an
+identifier — so "执行模式" / "两个模式" is fine in flowing Chinese
+prose.
+
+### Forbidden flutter phrasings
+
+These near-synonyms used to drift through docs; they are no longer
+allowed when referring to the *modes*:
+
+- "decoder engine" / "cache engine" / "execution engine" — replaced by
+  "decoder mode" / "cache mode" / "execution mode".
+- "cache-on" / "cache-off" — replaced by "cache mode" / "decoder mode".
+- "cached dispatch path" / "predecode/dispatch cache" used as a *mode
+  name* — replaced by "cache mode".
+
+The data structure's own name `PredecodeCache` is preserved (it is a
+class, not a mode), and mechanism-level phrasing like "predecode once,
+execute the cached path repeatedly" stays — it describes how cache mode
+works, it is not a label for the mode itself.

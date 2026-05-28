@@ -8,13 +8,12 @@
 #include <vector>
 
 #include "cpu-features.h"
-
-#include "aarch64/decoder-aarch64.h"
-#include "aarch64/simulator-aarch64.h"
-
 #include "gaby_vm/predecode_cache.h"
 #include "gaby_vm/registers.h"
 #include "gaby_vm/simulator.h"
+
+#include "aarch64/decoder-aarch64.h"
+#include "aarch64/simulator-aarch64.h"
 
 // GABY_VM_BENCH_BUILD_TYPE is normally injected by bench/CMakeLists.txt as a
 // string literal matching the active CMake configuration (e.g. "Release",
@@ -40,17 +39,20 @@ constexpr double kMinSeconds = 0.001;
 constexpr const char* kBuildType =
     *GABY_VM_BENCH_BUILD_TYPE ? GABY_VM_BENCH_BUILD_TYPE : "Unknown";
 
-// Which execution engine drives the workload. `kDecoder` keeps the historic
+// Which execution mode drives the workload. `kDecoder` keeps the historic
 // behaviour — `vixl::aarch64::Simulator` driven directly by the imported
 // decoder + visitor flow — and stays the default. `kCache` selects the
-// gaby_vm cache-track `Simulator` over a `PredecodeCache`.
-enum class Engine { kDecoder, kCache };
+// gaby_vm cache-track `Simulator` over a `PredecodeCache`. The terminology
+// is documented in docs/conventions.md ("decoder mode" / "cache mode") and
+// is the same vocabulary used by the `--mode` CLI flag and the `mode:`
+// output key.
+enum class Mode { kDecoder, kCache };
 
-constexpr const char* EngineName(Engine e) {
-  switch (e) {
-    case Engine::kDecoder:
+constexpr const char* ModeName(Mode m) {
+  switch (m) {
+    case Mode::kDecoder:
       return "decoder";
-    case Engine::kCache:
+    case Mode::kCache:
       return "cache";
   }
   return "unknown";
@@ -58,7 +60,7 @@ constexpr const char* EngineName(Engine e) {
 
 struct Args {
   double seconds = kDefaultRunSeconds;
-  Engine engine = Engine::kDecoder;
+  Mode mode = Mode::kDecoder;
 };
 
 enum class ParseResult { kRun, kHelpAndExit, kErrorAndExit };
@@ -66,25 +68,29 @@ enum class ParseResult { kRun, kHelpAndExit, kErrorAndExit };
 void PrintUsage(const char* program_name,
                 const char* workload_description,
                 std::FILE* out) {
-  std::fprintf(
-      out,
-      "Usage: %s [--engine {decoder|cache}] [--seconds <float>] [--help|-h]\n"
-      "\n"
-      "%s\n"
-      "\n"
-      "Options:\n"
-      "  --engine <engine>   Execution engine to drive the workload.\n"
-      "                      'decoder' (default) drives the imported VIXL\n"
-      "                      simulator directly. 'cache' drives the gaby_vm\n"
-      "                      cache-track Simulator over a PredecodeCache; the\n"
-      "                      buffer is registered before the warm-up call.\n"
-      "  --seconds <float>   Timed-loop target duration in seconds.\n"
-      "                      Default: %.1f. Minimum: %g.\n"
-      "  --help, -h          Show this message and exit.\n",
-      program_name,
-      workload_description,
-      kDefaultRunSeconds,
-      kMinSeconds);
+  std::fprintf(out,
+               "Usage: %s [--mode {decoder|cache}] [--seconds <float>] "
+               "[--help|-h]\n"
+               "\n"
+               "%s\n"
+               "\n"
+               "Options:\n"
+               "  --mode <mode>       Execution mode to drive the workload.\n"
+               "                      'decoder' (default) drives the imported "
+               "VIXL\n"
+               "                      simulator directly. 'cache' drives the "
+               "gaby_vm\n"
+               "                      cache-track Simulator over a "
+               "PredecodeCache; the\n"
+               "                      buffer is registered before the warm-up "
+               "call.\n"
+               "  --seconds <float>   Timed-loop target duration in seconds.\n"
+               "                      Default: %.1f. Minimum: %g.\n"
+               "  --help, -h          Show this message and exit.\n",
+               program_name,
+               workload_description,
+               kDefaultRunSeconds,
+               kMinSeconds);
 }
 
 ParseResult ParseArgs(int argc, char* argv[], Args* out) {
@@ -119,19 +125,19 @@ ParseResult ParseArgs(int argc, char* argv[], Args* out) {
         return ParseResult::kErrorAndExit;
       }
       out->seconds = s;
-    } else if (std::strcmp(a, "--engine") == 0) {
+    } else if (std::strcmp(a, "--mode") == 0) {
       if (i + 1 >= argc) {
-        std::fprintf(stderr, "missing value for --engine\n");
+        std::fprintf(stderr, "missing value for --mode\n");
         return ParseResult::kErrorAndExit;
       }
       const char* v = argv[++i];
       if (std::strcmp(v, "decoder") == 0) {
-        out->engine = Engine::kDecoder;
+        out->mode = Mode::kDecoder;
       } else if (std::strcmp(v, "cache") == 0) {
-        out->engine = Engine::kCache;
+        out->mode = Mode::kCache;
       } else {
         std::fprintf(stderr,
-                     "invalid --engine value: %s (expected 'decoder' or "
+                     "invalid --mode value: %s (expected 'decoder' or "
                      "'cache')\n",
                      v);
         return ParseResult::kErrorAndExit;
@@ -152,12 +158,12 @@ struct RunResult {
   std::uint64_t iterations;
 };
 
-// Decoder engine — drives the imported `vixl::aarch64::Simulator` directly.
-// This is the historic harness path; preserved here unchanged so cache-on and
-// cache-off runs report against an identical baseline.
-RunResult RunDecoderEngine(const std::uint32_t* code,
-                           std::size_t static_word_count,
-                           double target_seconds) {
+// Decoder mode — drives the imported `vixl::aarch64::Simulator` directly.
+// This is the historic harness path; preserved here unchanged so cache-mode
+// and decoder-mode runs report against an identical baseline.
+RunResult RunDecoderMode(const std::uint32_t* code,
+                         std::size_t static_word_count,
+                         double target_seconds) {
   // Copy the const instruction stream into a simulator-visible buffer.
   // The simulator only reads, but a heap-resident copy keeps lifetime
   // and alignment behavior identical across workloads regardless of
@@ -188,20 +194,20 @@ RunResult RunDecoderEngine(const std::uint32_t* code,
   return {std::chrono::duration<double>(t1 - t0).count(), iterations};
 }
 
-// Cache engine — drives the public `gaby_vm::Simulator` over a
+// Cache mode — drives the public `gaby_vm::Simulator` over a
 // `PredecodeCache`. The workload buffer is registered as a code range
 // *before* the warm-up call (design D3), so the timed region measures
 // steady-state cache execution only — the one-time predecode pass is
 // already paid by the time the steady-state loop starts.
 //
-// The warm-up + timed-loop shape mirrors `RunDecoderEngine` exactly: one
+// The warm-up + timed-loop shape mirrors `RunDecoderMode` exactly: one
 // discarded warm-up `RunFrom` followed by a steady-state loop that re-arms
 // the link-register sentinel before each iteration. `LR = 0` is the
-// end-of-simulation sentinel for both tracks (imported VIXL's
+// end-of-simulation sentinel for both modes (imported VIXL's
 // `kEndOfSimAddress` is `NULL`).
-RunResult RunCacheEngine(const std::uint32_t* code,
-                         std::size_t static_word_count,
-                         double target_seconds) {
+RunResult RunCacheMode(const std::uint32_t* code,
+                       std::size_t static_word_count,
+                       double target_seconds) {
   std::vector<std::uint32_t> buffer(code, code + static_word_count);
   const std::size_t buffer_bytes = buffer.size() * sizeof(std::uint32_t);
   const std::uintptr_t entry_pc =
@@ -214,7 +220,7 @@ RunResult RunCacheEngine(const std::uint32_t* code,
     const gaby_vm::PredecodeCache::RegistrationError* err =
         cache.GetLastRegistrationError();
     std::fprintf(stderr,
-                 "cache engine: RegisterCodeRange failed: %s\n",
+                 "cache mode: RegisterCodeRange failed: %s\n",
                  (err != nullptr && err->reason != nullptr) ? err->reason
                                                             : "(no detail)");
     std::exit(2);
@@ -267,9 +273,9 @@ int RunBenchmark(const char* workload_name,
   }
 
   const RunResult result =
-      (args.engine == Engine::kCache)
-          ? RunCacheEngine(code, static_word_count, args.seconds)
-          : RunDecoderEngine(code, static_word_count, args.seconds);
+      (args.mode == Mode::kCache)
+          ? RunCacheMode(code, static_word_count, args.seconds)
+          : RunDecoderMode(code, static_word_count, args.seconds);
 
   const double elapsed = result.elapsed_seconds;
   const std::uint64_t iterations = result.iterations;
@@ -280,7 +286,7 @@ int RunBenchmark(const char* workload_name,
 
   std::printf("workload: %s\n", workload_name);
   std::printf("build_type: %s\n", kBuildType);
-  std::printf("engine: %s\n", EngineName(args.engine));
+  std::printf("mode: %s\n", ModeName(args.mode));
   std::printf("workload_generator_tag: %s\n", generator_tag);
   std::printf("static_words_in_buffer: %zu\n", static_word_count);
   std::printf("dynamic_instructions_per_iteration: %" PRIu64 "\n",

@@ -1,7 +1,7 @@
 # Baseline Benchmark Suite
 
 > Methodology for measuring the upstream VIXL AArch64 simulator and
-> comparing it to Gaby-VM's cached-dispatch path. **This document
+> comparing it to Gaby-VM's cache mode. **This document
 > captures the methodology, not results.** Result snapshots land as
 > dated sibling files, never as edits to either this doc or each
 > other:
@@ -9,13 +9,13 @@
 > - [`baseline-benchmark-results-2026-05.md`](./baseline-benchmark-results-2026-05.md)
 >   — first snapshot, decoder-only (pre-cache time-zero).
 > - [`baseline-benchmark-results-cache-2026-05.md`](./baseline-benchmark-results-cache-2026-05.md)
->   — second snapshot, both engines, post-`predecode-cache-hotpath-speedup`.
+>   — second snapshot, both modes, post-`predecode-cache-hotpath-speedup`.
 > - [`baseline-benchmark-results-cache-2026-05-neon-inline.md`](./baseline-benchmark-results-cache-2026-05-neon-inline.md)
->   — third snapshot, both engines, post-`neon-format-helpers-constexpr-inline`
+>   — third snapshot, both modes, post-`neon-format-helpers-constexpr-inline`
 >   (mixed cache 1.80× over previous; mixed decoder 1.14× bonus; smoke
 >   essentially flat with a layout-noise note on the decoder side).
 > - [`baseline-benchmark-results-cache-2026-05-clearforwrite-helpers.md`](./baseline-benchmark-results-cache-2026-05-clearforwrite-helpers.md)
->   — fourth snapshot, both engines, post-`neon-clearforwrite-and-helpers-inline`
+>   — fourth snapshot, both modes, post-`neon-clearforwrite-and-helpers-inline`
 >   (mixed cache 1.93× cumulative over the original post-cache baseline;
 >   gate calibration discussion for the 7% B+C marginal win; decoder
 >   tracks took another small layout shift in the same shape A produced).
@@ -206,16 +206,15 @@ code shape if practical (i.e. seed `BenchCodeGenerator` identically
 or use the dumped blob as input to a small wrapper). Record
 throughput and ns/insn.
 
-This is the *floor* Gaby-VM must not regress against in V1 (cache off
-or out-of-range fallback path) and the headroom Gaby-VM should
-exceed (cache on, hot path).
+This is the *floor* Gaby-VM must not regress against in V1 (decoder mode,
+or the out-of-range fallback path inside cache mode) and the headroom
+Gaby-VM should exceed (cache mode, hot path).
 
-### Gaby-VM cache-on vs cache-off
+### Gaby-VM cache mode vs decoder mode
 
-Provide either a build flag or a runtime toggle that disables cache
-hits and forces the slow path on every instruction. Run the same
-benchmark twice; compute speedup as
-`throughput(cache_on) / throughput(cache_off)`.
+Run the same benchmark twice — once with `--mode decoder`, once with
+`--mode cache` — and compute speedup as
+`throughput(cache_mode) / throughput(decoder_mode)`.
 
 Equality of resulting register/memory state across the two paths is
 a **correctness gate**: the benchmark harness should `VIXL_CHECK`
@@ -238,10 +237,10 @@ Sample row:
 
 ```
 case: bench-mixed-sim mirror
-  upstream-VIXL    : median 47.3 ns/insn  (IQR 1.2 ns)
-  gaby-vm cache off: median 49.1 ns/insn  (IQR 1.5 ns)   [+3.8% slower]
-  gaby-vm cache on : median 18.6 ns/insn  (IQR 0.4 ns)   [-60.7% / 2.54x]
-  predecode cost   : 8.7 ms for 65,536 instructions
+  upstream-VIXL        : median 47.3 ns/insn  (IQR 1.2 ns)
+  gaby-vm decoder mode : median 49.1 ns/insn  (IQR 1.5 ns)   [+3.8% slower]
+  gaby-vm cache mode   : median 18.6 ns/insn  (IQR 0.4 ns)   [-60.7% / 2.54x]
+  predecode cost       : 8.7 ms for 65,536 instructions
 ```
 
 (Numbers are illustrative.)

@@ -725,7 +725,7 @@ branch-free 序列，跑 Release，Apple Silicon，单次 run，未做 pinning /
 
 ### A.1 baseline — `predecode-cache-benchmark`（archive `2026-05-26`）
 
-| workload | engine  | iters/sec | ns/insn | cache/decoder |
+| workload | mode    | iters/sec | ns/insn | cache/decoder |
 |---|---|---|---|---|
 | mixed    | decoder | 68        | —       | —             |
 | mixed    | cache   | 272       | —       | ~4.0×         |
@@ -736,11 +736,11 @@ branch-free 序列，跑 Release，Apple Silicon，单次 run，未做 pinning /
 
 ### A.2 `predecode-cache-hotpath-speedup`（本 change）
 
-跑法：`bench/bench_baseline --engine <decoder|cache> --seconds 1.0`、
-`bench/bench_smoke --engine <decoder|cache> --seconds 0.2`，两组 engine
+跑法：`bench/bench_baseline --mode <decoder|cache> --seconds 1.0`、
+`bench/bench_smoke --mode <decoder|cache> --seconds 0.2`，两个 mode
 紧挨着跑一次，记录原始 key/value 输出。
 
-| workload | engine  | iters/sec   | ns/insn  | cache/decoder |
+| workload | mode    | iters/sec   | ns/insn  | cache/decoder |
 |---|---|---|---|---|
 | mixed    | decoder | 69.14       | 223.74   | —             |
 | mixed    | cache   | 270.16      | 57.26    | ~3.9×         |

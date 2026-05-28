@@ -6,11 +6,11 @@ message(STATUS "Building gaby-vm benchmarks")
 # decision 5). The include + compile-definition pattern mirrors
 # test/CMakeLists.txt's privileged consumption of the imported VIXL surface:
 # PRIVATE include of ${PROJECT_SOURCE_DIR}/src lets runner.cc reach
-# vixl::aarch64::Simulator (the decoder engine) without exposing those headers
-# in include/gaby_vm/, and the three VIXL defines must match the ones the
-# simulator code was compiled with so the header view is consistent.
+# vixl::aarch64::Simulator (which drives decoder mode) without exposing those
+# headers in include/gaby_vm/, and the three VIXL defines must match the ones
+# the simulator code was compiled with so the header view is consistent.
 #
-# The cache engine consumes the gaby_vm public cache API
+# Cache mode consumes the gaby_vm public cache API
 # (gaby_vm/predecode_cache.h, gaby_vm/simulator.h). Those headers ride in
 # transitively through the existing PUBLIC link to gaby_vm::gaby_vm below; no
 # extra include directive is required — the link target already publishes

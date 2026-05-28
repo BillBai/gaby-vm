@@ -2,12 +2,12 @@
 
 This directory is a developer-invoked harness that measures the
 throughput of a fixed instruction workload through one of two execution
-engines: the imported `vixl::aarch64::Simulator` (the **decoder** engine,
+modes: the imported `vixl::aarch64::Simulator` (**decoder mode**,
 default) or the gaby-vm cache-track `Simulator` over a `PredecodeCache`
-(the **cache** engine, selected with `--engine cache`). Numbers from
+(**cache mode**, selected with `--mode cache`). Numbers from
 this harness are the project's reference baseline: future changes that
 touch either execution path (leaf tweaks, cache changes, etc.) compare
-against numbers from this harness, and the same flag picks the engine
+against numbers from this harness, and the same flag picks the mode
 to compare under.
 
 There are two binaries:
@@ -39,17 +39,17 @@ explicitly when they want the harness.
 ## Invocation
 
 ```sh
-./build/release/bench/bench_baseline                          # 5 seconds, decoder engine
+./build/release/bench/bench_baseline                          # 5 seconds, decoder mode
 ./build/release/bench/bench_baseline --seconds 10
-./build/release/bench/bench_baseline --engine cache           # cache-on, default --seconds
-./build/release/bench/bench_smoke    --engine cache --seconds 0.2
+./build/release/bench/bench_baseline --mode cache             # cache mode, default --seconds
+./build/release/bench/bench_smoke    --mode cache --seconds 0.2
 ./build/release/bench/bench_baseline --help                   # usage block, exit 0
 ./build/release/bench/bench_baseline -h                       # short alias for --help
 ```
 
 Supported flags:
 
-- `--engine {decoder|cache}` — execution engine that drives the
+- `--mode {decoder|cache}` — execution mode that drives the
   workload. Default `decoder`, which preserves the historic behaviour:
   the harness drives the imported `vixl::aarch64::Simulator` directly.
   `cache` instead constructs a `gaby_vm::PredecodeCache`, registers the
@@ -71,7 +71,7 @@ Supported flags:
 
 Unknown arguments produce an error on stderr that names the offending
 argument and points the user at `--help`, then exit status `2`. An
-unrecognised `--engine` value (anything other than `decoder` or `cache`)
+unrecognised `--mode` value (anything other than `decoder` or `cache`)
 is rejected the same way.
 
 Each invocation prints one observation as `key: value` lines on stdout:
@@ -80,7 +80,7 @@ Each invocation prints one observation as `key: value` lines on stdout:
 |-----|---------|
 | `workload` | Short identifier (`mixed` or `smoke`). |
 | `build_type` | The CMake configuration that compiled the runner (`Release`, `Debug`, `RelWithDebInfo`, `MinSizeRel`, ...). The string `Unknown` is emitted when no configuration is selected (rare; can happen with single-config generators invoked without `-DCMAKE_BUILD_TYPE`). |
-| `engine` | The execution engine that produced the run (`decoder` or `cache`), reflecting the `--engine` flag. Lets a downstream consumer tell cache-on numbers apart from cache-off numbers in a mixed log. |
+| `mode` | The execution mode that produced the run (`decoder` or `cache`), reflecting the `--mode` flag. Lets a downstream consumer tell cache-mode numbers apart from decoder-mode numbers in a mixed log. |
 | `workload_generator_tag` | Provenance string from the workload header — upstream commit + seed + buffer size for `mixed`; `llvm-mc` version + source digest for `smoke`. |
 | `static_words_in_buffer` | Number of 4-byte instruction words physically present in the workload header's array. |
 | `dynamic_instructions_per_iteration` | Number of guest instructions actually executed by one `Simulator::RunFrom` over the buffer. For `mixed`, captured offline once during workload generation; for `smoke` (branch-free), equals the static count by construction. |
@@ -93,17 +93,17 @@ Each invocation prints one observation as `key: value` lines on stdout:
 
 The harness runs one discarded warm-up `RunFrom` before the timed region
 and resets `LR` to the end-of-simulation sentinel (`NULL` — i.e. `0` —
-for both engines, matching `vixl::aarch64::Simulator::kEndOfSimAddress`)
+for both modes, matching `vixl::aarch64::Simulator::kEndOfSimAddress`)
 before every `RunFrom` call (warm-up included), so each iteration starts
 from the same exit convention regardless of what the workload did with
 `LR`. The warm-up, timed-loop, and LR-reset cadence are identical across
-engines; per-engine setup (constructing the simulator, registering the
+modes; per-mode setup (constructing the simulator, registering the
 predecode cache) happens once before the warm-up and so falls outside
 the timed region.
 
-## Comparing cache-on vs cache-off throughput
+## Comparing cache mode vs decoder mode throughput
 
-The `--engine` flag exists so the predecode cache can be measured against
+The `--mode` flag exists so the predecode cache can be measured against
 the decoder baseline on identical workloads. Both runs go through the
 same harness — same workload bytes, same warm-up call, same timed loop
 shape, same reported keys — so their `iterations_per_second` numbers are
@@ -112,11 +112,11 @@ directly comparable.
 A typical comparison run, on either binary:
 
 ```sh
-./build/release/bench/bench_baseline --engine decoder --seconds 1.0
-./build/release/bench/bench_baseline --engine cache   --seconds 1.0
+./build/release/bench/bench_baseline --mode decoder --seconds 1.0
+./build/release/bench/bench_baseline --mode cache   --seconds 1.0
 ```
 
-The `engine` key in each output identifies which run was which. A
+The `mode` key in each output identifies which run was which. A
 reasonable speedup expectation today is several × on `mixed` and roughly
 order-of-magnitude on `smoke` — the smoke workload is branch-free, so
 the cache eliminates more relative dispatch overhead per instruction.
@@ -127,7 +127,7 @@ because run-to-run variance on a typical unspecialized host is tens of
 percent (see *Host hygiene* below).
 
 `--seconds 0.2` is enough on `bench_smoke` to see the gap; `bench_baseline`
-needs at least `--seconds 1.0` for the cache-on side to see enough
+needs at least `--seconds 1.0` for the cache-mode side to see enough
 iterations to be stable.
 
 ## Regenerating `bench/workloads/smoke_workload_data.h`
