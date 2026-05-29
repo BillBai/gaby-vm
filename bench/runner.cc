@@ -58,9 +58,41 @@ constexpr const char* ModeName(Mode m) {
   return "unknown";
 }
 
+// Branch-hook variant (cache mode only; decoder mode bypasses gaby_vm and
+// therefore has no SetBranchHook entry point). Three settings:
+//   kNone      — no SetBranchHook call. The bench's historical behaviour.
+//   kNull      — SetBranchHook(nullptr, nullptr). Observationally identical
+//                to kNone but exercises the null-check fast path in the
+//                leaf hook helper. Catches accidental regressions in the
+//                null-hook path (branch-hook-api tasks.md task 8.2).
+//   kIdentity  — install a tiny `return target_pc;` hook. Each taken branch
+//                costs one indirect call. Useful as an informational
+//                measurement of the hot-path overhead ceiling
+//                (branch-hook-api tasks.md task 8.3).
+enum class HookVariant { kNone, kNull, kIdentity };
+
+constexpr const char* HookVariantName(HookVariant v) {
+  switch (v) {
+    case HookVariant::kNone:
+      return "none";
+    case HookVariant::kNull:
+      return "null";
+    case HookVariant::kIdentity:
+      return "identity";
+  }
+  return "unknown";
+}
+
+uintptr_t IdentityBranchHook(uintptr_t target_pc,
+                             void* /*user_data*/,
+                             gaby_vm::Simulator& /*sim*/) {
+  return target_pc;
+}
+
 struct Args {
   double seconds = kDefaultRunSeconds;
   Mode mode = Mode::kDecoder;
+  HookVariant hook = HookVariant::kNone;
 };
 
 enum class ParseResult { kRun, kHelpAndExit, kErrorAndExit };
@@ -69,8 +101,9 @@ void PrintUsage(const char* program_name,
                 const char* workload_description,
                 std::FILE* out) {
   std::fprintf(out,
-               "Usage: %s [--mode {decoder|cache}] [--seconds <float>] "
-               "[--help|-h]\n"
+               "Usage: %s [--mode {decoder|cache}] "
+               "[--hook {none|null|identity}] "
+               "[--seconds <float>] [--help|-h]\n"
                "\n"
                "%s\n"
                "\n"
@@ -84,6 +117,15 @@ void PrintUsage(const char* program_name,
                "PredecodeCache; the\n"
                "                      buffer is registered before the warm-up "
                "call.\n"
+               "  --hook <variant>    Branch-hook variant (cache mode only).\n"
+               "                      'none' (default): no SetBranchHook "
+               "call.\n"
+               "                      'null': SetBranchHook(nullptr, nullptr)\n"
+               "                              — exercises the null-check\n"
+               "                              fast path.\n"
+               "                      'identity': install an identity hook —\n"
+               "                              exercises the indirect-call\n"
+               "                              path on every taken branch.\n"
                "  --seconds <float>   Timed-loop target duration in seconds.\n"
                "                      Default: %.1f. Minimum: %g.\n"
                "  --help, -h          Show this message and exit.\n",
@@ -139,6 +181,25 @@ ParseResult ParseArgs(int argc, char* argv[], Args* out) {
         std::fprintf(stderr,
                      "invalid --mode value: %s (expected 'decoder' or "
                      "'cache')\n",
+                     v);
+        return ParseResult::kErrorAndExit;
+      }
+    } else if (std::strcmp(a, "--hook") == 0) {
+      if (i + 1 >= argc) {
+        std::fprintf(stderr, "missing value for --hook\n");
+        return ParseResult::kErrorAndExit;
+      }
+      const char* v = argv[++i];
+      if (std::strcmp(v, "none") == 0) {
+        out->hook = HookVariant::kNone;
+      } else if (std::strcmp(v, "null") == 0) {
+        out->hook = HookVariant::kNull;
+      } else if (std::strcmp(v, "identity") == 0) {
+        out->hook = HookVariant::kIdentity;
+      } else {
+        std::fprintf(stderr,
+                     "invalid --hook value: %s (expected 'none', 'null' or "
+                     "'identity')\n",
                      v);
         return ParseResult::kErrorAndExit;
       }
@@ -207,7 +268,8 @@ RunResult RunDecoderMode(const std::uint32_t* code,
 // `kEndOfSimAddress` is `NULL`).
 RunResult RunCacheMode(const std::uint32_t* code,
                        std::size_t static_word_count,
-                       double target_seconds) {
+                       double target_seconds,
+                       HookVariant hook) {
   std::vector<std::uint32_t> buffer(code, code + static_word_count);
   const std::size_t buffer_bytes = buffer.size() * sizeof(std::uint32_t);
   const std::uintptr_t entry_pc =
@@ -230,6 +292,19 @@ RunResult RunCacheMode(const std::uint32_t* code,
   // adjustments; the committed workloads stay well within the floor.
   std::vector<std::uint8_t> stack(gaby_vm::Simulator::kMinStackSize);
   gaby_vm::Simulator sim(&cache, stack.data(), stack.size());
+
+  // Branch-hook variant. Install before the warm-up so the warm-up exercises
+  // the same hot path the timed iterations will. See HookVariant docs above.
+  switch (hook) {
+    case HookVariant::kNone:
+      break;
+    case HookVariant::kNull:
+      sim.SetBranchHook(nullptr, nullptr);
+      break;
+    case HookVariant::kIdentity:
+      sim.SetBranchHook(IdentityBranchHook, nullptr);
+      break;
+  }
 
   // Warm-up — discarded. The Simulator's construction already seated LR at
   // the end-of-simulation sentinel; we re-write defensively so the warm-up
@@ -274,7 +349,7 @@ int RunBenchmark(const char* workload_name,
 
   const RunResult result =
       (args.mode == Mode::kCache)
-          ? RunCacheMode(code, static_word_count, args.seconds)
+          ? RunCacheMode(code, static_word_count, args.seconds, args.hook)
           : RunDecoderMode(code, static_word_count, args.seconds);
 
   const double elapsed = result.elapsed_seconds;
@@ -287,6 +362,7 @@ int RunBenchmark(const char* workload_name,
   std::printf("workload: %s\n", workload_name);
   std::printf("build_type: %s\n", kBuildType);
   std::printf("mode: %s\n", ModeName(args.mode));
+  std::printf("branch_hook: %s\n", HookVariantName(args.hook));
   std::printf("workload_generator_tag: %s\n", generator_tag);
   std::printf("static_words_in_buffer: %zu\n", static_word_count);
   std::printf("dynamic_instructions_per_iteration: %" PRIu64 "\n",
