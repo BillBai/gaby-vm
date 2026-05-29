@@ -26,10 +26,11 @@
 // The simulator never decodes host_marker bytes: when the BL fires the branch
 // hook, the hook recognises target_pc == host_marker, reads the AArch64 C-ABI
 // argument registers (X0 = a, X1 = b), calls host_add through a plain C
-// function pointer, writes the result back to X0, and returns BranchAction{
-// LR, false }. The simulator then commits PC to LR — the `mov lr, x19` that
-// follows the BL — and the guest continues. The trailing RET reads X19 back
-// into LR, sees the null-LR sentinel, and terminates.
+// function pointer, writes the result back to X0, and returns the guest LR
+// (the post-BL return address — the branch hook returns a bare uintptr_t next
+// PC). The simulator then commits PC to LR — the `mov lr, x19` that follows
+// the BL — and the guest continues. The trailing RET reads X19 back into LR,
+// sees the null-LR sentinel, and terminates.
 //
 // The same pattern scales to any host symbol the guest patch wants to
 // invoke: keep a small range-keyed dispatch table inside the hook body
@@ -37,7 +38,6 @@
 // fall back to FFI if not.
 // =============================================================================
 
-#include <array>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -45,6 +45,7 @@
 #include <iostream>
 #include <ostream>
 #include <string_view>
+#include <vector>
 
 #include "gaby_vm/gaby_vm.h"
 #include "gaby_vm/predecode_cache.h"
@@ -60,12 +61,6 @@ constexpr std::string_view kProgName = "gaby-vm";
 extern "C" int host_add(int a, int b) { return a + b; }
 
 // -------- Embedding boilerplate ----------------------------------------------
-
-struct StackBuffer {
-  alignas(16) std::array<uint8_t, 16 * 1024> bytes{};
-  void* data() { return bytes.data(); }
-  size_t size() const { return bytes.size(); }
-};
 
 // Embedder-owned context the branch hook carries opaquely through user_data.
 // Real embedders typically hold a table of loaded guest Mach-O ranges plus a
@@ -125,7 +120,7 @@ int RunDemo() {
     return 1;
   }
 
-  StackBuffer stack;
+  std::vector<uint8_t> stack(gaby_vm::Simulator::kMinStackSize);
   gaby_vm::Simulator sim(&cache, stack.data(), stack.size());
 
   EmbedderContext ctx{host_marker};

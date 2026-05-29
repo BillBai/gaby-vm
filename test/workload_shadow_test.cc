@@ -129,7 +129,7 @@ int main() {
         "mixed workload runs diverge-free under ShadowRunner");
 
   // Second pass: same workloads, with an identity branch hook installed on
-  // both tracks. The hook returns BranchAction{ target_pc, false } unchanged,
+  // both tracks. The hook returns target_pc (a bare uintptr_t) unchanged,
   // so the run MUST be observationally indistinguishable from the no-hook
   // pass above. Pins down the spec's "Identity hook is observationally
   // invisible" scenario.

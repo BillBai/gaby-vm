@@ -362,7 +362,11 @@ int RunBenchmark(const char* workload_name,
   std::printf("workload: %s\n", workload_name);
   std::printf("build_type: %s\n", kBuildType);
   std::printf("mode: %s\n", ModeName(args.mode));
-  std::printf("branch_hook: %s\n", HookVariantName(args.hook));
+  // The --hook variant only applies on the cache track; decoder mode bypasses
+  // gaby_vm and never installs a hook, so report "n/a" there rather than
+  // echoing a variant that was never actually applied.
+  std::printf("branch_hook: %s\n",
+              (args.mode == Mode::kCache) ? HookVariantName(args.hook) : "n/a");
   std::printf("workload_generator_tag: %s\n", generator_tag);
   std::printf("static_words_in_buffer: %zu\n", static_word_count);
   std::printf("dynamic_instructions_per_iteration: %" PRIu64 "\n",

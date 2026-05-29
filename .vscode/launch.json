@@ -2,7 +2,7 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "Debug: gaby-vm (banner)",
+      "name": "Debug: gaby-vm (demo)",
       "type": "lldb-dap",
       "request": "launch",
       "program": "${workspaceFolder}/build/debug/demos/cli/gaby-vm",
@@ -75,7 +75,7 @@
     {
       "id": "gabyVmArgs",
       "type": "promptString",
-      "description": "Single arg for gaby-vm (e.g. --version, --help). Leave empty for banner mode.",
+      "description": "Single arg for gaby-vm (e.g. --version, --help). Leave empty to run the embedding demo.",
       "default": ""
     },
     {

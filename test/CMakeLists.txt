@@ -118,7 +118,7 @@ gaby_vm_apply_compile_flags(simulator_constructor_stack_test)
 
 add_test(NAME simulator_constructor_stack COMMAND simulator_constructor_stack_test)
 
-# Branch-hook dispatch: per-branch-family firing, BranchAction semantics
+# Branch-hook dispatch: per-branch-family firing, hook return-value semantics
 # (identity / divert / stop), dual-track equivalence. Public-API only — no
 # privileged build pattern. See openspec/changes/branch-hook-api/.
 add_executable(branch_hook_dispatch_test branch_hook_dispatch_test.cc)

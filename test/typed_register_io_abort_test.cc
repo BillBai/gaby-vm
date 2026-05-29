@@ -26,16 +26,11 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
+#include "embedding_stack.h"
 #include "gaby_vm/registers.h"
 #include "gaby_vm/simulator.h"
 
 namespace {
-
-struct StackBuffer {
-  alignas(16) std::array<uint8_t, 16 * 1024> bytes{};
-  void* data() { return bytes.data(); }
-  size_t size() const { return bytes.size(); }
-};
 
 [[noreturn]] void run_bad_write_in_child() {
   StackBuffer stack;

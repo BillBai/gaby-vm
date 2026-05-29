@@ -34,6 +34,7 @@
 #include <type_traits>
 #include <variant>
 
+#include "embedding_stack.h"
 #include "gaby_vm/predecode_cache.h"
 #include "gaby_vm/registers.h"
 #include "gaby_vm/simulator.h"
@@ -65,12 +66,6 @@ void check(bool ok, const char* label) {
     std::fprintf(stderr, "[FAIL] %s\n", label);
   }
 }
-
-struct StackBuffer {
-  alignas(16) std::array<uint8_t, 16 * 1024> bytes{};
-  void* data() { return bytes.data(); }
-  size_t size() const { return bytes.size(); }
-};
 
 // AArch64 encodings (verified with an external assembler at authorship time).
 constexpr uint32_t kAddX0X0_1 = 0x91000400u;  // add x0, x0, #1

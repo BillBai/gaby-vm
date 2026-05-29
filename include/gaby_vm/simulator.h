@@ -64,6 +64,17 @@ class Simulator {
   Simulator(const Simulator&) = delete;
   Simulator& operator=(const Simulator&) = delete;
 
+  // Not movable either, and the deletion is load-bearing — not just tidiness.
+  // The constructor hands the imported vixl::aarch64::Simulator a back-pointer
+  // to `this` (SetGabyOuterSim, see simulator.cc) so the branch hook can be
+  // passed `gaby_vm::Simulator&`. A move would transfer impl_ but leave that
+  // back-pointer aimed at the moved-from wrapper, so the next branch hook
+  // would receive a dangling reference. Deleting the move members makes the
+  // "gaby_outer_sim_ == the owning Simulator" invariant explicit and stops a
+  // future `= default` from silently reintroducing the hazard.
+  Simulator(Simulator&&) = delete;
+  Simulator& operator=(Simulator&&) = delete;
+
   // --- Cache track -----------------------------------------------------------
   // Requires a non-null cache; otherwise aborts with a diagnostic. A PC that
   // leaves every registered code range aborts (no silent fallback).

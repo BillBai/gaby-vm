@@ -34,7 +34,7 @@ embeds the static library — the macOS/Linux integration example. From the
 debug build:
 
 ```sh
-./build/debug/demos/cli/gaby-vm           # banner with version
+./build/debug/demos/cli/gaby-vm           # runs the embedding demo (prints version + host_add result)
 ./build/debug/demos/cli/gaby-vm --version # version only
 ./build/debug/demos/cli/gaby-vm --help    # usage
 ```

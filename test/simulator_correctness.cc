@@ -46,6 +46,7 @@
 #include <cstring>
 #include <functional>
 
+#include "embedding_stack.h"
 #include "gaby_vm/predecode_cache.h"
 #include "gaby_vm/simulator.h"
 
@@ -114,14 +115,6 @@ uint8_t nzcv_z(const gaby_vm::Simulator& sim) {
   return static_cast<uint8_t>((sim.Read(gaby_vm::SysRegister::NZCV) >> 30) &
                               1u);
 }
-
-// -------- Embedder-owned guest stack --------
-
-struct StackBuffer {
-  alignas(16) std::array<uint8_t, 16 * 1024> bytes{};
-  void* data() { return bytes.data(); }
-  size_t size() const { return bytes.size(); }
-};
 
 // -------- Dual-path runner --------
 //
@@ -631,17 +624,18 @@ void run_call_return_tests(TestState& s) {
         0xaa1303fe,  // mov lr,  x19     ; restore outer LR
         0xd65f03c0,  // ret              ; outer terminator
     };
-    run_dual(s,
-             "PACIASP + BTI j + RET (BTI-relevant classification on cache track)",
-             code,
-             5,
-             [](gaby_vm::Simulator& /*sim*/) {},
-             [&s](gaby_vm::Simulator& sim) {
-               expect_eq_u64(s,
-                             sim.Read(gaby_vm::GpRegister::X19),
-                             0ULL,
-                             "X19 == 0 (outer LR preserved via X19)");
-             });
+    run_dual(
+        s,
+        "PACIASP + BTI j + RET (BTI-relevant classification on cache track)",
+        code,
+        5,
+        [](gaby_vm::Simulator& /*sim*/) {},
+        [&s](gaby_vm::Simulator& sim) {
+          expect_eq_u64(s,
+                        sim.Read(gaby_vm::GpRegister::X19),
+                        0ULL,
+                        "X19 == 0 (outer LR preserved via X19)");
+        });
   }
 }
 

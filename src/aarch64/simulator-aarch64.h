@@ -57,7 +57,7 @@
 
 // gaby-vm:
 //   branch-hook-api: branch-leaf 调 hook 时需要 gaby_vm::Simulator::BranchHook
-//   typedef、BranchAction 返回类型、以及把 outer sim 回传给 hook 用的
+//   typedef（返回 uintptr_t 的下一个 PC）、以及把 outer sim 回传给 hook 用的
 //   gaby_vm::Simulator&。gaby_vm/simulator.h 是 public API 头、不含任何 vixl::
 //   符号、也不 include 任何 imported VIXL 头，所以反向 include 是安全的（跟
 //   上面 gaby_vm/predecode_cache.h 同模式）。
@@ -1661,6 +1661,18 @@ class Simulator : public DecoderVisitor {
         gaby_branch_hook_(reinterpret_cast<uintptr_t>(target),
                           gaby_branch_hook_data_,
                           *gaby_outer_sim_);
+    // branch-hook-api: a diverting hook may return any address, so validate
+    // word alignment here with an always-on check (not VIXL_ASSERT, which is
+    // ((void)0) in release). The terminate sentinel 0 and every architectural
+    // target are word-aligned, so they pass for free; only a genuinely
+    // misaligned divert trips this. Without the guard a misaligned-but-in-range
+    // divert passes the next step's range check and the IsWordAligned assert in
+    // ExecuteInstructionCached is compiled out in release, so the simulator
+    // would silently decode a word straddling two instructions instead of
+    // failing cleanly.
+    if (!IsWordAligned(next_pc)) {
+      VIXL_ABORT_WITH_MSG("gaby-vm: branch hook returned a misaligned PC");
+    }
     WritePc(reinterpret_cast<const Instruction*>(next_pc));
   }
   // gaby-vm END
@@ -1693,8 +1705,15 @@ class Simulator : public DecoderVisitor {
   // 可以在同一个 Simulator 上再发起一次 RunFrom；嵌套调用据此
   // 先存档、返回时还原「解释器游标」——也就是「跑到哪了」这组
   // 运行期状态：pc_、cache 的 cur_range_、form_hash_、
-  // last_instr_、pc_modified_。游标刻意不含寄存器堆：寄存器要
-  // 跨嵌套调用透传（参数进、返回值出），跟真实调用边界一致。
+  // last_instr_、pc_modified_，以及 BTI 的 btype_/next_btype_。游标刻意
+  // 不含寄存器堆：寄存器要跨嵌套调用透传（参数进、返回值出），跟真实
+  // 调用边界一致。
+  //   btype_/next_btype_ 为什么也要存档：branch hook 是从分支 leaf 里触
+  //   发的，而 register-indirect 分支（BR/BLR/RET 及 PAC 变体）在调 hook
+  //   之前就已经 WriteNextBType 暂存了「目标该看到的 BType」。如果 hook
+  //   在这里 seat 了一次嵌套运行，嵌套里的每条指令都会 UpdateBType、把
+  //   这个暂存值消费并清掉；不连 btype_/next_btype_ 一起存档恢复，外层
+  //   分支的目标指令就会读到被嵌套运行污染的 BType（branch-hook-api）。
   // 这两个方法是 Simulator 成员，所以能直接读写上面那些
   // protected / private 字段；嵌套与否的判断、RAII 包装在
   // gaby_vm::Simulator 那侧。游标字段含义见
@@ -1706,10 +1725,18 @@ class Simulator : public DecoderVisitor {
     uint32_t form_hash;
     const Instruction* last_instr;
     bool pc_modified;
+    BType btype;
+    BType next_btype;
   };
 
   GabyInterpreterCursor GabySaveCursor() const {
-    return {pc_, cur_range_, form_hash_, last_instr_, pc_modified_};
+    return {pc_,
+            cur_range_,
+            form_hash_,
+            last_instr_,
+            pc_modified_,
+            btype_,
+            next_btype_};
   }
 
   void GabyRestoreCursor(const GabyInterpreterCursor& cursor) {
@@ -1718,6 +1745,8 @@ class Simulator : public DecoderVisitor {
     form_hash_ = cursor.form_hash;
     last_instr_ = cursor.last_instr;
     pc_modified_ = cursor.pc_modified;
+    btype_ = cursor.btype;
+    next_btype_ = cursor.next_btype;
   }
   // gaby-vm END
 

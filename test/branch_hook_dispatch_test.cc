@@ -27,6 +27,7 @@
 #include <functional>
 #include <vector>
 
+#include "embedding_stack.h"
 #include "gaby_vm/predecode_cache.h"
 #include "gaby_vm/registers.h"
 #include "gaby_vm/simulator.h"
@@ -86,12 +87,6 @@ void check_eq_u64(uint64_t actual, uint64_t expected, const char* label) {
                static_cast<unsigned long long>(actual),
                static_cast<unsigned long long>(expected));
 }
-
-struct StackBuffer {
-  alignas(16) std::array<uint8_t, 16 * 1024> bytes{};
-  void* data() { return bytes.data(); }
-  size_t size() const { return bytes.size(); }
-};
 
 using SetupFn = std::function<void(gaby_vm::Simulator&)>;
 

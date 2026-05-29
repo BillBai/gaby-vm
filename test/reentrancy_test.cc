@@ -31,6 +31,7 @@
 #include <cstdint>
 #include <cstdio>
 
+#include "embedding_stack.h"
 #include "gaby_vm/predecode_cache.h"
 #include "gaby_vm/simulator.h"
 
@@ -54,14 +55,6 @@ void check(bool ok, const char* label) {
     std::fprintf(stderr, "[FAIL] %s\n", label);
   }
 }
-
-// Embedder-owned guest stack buffer. The test's guest code never touches SP,
-// so the size only has to be enough for the Simulator to seat an initial SP.
-struct StackBuffer {
-  alignas(16) std::array<uint8_t, 16 * 1024> bytes{};
-  void* data() { return bytes.data(); }
-  size_t size() const { return bytes.size(); }
-};
 
 // --- task 4.6: NOP;RET terminates cleanly on both tracks ---------------------
 
