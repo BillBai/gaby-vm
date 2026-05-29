@@ -24,15 +24,18 @@ not a pre-registered "intercept these specific host symbols" list.
 
 ## What Changes
 
-- Add `gaby_vm::BranchAction` value type in `include/gaby_vm/simulator.h`
-  (the `{uintptr_t pc; bool stop;}` shape — fits in two ARM64 result
-  registers, no heap allocation per branch).
-- Add `gaby_vm::BranchHook` C-style function-pointer typedef in the
-  same header, with the signature
-  `BranchAction (*)(uintptr_t target_pc, void* user_data, Simulator& sim)`.
-  `void* user_data` carries an embedder-owned opaque pointer so the
+- Add `gaby_vm::Simulator::BranchHook` C-style function-pointer typedef
+  in `include/gaby_vm/simulator.h`, with the signature
+  `uintptr_t (*)(uintptr_t target_pc, void* user_data, Simulator& sim)`.
+  The hook returns the address the simulator should commit as the next
+  PC. `void* user_data` carries an embedder-owned opaque pointer so the
   hook can be a closure-equivalent without paying for `std::function`
-  on the per-branch hot path.
+  on the per-branch hot path. Termination is expressed by returning 0
+  (the null-LR end-of-simulation sentinel) — the same path the guest
+  uses when its own RET hits a null LR. No separate `BranchAction`
+  return struct, no separate stop flag: the single `uintptr_t` return
+  encodes the three outcomes (identity = return `target_pc`, divert =
+  return some other in-range PC, terminate = return 0).
 - Add `Simulator::SetBranchHook(BranchHook hook, void* user_data)` to
   install or replace the hook. Passing `nullptr` removes it. The
   installed hook applies to **both** the cache track and the decoder
@@ -67,9 +70,9 @@ not a pre-registered "intercept these specific host symbols" list.
   result and serves as the canonical embedding pattern.
 - Add tests under `test/`:
   - `branch_hook_dispatch_test.cc` — hook fires on each branch type,
-    target address matches expectation, struct return paths (continue
-    at target vs divert to a different PC vs stop) behave as
-    documented.
+    target address matches expectation, return-value paths (continue
+    at target vs divert to a different PC vs terminate by returning 0)
+    behave as documented.
   - `branch_hook_reentrancy_test.cc` — hook may call
     `Read`/`Write` on the simulator and seat a nested step via
     `RunFrom`/`StepOnce(entry_pc)`/`DebugStepOnce(entry_pc)`, the
