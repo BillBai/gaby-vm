@@ -223,7 +223,12 @@ Simulator::Simulator(PredecodeCache* cache,
                      size_t stack_size)
     : impl_(std::make_unique<Impl>(cache,
                                    stack_buffer,
-                                   CheckStackSize(stack_size))) {}
+                                   CheckStackSize(stack_size))) {
+  // Hand the imported vixl::aarch64::Simulator the back-pointer it needs to
+  // pass `gaby_vm::Simulator&` to the branch hook. Set once, lives for the
+  // Simulator's lifetime. See openspec/changes/branch-hook-api/design.md §D7.
+  impl_->vsim.SetGabyOuterSim(this);
+}
 
 Simulator::~Simulator() = default;
 
@@ -525,6 +530,13 @@ void Simulator::SetMemoryWriteObserver(MemoryWriteObserver observer) {
   // Wire the sink into the imported Simulator only while an observer is set,
   // so stores pay nothing for observation when none is installed.
   impl_->vsim.SetMemoryWriteSink(impl_->sink.observer ? &impl_->sink : nullptr);
+}
+
+void Simulator::SetBranchHook(BranchHook hook, void* user_data) {
+  // Thin forwarder: the storage and null-check fast path live on the imported
+  // Simulator (under the branch-hook-api marker block in simulator-aarch64.h)
+  // so each branch leaf reaches the hook with one direct member-function call.
+  impl_->vsim.SetGabyBranchHook(hook, user_data);
 }
 
 }  // namespace gaby_vm

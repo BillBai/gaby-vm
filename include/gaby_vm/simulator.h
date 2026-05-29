@@ -201,6 +201,77 @@ class Simulator {
   using MemoryWriteObserver = std::function<void(const MemoryWriteEvent&)>;
   void SetMemoryWriteObserver(MemoryWriteObserver observer);
 
+  // --- Branch observation ----------------------------------------------------
+
+  // Hook fired on every taken PC-redirecting branch the guest executes, on
+  // both the cache track and the debug track, after target resolution and
+  // before PC commit. The branch families covered are: B, BL, B.cond (when
+  // the condition passes), TBZ/TBNZ (when the branch is taken), CBZ/CBNZ
+  // (when the branch is taken), BR, BLR, RET, and the PAC variants BRAA,
+  // BRAB, BLRAA, BLRAB, RETAA, RETAB. Not-taken conditional, test, and
+  // compare branches fall through to PC+4 and do NOT invoke the hook.
+  //
+  // The hook returns the address the simulator should commit as PC:
+  //   return target_pc  — identity: continue at the architectural target.
+  //                       With no other side effects in the hook body this
+  //                       is observationally indistinguishable from running
+  //                       with no hook installed.
+  //   return other_pc   — divert: commit a different PC. On the cache
+  //                       track, other_pc must lie inside some registered
+  //                       code range; otherwise the next cache step aborts
+  //                       with the existing "PC not in any registered code
+  //                       range" diagnostic.
+  //   return 0          — terminate the run. The simulator commits PC = 0
+  //                       (the null-LR end-of-simulation sentinel), which
+  //                       trips IsSimulationFinished on the next StepOnce /
+  //                       DebugStepOnce and the enclosing run returns. This
+  //                       is the same termination path the guest uses with
+  //                       a RET to a null LR; no separate "stop" flag.
+  //
+  // Arguments:
+  //   target_pc — the architectural target address. For PAC variants this is
+  //               the authenticated (stripped) address, not the raw signed
+  //               value. For BL-class branches the simulator has already
+  //               written LR to point at the post-branch return address by
+  //               the time the hook runs, so sim.Read(GpRegister::LR) inside
+  //               the hook observes it.
+  //   user_data — the opaque pointer the embedder passed to SetBranchHook.
+  //   sim       — the same Simulator this hook is installed on, exposed so
+  //               the hook body can read/write registers and seat nested
+  //               execution calls (see SetBranchHook for the re-entrancy
+  //               contract).
+  using BranchHook = uintptr_t (*)(uintptr_t target_pc,
+                                   void* user_data,
+                                   Simulator& sim);
+
+  // Install (or atomically replace) the branch hook. Passing nullptr for
+  // `hook` removes it; user_data is then ignored. The same hook applies to
+  // both execution tracks — the embedder does not need to know which track
+  // is in use.
+  //
+  // Threading. SetBranchHook is not thread-safe relative to a concurrent
+  // execution call on the same Simulator. The embedder MUST install or
+  // replace the hook either before any execution call begins on this
+  // Simulator, or after the current execution call has returned. This
+  // matches the existing single-writer threading contract for Simulator.
+  //
+  // Re-entrancy contract. From inside the hook body, the embedder MAY
+  // perform any of the following on the same Simulator:
+  //   - any typed Read(...) overload;
+  //   - any typed Write(...) overload EXCEPT Write(GpRegister::PC, _);
+  //   - seat a nested run or step via RunFrom(entry_pc),
+  //     StepOnce(entry_pc), or DebugStepOnce(entry_pc).
+  // The embedder MUST NOT, from inside the hook body, do either of:
+  //   - call Write(GpRegister::PC, _) followed by bare StepOnce() or
+  //     DebugStepOnce() — the bare PC write mutates the simulator's PC
+  //     outside the re-entrancy guard and corrupts the enclosing run's
+  //     cursor on resume (the same hazard the PC-case note on
+  //     Write(GpRegister, uint64_t) calls out);
+  //   - call WriteAll(_) — same reason: WriteAll is a top-level state
+  //     restore that mutates PC outside the guard.
+  // These are the same rules the existing MemoryWriteObserver follows.
+  void SetBranchHook(BranchHook hook, void* user_data);
+
  private:
   class Impl;
   std::unique_ptr<Impl> impl_;

@@ -9,6 +9,8 @@
 #include <functional>
 #include <memory>
 
+#include "gaby_vm/simulator.h"
+
 // gaby_vm::testing::ShadowRunner — the V1 correctness oracle for the cache.
 //
 // ShadowRunner executes the same guest code twice in lockstep: once on the
@@ -107,6 +109,14 @@ class ShadowRunner {
   // Install a custom divergence handler, replacing the default abort-on-diff
   // behaviour. Passing an empty std::function restores the default.
   void SetDivergenceHandler(DivergenceHandler handler);
+
+  // Install (or replace) the same branch hook on BOTH internal Simulators —
+  // so a lockstep run sees the hook fire identically on the cache and decoder
+  // tracks. The threading and re-entrancy contracts are the ones documented
+  // on Simulator::SetBranchHook; the hook body is called twice per dynamic
+  // branch (once per track), so it must be safe to invoke on either inner
+  // Simulator. Passing nullptr removes the hook from both.
+  void SetBranchHook(Simulator::BranchHook hook, void* user_data);
 
  private:
   class Impl;

@@ -93,6 +93,11 @@ class ShadowRunner::Impl {
     handler_ = std::move(handler);
   }
 
+  void SetBranchHook(Simulator::BranchHook hook, void* user_data) {
+    fast_.SetBranchHook(hook, user_data);
+    ref_.SetBranchHook(hook, user_data);
+  }
+
   void RunFrom(uintptr_t entry_pc) {
     fast_.Write(GpRegister::PC, entry_pc);
     ref_.Write(GpRegister::PC, entry_pc);
@@ -299,6 +304,12 @@ void ShadowRunner::RunFrom(uintptr_t entry_pc) { impl_->RunFrom(entry_pc); }
 
 void ShadowRunner::SetDivergenceHandler(DivergenceHandler handler) {
   impl_->SetDivergenceHandler(std::move(handler));
+}
+
+void ShadowRunner::SetBranchHook(Simulator::BranchHook hook, void* user_data) {
+  // The two inner Simulators each own their own hook pointer; install the
+  // same one on both so a lockstep run sees identical hook firings.
+  impl_->SetBranchHook(hook, user_data);
 }
 
 }  // namespace testing

@@ -3938,7 +3938,9 @@ void Simulator::VisitUnconditionalBranch(const Instruction* instr) {
       GCSPush(reinterpret_cast<uint64_t>(instr->GetNextInstruction()));
       VIXL_FALLTHROUGH();
     case B:
-      WritePc(instr->GetImmPCOffsetTarget());
+      // gaby-vm:
+      //   branch-hook-api: route PC commit through the shared hook helper.
+      GabyHookedWritePc(instr->GetImmPCOffsetTarget());
       break;
     default:
       VIXL_UNREACHABLE();
@@ -3950,7 +3952,9 @@ void Simulator::VisitConditionalBranch(const Instruction* instr) {
   VIXL_ASSERT((form_hash_ == "b_only_condbranch"_h) ||
               (form_hash_ == "bc_only_condbranch"_h));
   if (ConditionPassed(instr->GetConditionBranch())) {
-    WritePc(instr->GetImmPCOffsetTarget());
+    // gaby-vm:
+    //   branch-hook-api: route PC commit through the shared hook helper.
+    GabyHookedWritePc(instr->GetImmPCOffsetTarget());
   }
 }
 
@@ -4079,7 +4083,11 @@ void Simulator::VisitUnconditionalBranchToRegister(const Instruction* instr) {
   }
 
   WriteNextBType(GetBTypeFromInstruction(instr));
-  WritePc(Instruction::Cast(addr));
+  // gaby-vm:
+  //   branch-hook-api: route PC commit through the shared hook helper. The
+  //   hook sees `addr` after PAC authentication, the GCS check, the optional
+  //   WriteLr for the BL-class, and after VIXL's own BranchInterception path.
+  GabyHookedWritePc(Instruction::Cast(addr));
 }
 
 
@@ -4099,7 +4107,9 @@ void Simulator::VisitTestBranch(const Instruction* instr) {
       VIXL_UNIMPLEMENTED();
   }
   if (take_branch) {
-    WritePc(instr->GetImmPCOffsetTarget());
+    // gaby-vm:
+    //   branch-hook-api: route PC commit through the shared hook helper.
+    GabyHookedWritePc(instr->GetImmPCOffsetTarget());
   }
 }
 
@@ -4124,7 +4134,9 @@ void Simulator::VisitCompareBranch(const Instruction* instr) {
       VIXL_UNIMPLEMENTED();
   }
   if (take_branch) {
-    WritePc(instr->GetImmPCOffsetTarget());
+    // gaby-vm:
+    //   branch-hook-api: route PC commit through the shared hook helper.
+    GabyHookedWritePc(instr->GetImmPCOffsetTarget());
   }
 }
 

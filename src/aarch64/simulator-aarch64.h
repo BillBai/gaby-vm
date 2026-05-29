@@ -55,6 +55,15 @@
 // 详见 docs/refs/gaby-vm-predecode-cache-design.md §4.2、§6.1、§6.3。
 #include "gaby_vm/predecode_cache.h"
 
+// gaby-vm:
+//   branch-hook-api: branch-leaf 调 hook 时需要 gaby_vm::Simulator::BranchHook
+//   typedef、BranchAction 返回类型、以及把 outer sim 回传给 hook 用的
+//   gaby_vm::Simulator&。gaby_vm/simulator.h 是 public API 头、不含任何 vixl::
+//   符号、也不 include 任何 imported VIXL 头，所以反向 include 是安全的（跟
+//   上面 gaby_vm/predecode_cache.h 同模式）。
+//   详见 openspec/changes/branch-hook-api/design.md §D7。
+#include "gaby_vm/simulator.h"
+
 // These are only used for the ABI feature, and depend on checks performed for
 // it.
 #ifdef VIXL_HAS_ABI_SUPPORT
@@ -1613,6 +1622,46 @@ class Simulator : public DecoderVisitor {
     if (IsSimulationFinished()) return false;
     ExecuteInstruction();
     return true;
+  }
+  // gaby-vm END
+
+  // gaby-vm BEGIN:
+  //   branch-hook-api: 分支 hook 的安装点和 shared invocation helper。
+  //   SetGabyBranchHook / SetGabyOuterSim 是 gaby_vm 侧的 forwarder 目标。
+  //   GabyHookedWritePc 是 5 个分支 leaf 共享的「替代 WritePc」入口——把
+  //   null-check 和 hook 调用集中在唯一一处定义，每个 leaf 只剩一行 redirect。
+  //   hook 返回 0 时落到上游的 kEndOfSimAddress 终止路径（WritePc(0) → 下一
+  //   次 StepOnce 看 IsSimulationFinished() 直接 return false），所以不需要
+  //   单独的 stop flag。inline 在 header 里是为了让编译器把 nullptr 分支折
+  //   掉，不依赖 LTO。详见 design.md §D2、§D7。
+  void SetGabyBranchHook(gaby_vm::Simulator::BranchHook hook, void* data) {
+    // 安装非空 hook 之前必须先 SetGabyOuterSim——GabyHookedWritePc 会
+    // deref gaby_outer_sim_ 把 gaby_vm::Simulator& 传给 hook。gaby_vm::
+    // Simulator 的构造函数体里会先调 SetGabyOuterSim 再让用户碰
+    // SetBranchHook，所以公开 API 这条路天然满足；这条 assert 只是给
+    // privileged build 里直接构造裸 vixl::aarch64::Simulator、又跳过
+    // gaby_vm 接线、再装 hook 的那种用法兜底。
+    VIXL_ASSERT((hook == nullptr) || (gaby_outer_sim_ != nullptr));
+    gaby_branch_hook_ = hook;
+    gaby_branch_hook_data_ = data;
+  }
+  void SetGabyOuterSim(gaby_vm::Simulator* outer_sim) {
+    gaby_outer_sim_ = outer_sim;
+  }
+
+  void GabyHookedWritePc(const Instruction* target) {
+    if (gaby_branch_hook_ == nullptr) {
+      WritePc(target);
+      return;
+    }
+    // 由 SetGabyBranchHook 的安装时断言保证；这里再断一次是深防御，
+    // 万一未来加了别的 hook 入口忘了同步约束也能在 debug 抓出。
+    VIXL_ASSERT(gaby_outer_sim_ != nullptr);
+    const uintptr_t next_pc =
+        gaby_branch_hook_(reinterpret_cast<uintptr_t>(target),
+                          gaby_branch_hook_data_,
+                          *gaby_outer_sim_);
+    WritePc(reinterpret_cast<const Instruction*>(next_pc));
   }
   // gaby-vm END
 
@@ -5655,6 +5704,24 @@ class Simulator : public DecoderVisitor {
   MemoryWriteSink* write_sink_ = nullptr;
   gaby_vm::PredecodeCache* cache_ = nullptr;
   const gaby_vm::PredecodeCache::CodeRange* cur_range_ = nullptr;
+  // gaby-vm END
+
+  // gaby-vm BEGIN:
+  //   branch-hook-api: per-Simulator branch-hook 状态。放在 pc_ /
+  //   pc_modified_ / last_instr_ / cur_range_ 旁边，让 hook 指针跟解释器热
+  //   字段共享一条 cache line —— 每次 taken 分支在 GabyHookedWritePc 里都要
+  //   读一次 gaby_branch_hook_。
+  //     gaby_branch_hook_       —— 已安装的 hook 函数指针；nullptr 表示未安
+  //                                装，分支按上游语义走（直接调 WritePc）。
+  //     gaby_branch_hook_data_  —— hook 的 opaque user_data，原样回传。
+  //     gaby_outer_sim_         —— gaby_vm::Simulator 回指针，hook 签名里要
+  //                                Simulator& 形参，gaby_vm 侧构造时 set 一
+  //                                次、整个生命周期不变。
+  //   hook 返回 0 时通过 WritePc(0) 落到上游的 kEndOfSimAddress 终止路径，所
+  //   以不需要单独的 stop flag。详见 design.md §D2、§D7。
+  gaby_vm::Simulator::BranchHook gaby_branch_hook_ = nullptr;
+  void* gaby_branch_hook_data_ = nullptr;
+  gaby_vm::Simulator* gaby_outer_sim_ = nullptr;
   // gaby-vm END
 
   static const char* xreg_names[];
