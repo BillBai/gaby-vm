@@ -20,6 +20,10 @@ Makefile
 install_manifest.txt
 compile_commands.json
 
+# CTest run artifact: created in the working directory when `ctest` is invoked
+# from outside the build tree (it writes `Testing/Temporary/LastTest.log`).
+Testing/
+
 # Ninja
 .ninja_deps
 .ninja_log
