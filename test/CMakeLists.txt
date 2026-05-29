@@ -117,3 +117,21 @@ target_link_libraries(simulator_constructor_stack_test PRIVATE gaby_vm::gaby_vm)
 gaby_vm_apply_compile_flags(simulator_constructor_stack_test)
 
 add_test(NAME simulator_constructor_stack COMMAND simulator_constructor_stack_test)
+
+# Branch-hook dispatch: per-branch-family firing, BranchAction semantics
+# (identity / divert / stop), dual-track equivalence. Public-API only — no
+# privileged build pattern. See openspec/changes/branch-hook-api/.
+add_executable(branch_hook_dispatch_test branch_hook_dispatch_test.cc)
+target_link_libraries(branch_hook_dispatch_test PRIVATE gaby_vm::gaby_vm)
+gaby_vm_apply_compile_flags(branch_hook_dispatch_test)
+
+add_test(NAME branch_hook_dispatch COMMAND branch_hook_dispatch_test)
+
+# Branch-hook re-entrancy: hook reads/writes registers and seats a nested
+# RunFrom on the same Simulator without corrupting the enclosing run's
+# cursor. Public-API only. See openspec/changes/branch-hook-api/.
+add_executable(branch_hook_reentrancy_test branch_hook_reentrancy_test.cc)
+target_link_libraries(branch_hook_reentrancy_test PRIVATE gaby_vm::gaby_vm)
+gaby_vm_apply_compile_flags(branch_hook_reentrancy_test)
+
+add_test(NAME branch_hook_reentrancy COMMAND branch_hook_reentrancy_test)

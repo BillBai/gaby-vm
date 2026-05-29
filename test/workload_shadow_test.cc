@@ -19,6 +19,7 @@
 
 #include "gaby_vm/predecode_cache.h"
 #include "gaby_vm/shadow_runner.h"
+#include "gaby_vm/simulator.h"
 #include "workloads/mixed_workload_data.h"
 #include "workloads/smoke_workload_data.h"
 
@@ -36,11 +37,25 @@ void check(bool ok, const char* label) {
   }
 }
 
+// Identity branch hook used by the identity-hook workload pass. Returns the
+// architectural target unchanged so the run is observationally identical to
+// one with no hook installed (branch-hook-api specs/aarch64-simulator:
+// "Identity hook is observationally invisible").
+uintptr_t identity_hook(uintptr_t target_pc,
+                        void* /*user_data*/,
+                        gaby_vm::Simulator& /*sim*/) {
+  return target_pc;
+}
+
 // Register `code` in a fresh cache, then run the cache and decoder tracks in
 // lockstep over it. Returns true iff the run completes with no divergence.
+// `install_identity_hook` mirrors the same identity branch hook onto both
+// inner Simulators (branch-hook-api): the hook must not introduce any
+// divergence relative to the no-hook baseline.
 bool shadow_workload(const char* name,
                      const uint32_t* code,
-                     size_t word_count) {
+                     size_t word_count,
+                     bool install_identity_hook = false) {
   gaby_vm::PredecodeCache cache;
   const gaby_vm::PredecodeCache::RegistrationStatus status =
       cache.RegisterCodeRange(code, word_count * sizeof(uint32_t));
@@ -57,6 +72,10 @@ bool shadow_workload(const char* name,
   // A generous heap-resident guest stack, shared by both tracks.
   std::vector<uint8_t> stack(1024 * 1024);
   gaby_vm::testing::ShadowRunner shadow(&cache, stack.data(), stack.size());
+
+  if (install_identity_hook) {
+    shadow.SetBranchHook(identity_hook, nullptr);
+  }
 
   int divergences = 0;
   gaby_vm::testing::DivergenceReport first{};
@@ -108,6 +127,23 @@ int main() {
                         gaby_vm_bench::kMixedWorkloadInstructions,
                         gaby_vm_bench::kMixedWorkloadStaticWordCount),
         "mixed workload runs diverge-free under ShadowRunner");
+
+  // Second pass: same workloads, with an identity branch hook installed on
+  // both tracks. The hook returns BranchAction{ target_pc, false } unchanged,
+  // so the run MUST be observationally indistinguishable from the no-hook
+  // pass above. Pins down the spec's "Identity hook is observationally
+  // invisible" scenario.
+  check(shadow_workload("smoke (identity hook)",
+                        gaby_vm_bench::kSmokeWorkloadInstructions,
+                        gaby_vm_bench::kSmokeWorkloadStaticWordCount,
+                        /*install_identity_hook=*/true),
+        "smoke workload diverge-free with identity branch hook installed");
+
+  check(shadow_workload("mixed (identity hook)",
+                        gaby_vm_bench::kMixedWorkloadInstructions,
+                        gaby_vm_bench::kMixedWorkloadStaticWordCount,
+                        /*install_identity_hook=*/true),
+        "mixed workload diverge-free with identity branch hook installed");
 
   std::printf("workload_shadow: %d/%d workloads diverge-free\n",
               g_passed,
