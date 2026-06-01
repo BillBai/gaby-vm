@@ -79,6 +79,16 @@ xcuserdata/
 DerivedData/
 
 # ----------------------------------------------------------------------------
+# Swift Package Manager
+# ----------------------------------------------------------------------------
+# Transient SPM artifacts. `.build/` is the build/output dir; `.swiftpm/` holds
+# per-user package state; `Package.resolved` pins dependency versions and is
+# intentionally not tracked for a library package (consumers resolve their own).
+.build/
+.swiftpm/
+Package.resolved
+
+# ----------------------------------------------------------------------------
 # IDE / editor
 # ----------------------------------------------------------------------------
 # .vscode/ is ignored by default to keep per-user editor state out of the

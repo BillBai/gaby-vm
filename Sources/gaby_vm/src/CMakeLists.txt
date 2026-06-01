@@ -1,11 +1,9 @@
-# Generate version.cc from the template so PROJECT_VERSION is the single
-# source of truth at build time.
-configure_file(version.cc.in ${CMAKE_CURRENT_BINARY_DIR}/version.cc @ONLY)
-
 add_library(gaby_vm STATIC)
 add_library(gaby_vm::gaby_vm ALIAS gaby_vm)
 
-target_sources(gaby_vm PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/version.cc)
+# version() is header-only (inline in include/gaby_vm/version.h), so the
+# version string is the single source of truth and there is no generated
+# translation unit. See openspec change `swiftpm-package`, design Decision 3.
 
 # Imported VIXL-derived sources. Populated as files land in src/ and
 # src/aarch64/ during the import (paths are relative to this CMakeLists.txt).
@@ -60,8 +58,8 @@ set(GABY_VM_SOURCES
 target_sources(gaby_vm PRIVATE ${GABY_VM_SOURCES})
 
 target_include_directories(gaby_vm
-  PUBLIC  $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>
-  PRIVATE ${PROJECT_SOURCE_DIR}/src)
+  PUBLIC  $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/Sources/gaby_vm/include>
+  PRIVATE ${PROJECT_SOURCE_DIR}/Sources/gaby_vm/src)
 
 # VIXL build defines, scoped PRIVATE so they do not leak to consumers via
 # INTERFACE propagation. VIXL_DEBUG follows CMAKE_BUILD_TYPE. Out-of-scope

@@ -6,12 +6,12 @@ add_test(NAME smoke COMMAND gaby_vm_smoke)
 
 # Simulator smoke: constructs a vixl::aarch64::Simulator and runs a single
 # NOP through the imported decode → visit → leaf path. PRIVATE include access
-# to ${PROJECT_SOURCE_DIR}/src lets the test reach VIXL headers directly,
+# to ${PROJECT_SOURCE_DIR}/Sources/gaby_vm/src lets the test reach VIXL headers directly,
 # without exposing them in include/gaby_vm/ (see specs/aarch64-simulator/spec.md
 # requirement R11 and design.md decision D6).
 add_executable(simulator_smoke simulator_smoke.cc)
 target_link_libraries(simulator_smoke PRIVATE gaby_vm::gaby_vm)
-target_include_directories(simulator_smoke PRIVATE ${PROJECT_SOURCE_DIR}/src)
+target_include_directories(simulator_smoke PRIVATE ${PROJECT_SOURCE_DIR}/Sources/gaby_vm/src)
 # The same VIXL build defines that gate the simulator code in gaby_vm must
 # also gate the test's view of the imported headers (e.g. simulator-aarch64.h
 # is wrapped in #ifdef VIXL_INCLUDE_SIMULATOR_AARCH64). PRIVATE here keeps the
@@ -36,7 +36,7 @@ add_executable(instructions_aarch64_constexpr_smoke_test
 target_link_libraries(instructions_aarch64_constexpr_smoke_test
   PRIVATE gaby_vm::gaby_vm)
 target_include_directories(instructions_aarch64_constexpr_smoke_test
-  PRIVATE ${PROJECT_SOURCE_DIR}/src)
+  PRIVATE ${PROJECT_SOURCE_DIR}/Sources/gaby_vm/src)
 target_compile_definitions(instructions_aarch64_constexpr_smoke_test PRIVATE
   VIXL_INCLUDE_TARGET_A64
   VIXL_INCLUDE_SIMULATOR_AARCH64

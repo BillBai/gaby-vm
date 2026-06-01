@@ -4,10 +4,10 @@
 
 Source is formatted by `clang-format`. The repository-root
 [`../.clang-format`](../.clang-format) holds the project style; two subtree
-configs refine it — `src/.clang-format` disables formatting for imported VIXL
-sources (their byte-identity with upstream is a spec invariant), and
-`src/gaby_vm/.clang-format` re-enables the project style for project-authored
-code under `src/`.
+configs refine it — `Sources/gaby_vm/src/.clang-format` disables formatting
+for imported VIXL sources (their byte-identity with upstream is a spec
+invariant), and `Sources/gaby_vm/src/gaby_vm/.clang-format` re-enables the
+project style for project-authored code under `Sources/gaby_vm/src/`.
 
 - Base style: Google.
 - `MaxEmptyLinesToKeep: 2` — two blank lines between functions in `.cc`
@@ -28,8 +28,8 @@ with a nearby comment explaining why.
 
 ## Braces on control-flow statements
 
-In project-authored code — everything under `src/gaby_vm/`,
-`include/gaby_vm/`, and `test/` — every `if`, `else`, `for`, `while`, and
+In project-authored code — everything under `Sources/gaby_vm/src/gaby_vm/`,
+`Sources/gaby_vm/include/gaby_vm/`, and `test/` — every `if`, `else`, `for`, `while`, and
 `do`-`while` body is wrapped in braces and put on its own line. No single-line
 bodies, even for a one-statement `if`:
 
@@ -51,7 +51,8 @@ if (done) return;
 first pass rather than a guarantee — review still catches what the formatter
 misses.
 
-Imported VIXL files are exempt. They resolve to `src/.clang-format`
+Imported VIXL files are exempt. They resolve to
+`Sources/gaby_vm/src/.clang-format`
 (`DisableFormat: true`) so they stay byte-identical to upstream, and
 project-authored code that lives inside a marker region in an imported file
 follows that host file's upstream style. The rule is scoped by directory, not
@@ -63,8 +64,8 @@ by authorship.
 - Imported VIXL code keeps the `vixl` and `vixl::aarch64` namespaces — there
   is no rename. See [`architecture.md`](architecture.md).
 - Header guards for project headers: `GABY_VM_<RELATIVE_PATH>_H_`, matching
-  the file's path under `include/` or `src/`. Imported VIXL headers keep
-  their upstream `VIXL_*_H` guards verbatim.
+  the file's path under `Sources/gaby_vm/include/` or `Sources/gaby_vm/src/`.
+  Imported VIXL headers keep their upstream `VIXL_*_H` guards verbatim.
 
 ## License headers
 
@@ -116,8 +117,8 @@ Rules:
   reason.
 - When removing upstream code, leave the deletion commented out inside the
   `BEGIN/END` block so the removal is reviewable.
-- `git grep -nE 'gaby-vm( BEGIN| END|:)' src/` enumerates every drifted
-  location — keep that true by not writing the literal `gaby-vm:`,
+- `git grep -nE 'gaby-vm( BEGIN| END|:)' Sources/gaby_vm/src/` enumerates
+  every drifted location — keep that true by not writing the literal `gaby-vm:`,
   `gaby-vm BEGIN`, or `gaby-vm END` inside reason prose.
 
 Putting the token on its own line (rather than trailing the reason after it)
@@ -126,8 +127,9 @@ with no alignment block to reflow.
 
 ## Public API hygiene
 
-Headers under [`../include/gaby_vm/`](../include/gaby_vm/) are designed to be
-free of imported VIXL types — they don't include imported VIXL headers or
+Headers under
+[`../Sources/gaby_vm/include/gaby_vm/`](../Sources/gaby_vm/include/gaby_vm/) are
+designed to be free of imported VIXL types — they don't include imported VIXL headers or
 reference `vixl::*` symbols (including in forward declarations), so the
 public surface stays VIXL-free. When a public type needs to expose simulator
 state, a `gaby_vm`-namespaced wrapper is the usual approach.

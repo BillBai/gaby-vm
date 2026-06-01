@@ -2,7 +2,12 @@
 
 > Concrete file list for importing the VIXL AArch64 simulator into
 > Gaby-VM, organized by tier (must-have / recommended / deferrable /
-> out). Citations are paths inside `../vixl/`.
+> out). Citations are paths inside `../vixl/` (e.g. `src/aarch64/…`).
+> The imported subset (Tiers 1–3) now lives in this repository under
+> `Sources/gaby_vm/src/…`, mirroring that same relative structure — so a
+> `src/aarch64/foo.cc` citation below resolves to
+> `Sources/gaby_vm/src/aarch64/foo.cc` here. Tier 0 files are cited for
+> reference only and are not imported.
 >
 > This is a **reference map**, not a task list. The actual import
 > change will use these tiers to scope its file list, dependencies,

@@ -67,15 +67,17 @@ bounded subset is imported into this repository.
   imported, since the project doesn't currently need those subsystems. If a
   later capability needs something out of Tier 0, the extraction map gets
   updated alongside the import.
-- **Layout** mirrors upstream byte-for-byte under `src/`: shared root files
-  (e.g. `utils-vixl.h`, `cpu-features.h`) at `src/`; AArch64-specific files
-  at `src/aarch64/`. There's no `third_party/vixl/` tree.
+- **Layout** mirrors upstream byte-for-byte under `Sources/gaby_vm/src/`:
+  shared root files (e.g. `utils-vixl.h`, `cpu-features.h`) at
+  `Sources/gaby_vm/src/`; AArch64-specific files at
+  `Sources/gaby_vm/src/aarch64/`. There's no `third_party/vixl/` tree.
 - **Marker convention** is how we record drift from upstream content. The
   marker token sits alone on its line; the reason follows on the next
   ordinary `//` comment lines. There are two forms: a single-line
   `// gaby-vm:` marker immediately above the changed line, or a multi-line
   `// gaby-vm BEGIN:` … `// gaby-vm END` block. The token `gaby-vm` is
-  lowercase; the goal is that `git grep -nE 'gaby-vm( BEGIN| END|:)' src/`
+  lowercase; the goal is that
+  `git grep -nE 'gaby-vm( BEGIN| END|:)' Sources/gaby_vm/src/`
   enumerates every drift, so reviewers can audit modifications cheaply.
   Detailed scenarios are in
   [`../openspec/specs/aarch64-simulator/spec.md`](../openspec/specs/aarch64-simulator/spec.md).
@@ -102,13 +104,15 @@ bounded subset is imported into this repository.
 
 ## Public API surface
 
-Public headers live under [`../include/gaby_vm/`](../include/gaby_vm/) and
+Public headers live under
+[`../Sources/gaby_vm/include/gaby_vm/`](../Sources/gaby_vm/include/gaby_vm/) and
 own the `gaby_vm::` namespace. They are designed not to expose imported VIXL
 types — they don't include imported VIXL headers and don't reference
 `vixl::*` symbols, so embedders see only the `gaby_vm::` surface.
 
 Imported VIXL headers are reached from inside the `gaby_vm` static library
 and from privileged in-tree test targets, via a `PRIVATE` include of
-`${PROJECT_SOURCE_DIR}/src` plus the same `VIXL_*` compile defines that gate
+`${PROJECT_SOURCE_DIR}/Sources/gaby_vm/src` plus the same `VIXL_*` compile
+defines that gate
 the imported sources. Consumers linking against `gaby_vm::gaby_vm` don't
 inherit those defines or include paths.

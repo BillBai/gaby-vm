@@ -1,6 +1,6 @@
-# clang-format policy for everything under src/.
+# clang-format policy for everything under Sources/gaby_vm/src/.
 #
-# src/aarch64/ (and the shared-root imports) hold VIXL-derived sources whose
+# Sources/gaby_vm/src/aarch64/ (and the shared-root imports) hold VIXL-derived sources whose
 # byte-identity against upstream is a spec invariant (see
 # specs/aarch64-simulator/spec.md and design.md decision D5). `DisableFormat:
 # true` keeps clang-format from touching them — even small formatter-version
@@ -10,11 +10,11 @@
 # `BasedOnStyle: InheritParentConfig` makes this config build on the root
 # `.clang-format` instead of the LLVM default. For imported sources that is
 # inert — `DisableFormat: true` means the base style is never applied. It
-# matters for src/gaby_vm/: that directory holds project-authored code and has
-# its own `.clang-format` that re-enables formatting. `InheritParentConfig`
-# only climbs past this file to the root Google config when this file opts in
-# too; without this line, code under src/gaby_vm/ would be formatted
-# LLVM-style instead of matching the rest of the project.
+# matters for Sources/gaby_vm/src/gaby_vm/: that directory holds project-authored
+# code and has its own `.clang-format` that re-enables formatting.
+# `InheritParentConfig` only climbs past this file to the root Google config when
+# this file opts in too; without this line, code under Sources/gaby_vm/src/gaby_vm/
+# would be formatted LLVM-style instead of matching the rest of the project.
 
 BasedOnStyle: InheritParentConfig
 DisableFormat: true

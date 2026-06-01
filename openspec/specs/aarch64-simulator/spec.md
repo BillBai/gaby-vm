@@ -3,7 +3,7 @@
 ## Purpose
 Execute AArch64 user-mode (EL0) instructions on a software interpreter derived
 from the VIXL simulator. This capability owns the imported simulator code
-(located in `src/` and `src/aarch64/`), the build-time boundary between project
+(located in `Sources/gaby_vm/src/` and `Sources/gaby_vm/src/aarch64/`), the build-time boundary between project
 warning policy and imported-source warning policy, the marker convention for
 auditable deviations from upstream, and the test contract that proves the
 interpreter can decode and execute instructions end-to-end. It is the
@@ -15,28 +15,28 @@ embedding API, and any platform-portability work — will refine and extend.
 The repository SHALL contain VIXL source files only from Tiers 1, 2, and 3 of `docs/refs/vixl-extraction-map.md`. Tier 0 files (assembler, macro-assembler, code-buffer, pool-manager, AArch32, build tooling, and the helpers listed under "Tier 0 — out of scope") SHALL NOT be present in the imported tree.
 
 #### Scenario: Tier 1 file is present at the expected path
-- **WHEN** an entry from Tier 1 of the extraction map is checked (e.g., `src/aarch64/simulator-aarch64.cc`, `src/utils-vixl.h`)
-- **THEN** the file exists in the repository at the corresponding path under `src/`
+- **WHEN** an entry from Tier 1 of the extraction map is checked (e.g., `Sources/gaby_vm/src/aarch64/simulator-aarch64.cc`, `Sources/gaby_vm/src/utils-vixl.h`)
+- **THEN** the file exists in the repository at the corresponding path under `Sources/gaby_vm/src/`
 
 #### Scenario: Tier 0 file is absent from the repository
 - **WHEN** an entry from Tier 0 of the extraction map is checked (e.g., `assembler-aarch64.cc`, anything under `aarch32/`, `code-buffer-vixl.cc`, `pool-manager.h`)
-- **THEN** no file with that name exists anywhere under `src/`
+- **THEN** no file with that name exists anywhere under `Sources/gaby_vm/src/`
 
 #### Scenario: AArch32 directory is not present
-- **WHEN** the path `src/aarch32/` is checked
+- **WHEN** the path `Sources/gaby_vm/src/aarch32/` is checked
 - **THEN** the directory does not exist
 
 ### Requirement: Imported file layout mirrors upstream `src/` layout exactly
 
-Imported VIXL files SHALL be placed at paths that mirror their upstream location relative to `../vixl/src/`. Shared root files (e.g., `utils-vixl.h`, `globals-vixl.h`, `cpu-features.h`) live directly under `src/`. AArch64-specific files live under `src/aarch64/`. No additional directory levels (such as `src/vixl/`, `third_party/vixl/`, or `src/sim/`) SHALL be introduced for imported files.
+Imported VIXL files SHALL be placed at paths that mirror their upstream location relative to `../vixl/src/`. Shared root files (e.g., `utils-vixl.h`, `globals-vixl.h`, `cpu-features.h`) live directly under `Sources/gaby_vm/src/`. AArch64-specific files live under `Sources/gaby_vm/src/aarch64/`. No additional directory levels (such as `Sources/gaby_vm/src/vixl/`, `third_party/vixl/`, or `Sources/gaby_vm/src/sim/`) SHALL be introduced for imported files.
 
 #### Scenario: Shared root file is at the upstream-relative path
 - **WHEN** the imported path of `utils-vixl.h` is compared with `../vixl/src/utils-vixl.h`
-- **THEN** the imported path is `src/utils-vixl.h` (same relative path under `src/`)
+- **THEN** the imported path is `Sources/gaby_vm/src/utils-vixl.h` (same relative path under `Sources/gaby_vm/src/`)
 
 #### Scenario: AArch64 file is at the upstream-relative path
 - **WHEN** the imported path of `simulator-aarch64.cc` is compared with `../vixl/src/aarch64/simulator-aarch64.cc`
-- **THEN** the imported path is `src/aarch64/simulator-aarch64.cc` (same relative path under `src/`)
+- **THEN** the imported path is `Sources/gaby_vm/src/aarch64/simulator-aarch64.cc` (same relative path under `Sources/gaby_vm/src/`)
 
 #### Scenario: No `third_party/vixl/` tree exists for imported files
 - **WHEN** the path `third_party/vixl/` is checked
@@ -61,7 +61,7 @@ Any deviation from upstream content inside an imported file SHALL be bracketed b
 - Single-line edit: a `// gaby-vm:` token line, followed by one or more ordinary `//` reason lines, placed immediately above the single modified line.
 - Multi-line edit (including deletions): a `// gaby-vm BEGIN:` token line followed by one or more ordinary `//` reason lines above the changed region, and a `// gaby-vm END` line below it. Removed code is left commented out within the block so the deletion is reviewable.
 
-The marker token `gaby-vm` SHALL be lowercase. A token line SHALL carry no reason text after the token. A `// gaby-vm:` or `// gaby-vm BEGIN:` marker SHALL have at least one reason line. Reason lines SHALL NOT contain the literal sequences `gaby-vm:`, `gaby-vm BEGIN`, or `gaby-vm END`, so that they are not picked up by the enumeration grep. The command `git grep -nE 'gaby-vm( BEGIN| END|:)' src/` SHALL enumerate every modified location.
+The marker token `gaby-vm` SHALL be lowercase. A token line SHALL carry no reason text after the token. A `// gaby-vm:` or `// gaby-vm BEGIN:` marker SHALL have at least one reason line. Reason lines SHALL NOT contain the literal sequences `gaby-vm:`, `gaby-vm BEGIN`, or `gaby-vm END`, so that they are not picked up by the enumeration grep. The command `git grep -nE 'gaby-vm( BEGIN| END|:)' Sources/gaby_vm/src/` SHALL enumerate every modified location.
 
 #### Scenario: Single-line edit is preceded by a single-line marker
 - **WHEN** a single line of an imported file differs from upstream
@@ -76,7 +76,7 @@ The marker token `gaby-vm` SHALL be lowercase. A token line SHALL carry no reaso
 - **THEN** the line contains only the marker token plus leading indentation, with the reason text (if any) on the following ordinary `//` lines
 
 #### Scenario: Marker grep enumerates every drifted location
-- **WHEN** running `git grep -nE 'gaby-vm( BEGIN| END|:)' src/`
+- **WHEN** running `git grep -nE 'gaby-vm( BEGIN| END|:)' Sources/gaby_vm/src/`
 - **THEN** the output includes at least one match for every region that differs from upstream, and ordinary `//` reason lines (which carry no marker token) are not matched
 
 ### Requirement: Imported simulator code is preserved structurally
@@ -111,12 +111,12 @@ Specifically:
 
 #### Scenario: Imported `Simulator` class declaration matches upstream
 
-- **WHEN** `src/aarch64/simulator-aarch64.h`'s `Simulator` class declaration is compared with upstream
+- **WHEN** `Sources/gaby_vm/src/aarch64/simulator-aarch64.h`'s `Simulator` class declaration is compared with upstream
 - **THEN** the public, protected, and private member variables and method signatures match (additions are permitted only inside marker-commented regions; removals are not permitted)
 
 #### Scenario: `vixl::aarch64` namespace is unchanged
 
-- **WHEN** `git grep -n 'namespace vixl' src/` is run
+- **WHEN** `git grep -n 'namespace vixl' Sources/gaby_vm/src/` is run
 - **THEN** the imported files declare and use the `vixl` and `vixl::aarch64` namespaces (no renames to `gaby_vm` or other namespace introduced)
 
 #### Scenario: Imported dispatch flow remains reachable
@@ -218,14 +218,14 @@ The pre-existing `gaby_vm_smoke` test SHALL continue to pass after this change w
 
 ### Requirement: Public header surface does not expose VIXL types
 
-Files under `include/gaby_vm/` SHALL NOT include any imported VIXL header (e.g., `aarch64/simulator-aarch64.h`, `utils-vixl.h`) and SHALL NOT reference any `vixl::*` symbol in declarations. Imported simulator types SHALL be reachable only via PRIVATE include access granted to internal targets (such as `simulator_smoke`).
+Files under `Sources/gaby_vm/include/gaby_vm/` SHALL NOT include any imported VIXL header (e.g., `aarch64/simulator-aarch64.h`, `utils-vixl.h`) and SHALL NOT reference any `vixl::*` symbol in declarations. Imported simulator types SHALL be reachable only via PRIVATE include access granted to internal targets (such as `simulator_smoke`).
 
 #### Scenario: No public header includes a VIXL header
-- **WHEN** `git grep -n '#include' include/gaby_vm/` is run
+- **WHEN** `git grep -n '#include' Sources/gaby_vm/include/gaby_vm/` is run
 - **THEN** no result references an imported VIXL header path
 
 #### Scenario: No public header references the `vixl` namespace
-- **WHEN** `git grep -n 'vixl::' include/gaby_vm/` is run
+- **WHEN** `git grep -n 'vixl::' Sources/gaby_vm/include/gaby_vm/` is run
 - **THEN** the output is empty
 
 #### Scenario: Smoke test reaches imported headers via PRIVATE include
@@ -234,7 +234,7 @@ Files under `include/gaby_vm/` SHALL NOT include any imported VIXL header (e.g.,
 
 ### Requirement: Public register-identifier header is provided
 
-The repository SHALL contain a public header `include/gaby_vm/registers.h`
+The repository SHALL contain a public header `Sources/gaby_vm/include/gaby_vm/registers.h`
 declaring the strongly-typed register identifiers and FFI-stable register-data
 types used by the `gaby_vm::Simulator` typed register-I/O surface. In the
 `gaby_vm` namespace the header SHALL declare:
@@ -264,12 +264,12 @@ compile.
 
 #### Scenario: Header exists at the public-API path
 
-- **WHEN** the path `include/gaby_vm/registers.h` is checked
+- **WHEN** the path `Sources/gaby_vm/include/gaby_vm/registers.h` is checked
 - **THEN** the file exists
 
 #### Scenario: Enums declare a `uint8_t` underlying type
 
-- **WHEN** `include/gaby_vm/registers.h` is parsed for the declarations of
+- **WHEN** `Sources/gaby_vm/include/gaby_vm/registers.h` is parsed for the declarations of
   `GpRegister`, `VRegister`, and `SysRegister`
 - **THEN** each declaration has the form `enum class <name> : uint8_t`
 
@@ -282,7 +282,7 @@ compile.
 
 #### Scenario: No VIXL include or symbol leaks into `registers.h`
 
-- **WHEN** `git grep -nE 'vixl|aarch64/' include/gaby_vm/registers.h` is run
+- **WHEN** `git grep -nE 'vixl|aarch64/' Sources/gaby_vm/include/gaby_vm/registers.h` is run
 - **THEN** the output is empty
 
 #### Scenario: Header is self-contained
@@ -294,7 +294,7 @@ compile.
 ### Requirement: Simulator exposes typed register Read/Write accessors
 
 `gaby_vm::Simulator` SHALL expose the following member functions in
-`include/gaby_vm/simulator.h`. The Read overloads SHALL be `const`-qualified:
+`Sources/gaby_vm/include/gaby_vm/simulator.h`. The Read overloads SHALL be `const`-qualified:
 
 - `void Write(GpRegister reg, uint64_t value);` and
   `uint64_t Read(GpRegister reg) const;`
@@ -358,7 +358,7 @@ the PC case and SHALL name the three re-entrant alternatives.
 #### Scenario: PC docstring documents the nested-step hazard
 
 - **WHEN** the docstring attached to `Simulator::Write(GpRegister, uint64_t)`
-  in `include/gaby_vm/simulator.h` is read
+  in `Sources/gaby_vm/include/gaby_vm/simulator.h` is read
 - **THEN** it states that the `GpRegister::PC` case MUST NOT be used to seat
   a nested step from inside a leaf, and names `RunFrom`,
   `StepOnce(entry_pc)`, and `DebugStepOnce(entry_pc)` as the re-entrant
@@ -366,7 +366,7 @@ the PC case and SHALL name the three re-entrant alternatives.
 
 ### Requirement: Existing unsigned-coded register accessors are removed
 
-`gaby_vm::Simulator`'s public surface in `include/gaby_vm/simulator.h` SHALL
+`gaby_vm::Simulator`'s public surface in `Sources/gaby_vm/include/gaby_vm/simulator.h` SHALL
 NOT declare any of:
 
 - `WriteXRegister(unsigned, uint64_t)` or `ReadXRegister(unsigned) const`,
@@ -376,12 +376,12 @@ NOT declare any of:
 
 These entry points SHALL be wholly absent — they MAY NOT be retained as
 deprecated forwarders. Internal call sites in the project (under `test/`,
-`src/gaby_vm/`, and any in-tree benchmark target) SHALL be migrated to the
+`Sources/gaby_vm/src/gaby_vm/`, and any in-tree benchmark target) SHALL be migrated to the
 typed surface; the build SHALL NOT compile if any caller still names them.
 
 #### Scenario: Removed accessor names are absent from the public header
 
-- **WHEN** `git grep -nE '\b(WriteXRegister|ReadXRegister|WriteSp|ReadSp|WritePc|ReadPc|ReadVRegister)\b' include/gaby_vm/simulator.h` is run
+- **WHEN** `git grep -nE '\b(WriteXRegister|ReadXRegister|WriteSp|ReadSp|WritePc|ReadPc|ReadVRegister)\b' Sources/gaby_vm/include/gaby_vm/simulator.h` is run
 - **THEN** the output is empty
 
 #### Scenario: Project compiles with the removed accessors absent
@@ -393,7 +393,7 @@ typed surface; the build SHALL NOT compile if any caller still names them.
 
 ### Requirement: `RegisterFile` is a POD with frozen layout
 
-`include/gaby_vm/registers.h` SHALL declare `struct RegisterFile` with this
+`Sources/gaby_vm/include/gaby_vm/registers.h` SHALL declare `struct RegisterFile` with this
 exact field order and exact field types:
 
 | order | field   | type                  |
@@ -416,13 +416,13 @@ independent of host pointer width.
 #### Scenario: Field order matches the spec
 
 - **WHEN** the declaration of `gaby_vm::RegisterFile` in
-  `include/gaby_vm/registers.h` is inspected
+  `Sources/gaby_vm/include/gaby_vm/registers.h` is inspected
 - **THEN** the fields appear in the order `x`, `sp`, `pc`, `v`, `nzcv`,
   `fpcr`, `fpsr`, `btype`, with the types listed above
 
 #### Scenario: `sizeof(RegisterFile)` is frozen at compile time
 
-- **WHEN** `include/gaby_vm/registers.h` is searched for a `static_assert`
+- **WHEN** `Sources/gaby_vm/include/gaby_vm/registers.h` is searched for a `static_assert`
   on `sizeof(RegisterFile)`
 - **THEN** the file contains a `static_assert` that asserts
   `sizeof(RegisterFile) == 31*8 + 8 + 8 + 32*16 + 4*4` (or an arithmetically
@@ -471,7 +471,7 @@ this constraint explicitly.
 #### Scenario: WriteAll docstring documents the top-level-only constraint
 
 - **WHEN** the docstring attached to `Simulator::WriteAll` in
-  `include/gaby_vm/simulator.h` is read
+  `Sources/gaby_vm/include/gaby_vm/simulator.h` is read
 - **THEN** it states that `WriteAll` is for top-level use only and MUST NOT
   be called from inside a leaf executed by an enclosing run
 
@@ -518,13 +518,13 @@ diagnostic that identifies the offending element's position in the span.
 #### Scenario: `RegisterWrite` resolves to the documented variant
 
 - **WHEN** the declaration of `gaby_vm::RegisterWrite` in
-  `include/gaby_vm/registers.h` is inspected
+  `Sources/gaby_vm/include/gaby_vm/registers.h` is inspected
 - **THEN** it is declared as
   `using RegisterWrite = std::variant<GpWrite, VWrite, SysWrite>;`
 
 ### Requirement: Simulator constructor rejects undersized stack buffers
 
-The `gaby_vm::Simulator(PredecodeCache*, void* stack_buffer, size_t stack_size)` constructor SHALL reject `stack_size` values strictly less than a documented minimum, exposed as the public `static constexpr` member `gaby_vm::Simulator::kMinStackSize`. On rejection the constructor SHALL abort via `VIXL_ABORT_WITH_MSG` (or equivalent) with a diagnostic that names both the rejected `stack_size` and the `kMinStackSize` value. The minimum SHALL be greater than or equal to the sum of the imported `vixl::aarch64::SimStack` default `limit_guard_size_` plus `usable_size_` (currently `4 * 1024 + 8 * 1024 = 12288` bytes in `src/aarch64/simulator-aarch64.h`). `stack_size` values at or above the minimum SHALL construct a usable `Simulator` whose initial guest SP is set to the 16-byte-aligned top of `stack_buffer`, exactly as today.
+The `gaby_vm::Simulator(PredecodeCache*, void* stack_buffer, size_t stack_size)` constructor SHALL reject `stack_size` values strictly less than a documented minimum, exposed as the public `static constexpr` member `gaby_vm::Simulator::kMinStackSize`. On rejection the constructor SHALL abort via `VIXL_ABORT_WITH_MSG` (or equivalent) with a diagnostic that names both the rejected `stack_size` and the `kMinStackSize` value. The minimum SHALL be greater than or equal to the sum of the imported `vixl::aarch64::SimStack` default `limit_guard_size_` plus `usable_size_` (currently `4 * 1024 + 8 * 1024 = 12288` bytes in `Sources/gaby_vm/src/aarch64/simulator-aarch64.h`). `stack_size` values at or above the minimum SHALL construct a usable `Simulator` whose initial guest SP is set to the 16-byte-aligned top of `stack_buffer`, exactly as today.
 
 #### Scenario: Below-minimum stack size aborts with a diagnostic
 
@@ -538,12 +538,12 @@ The `gaby_vm::Simulator(PredecodeCache*, void* stack_buffer, size_t stack_size)`
 
 #### Scenario: kMinStackSize matches or exceeds the VIXL SimStack default total
 
-- **WHEN** the value of `gaby_vm::Simulator::kMinStackSize` is compared with the default value of `vixl::aarch64::SimStack::limit_guard_size_` plus `vixl::aarch64::SimStack::usable_size_` in `src/aarch64/simulator-aarch64.h`
-- **THEN** `kMinStackSize` is greater than or equal to that sum, enforced at compile time by a `static_assert` in `src/gaby_vm/simulator.cc`
+- **WHEN** the value of `gaby_vm::Simulator::kMinStackSize` is compared with the default value of `vixl::aarch64::SimStack::limit_guard_size_` plus `vixl::aarch64::SimStack::usable_size_` in `Sources/gaby_vm/src/aarch64/simulator-aarch64.h`
+- **THEN** `kMinStackSize` is greater than or equal to that sum, enforced at compile time by a `static_assert` in `Sources/gaby_vm/src/gaby_vm/simulator.cc`
 
 ### Requirement: NEON format helpers SHALL be defined to allow compile-time constant folding
 
-The six imported VIXL helpers that map `VectorFormat` (a 6-bit enum) to lane size, lane count, register size, or format kind — `vixl::aarch64::IsSVEFormat`, `LaneSizeInBitsFromFormat`, `LaneSizeInBytesFromFormat`, `LaneCountFromFormat`, `RegisterSizeInBitsFromFormat`, `RegisterSizeInBytesFromFormat` — SHALL be defined as `constexpr inline` functions in `src/aarch64/instructions-aarch64.h`, so the compiler MUST be able to constant-fold them at call sites where the `VectorFormat` argument is a compile-time constant.
+The six imported VIXL helpers that map `VectorFormat` (a 6-bit enum) to lane size, lane count, register size, or format kind — `vixl::aarch64::IsSVEFormat`, `LaneSizeInBitsFromFormat`, `LaneSizeInBytesFromFormat`, `LaneCountFromFormat`, `RegisterSizeInBitsFromFormat`, `RegisterSizeInBytesFromFormat` — SHALL be defined as `constexpr inline` functions in `Sources/gaby_vm/src/aarch64/instructions-aarch64.h`, so the compiler MUST be able to constant-fold them at call sites where the `VectorFormat` argument is a compile-time constant.
 
 These helpers MUST remain inside a gaby-vm marker block in the header
 (`// gaby-vm BEGIN:` … `// gaby-vm END`), per the marker convention
@@ -553,7 +553,7 @@ text SHALL identify the change that promoted the definitions and
 point back to the current source location in upstream
 `instructions-aarch64.cc`, so a future re-import can find them.
 
-The corresponding source file (`src/aarch64/instructions-aarch64.cc`)
+The corresponding source file (`Sources/gaby_vm/src/aarch64/instructions-aarch64.cc`)
 SHALL retain a marker block at the original definition site, noting
 that the definitions have been lifted to the header. The marker block
 in the source MUST NOT contain a stale function-body copy (which would
@@ -567,7 +567,7 @@ semantic change.
 
 #### Scenario: Header carries inline definitions inside a marker block
 
-- **WHEN** the file `src/aarch64/instructions-aarch64.h` is inspected
+- **WHEN** the file `Sources/gaby_vm/src/aarch64/instructions-aarch64.h` is inspected
   for the definitions of the six listed helpers
 - **THEN** each helper is defined as a `constexpr inline` function in
   the header
@@ -577,7 +577,7 @@ semantic change.
 
 #### Scenario: Source file does not redefine the helpers
 
-- **WHEN** the file `src/aarch64/instructions-aarch64.cc` is inspected
+- **WHEN** the file `Sources/gaby_vm/src/aarch64/instructions-aarch64.cc` is inspected
   for the bodies of the six listed helpers
 - **THEN** no helper has a function body in the source file
 - **AND** the position formerly occupied by the bodies contains a
@@ -613,7 +613,7 @@ to the register's byte storage. The helper's only behavior is to zero
 the requested tail byte range and call `NotifyRegisterWrite()` once.
 
 The implementation lives inside the existing imported VIXL header
-(`src/aarch64/simulator-aarch64.h`) and MUST be enclosed in a gaby-vm
+(`Sources/gaby_vm/src/aarch64/simulator-aarch64.h`) and MUST be enclosed in a gaby-vm
 marker block (`// gaby-vm BEGIN:` … `// gaby-vm END`), per the marker
 convention required by the "Imported files are byte-identical to
 upstream except at marked locations" requirement. The marker block's
@@ -672,9 +672,9 @@ once and setting it to `true` N times are identical operations.
 
 ### Requirement: Remaining VectorFormat helpers SHALL be defined to allow compile-time constant folding
 
-The eight imported VIXL `VectorFormat` helpers — `vixl::aarch64::ScalarFormatFromLaneSize`, `LaneSizeInBytesLog2FromFormat`, `MaxLaneCountFromFormat`, `IsVectorFormat`, `ScalarFormatFromFormat`, `MaxIntFromFormat`, `MinIntFromFormat`, `MaxUintFromFormat` — SHALL be defined as `constexpr inline` functions in `src/aarch64/instructions-aarch64.h`, so the compiler MUST be able to constant-fold them at call sites where the input is a compile-time constant.
+The eight imported VIXL `VectorFormat` helpers — `vixl::aarch64::ScalarFormatFromLaneSize`, `LaneSizeInBytesLog2FromFormat`, `MaxLaneCountFromFormat`, `IsVectorFormat`, `ScalarFormatFromFormat`, `MaxIntFromFormat`, `MinIntFromFormat`, `MaxUintFromFormat` — SHALL be defined as `constexpr inline` functions in `Sources/gaby_vm/src/aarch64/instructions-aarch64.h`, so the compiler MUST be able to constant-fold them at call sites where the input is a compile-time constant.
 
-Additionally, the helper `vixl::GetUintMask` in `src/utils-vixl.h`,
+Additionally, the helper `vixl::GetUintMask` in `Sources/gaby_vm/src/utils-vixl.h`,
 which is called by `MaxIntFromFormat` and `MaxUintFromFormat`, SHALL
 be promoted from `inline` to `constexpr inline` so that the callers'
 constexpr eligibility is not broken by the dependency.
@@ -686,7 +686,7 @@ except at marked locations" requirement. Each marker block's reason
 text SHALL identify this change and point back to the current source
 location in upstream.
 
-The corresponding source file (`src/aarch64/instructions-aarch64.cc`)
+The corresponding source file (`Sources/gaby_vm/src/aarch64/instructions-aarch64.cc`)
 SHALL retain marker blocks at the original definition sites, noting
 that the definitions have been lifted to the header. The marker blocks
 in the source MUST NOT contain stale function-body copies (which would
@@ -700,7 +700,7 @@ semantic change.
 
 #### Scenario: Header carries inline definitions inside marker blocks
 
-- **WHEN** the file `src/aarch64/instructions-aarch64.h` is inspected
+- **WHEN** the file `Sources/gaby_vm/src/aarch64/instructions-aarch64.h` is inspected
   for the definitions of the eight listed helpers
 - **THEN** each helper is defined as a `constexpr inline` function in
   the header
@@ -710,7 +710,7 @@ semantic change.
 
 #### Scenario: utils-vixl.h GetUintMask is constexpr inline
 
-- **WHEN** the file `src/utils-vixl.h` is inspected for the definition
+- **WHEN** the file `Sources/gaby_vm/src/utils-vixl.h` is inspected for the definition
   of `vixl::GetUintMask`
 - **THEN** the function is defined as `constexpr inline` (not plain
   `inline`)
@@ -719,7 +719,7 @@ semantic change.
 
 #### Scenario: Source file does not redefine the helpers
 
-- **WHEN** the file `src/aarch64/instructions-aarch64.cc` is inspected
+- **WHEN** the file `Sources/gaby_vm/src/aarch64/instructions-aarch64.cc` is inspected
   for the bodies of the eight listed helpers
 - **THEN** no helper has a function body in the source file
 - **AND** each position formerly occupied by a body contains a

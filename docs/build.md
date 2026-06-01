@@ -25,14 +25,15 @@ structure** of the build — what's worth understanding when you change
 ## Targets
 
 - `gaby_vm` (static library) plus the public alias `gaby_vm::gaby_vm`.
-  Public include directory is `include/`; private include directory is `src/`.
+  Public include directory is `Sources/gaby_vm/include/`; private include
+  directory is `Sources/gaby_vm/src/`.
   Compile features: `PUBLIC cxx_std_17`.
 - Test executables under `test/`:
   `gaby_vm_smoke` (library sanity), `simulator_smoke` (Simulator + single
   NOP), `simulator_correctness` (hand-encoded sequences). Each links
   `PRIVATE gaby_vm::gaby_vm`; the two simulator tests additionally take a
-  `PRIVATE` include of `${PROJECT_SOURCE_DIR}/src` and the VIXL compile
-  defines (see "VIXL build defines" below) — this is the
+  `PRIVATE` include of `${PROJECT_SOURCE_DIR}/Sources/gaby_vm/src` and the
+  VIXL compile defines (see "VIXL build defines" below) — this is the
   [privileged build pattern](#privileged-test-build-pattern).
 - `gaby-vm` (CLI demo) under `demos/cli/`.
 
@@ -77,7 +78,7 @@ coexist in the same target (`gaby_vm`) under different flag sets.
 types and headers that are not part of the public API. They get them via:
 
 ```cmake
-target_include_directories(<target> PRIVATE ${PROJECT_SOURCE_DIR}/src)
+target_include_directories(<target> PRIVATE ${PROJECT_SOURCE_DIR}/Sources/gaby_vm/src)
 target_compile_definitions(<target> PRIVATE
   VIXL_INCLUDE_TARGET_A64
   VIXL_INCLUDE_SIMULATOR_AARCH64

@@ -240,13 +240,13 @@ not publication-grade measurements.
 - **WHEN** `bench/README.md` is read
 - **THEN** it contains content covering each of the following topics, identifiable by headings or clearly labeled sections: build invocation, per-binary usage and output meaning (including `build_type`), supported flags (including `--help`/`-h` and the `--seconds` minimum), mixed-workload regeneration, smoke-workload regeneration, and upstream cross-comparison
 
-### Requirement: Benchmark sources do not modify src/, include/gaby_vm/, or imported VIXL files
+### Requirement: Benchmark sources do not modify Sources/gaby_vm/src/, Sources/gaby_vm/include/gaby_vm/, or imported VIXL files
 
-The benchmark harness SHALL NOT alter any file under `src/`, any imported
-VIXL source file, or any public header under `include/gaby_vm/`. The harness
+The benchmark harness SHALL NOT alter any file under `Sources/gaby_vm/src/`, any imported
+VIXL source file, or any public header under `Sources/gaby_vm/include/gaby_vm/`. The harness
 MAY consume the `gaby_vm` public API — including the `PredecodeCache` and
 `Simulator` types introduced by the `predecode-cache` capability — in addition
-to the imported `src/` headers it already uses to drive
+to the imported `Sources/gaby_vm/src/` headers it already uses to drive
 `vixl::aarch64::Simulator`. The harness itself SHALL NOT introduce any new
 public header or other new public API surface.
 
@@ -257,7 +257,7 @@ public header or other new public API surface.
 
 #### Scenario: No new public headers are introduced
 
-- **WHEN** the contents of `include/gaby_vm/` are listed
+- **WHEN** the contents of `Sources/gaby_vm/include/gaby_vm/` are listed
 - **THEN** the listing contains no public header added by the benchmark-harness capability (cache headers added by the `predecode-cache` capability are consumed by the harness, not owned by it)
 
 ### Requirement: Help flag prints usage and exits successfully

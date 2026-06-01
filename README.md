@@ -54,3 +54,49 @@ target_link_libraries(your_target PRIVATE gaby_vm::gaby_vm)
 Tests and demos default off when consumed via `add_subdirectory`. Override
 explicitly with `-DGABY_VM_BUILD_TESTS=ON` or `-DGABY_VM_BUILD_DEMOS=ON` when
 desired.
+
+### SwiftPM
+
+gaby-vm also ships a top-level `Package.swift`, so a Swift Package Manager
+project can depend on it directly. This is aimed at C++ SPM consumers (the
+primary embedder builds with SwiftPM); CMake stays the canonical build that
+runs the tests and benchmarks. Both build systems compile the same sources.
+
+Add gaby-vm as a package dependency and depend on the `gaby_vm` product:
+
+```swift
+// In your Package.swift
+let package = Package(
+    name: "MyHotfixEngine",
+    dependencies: [
+        .package(url: "https://example.invalid/gaby-vm.git", branch: "main"),
+    ],
+    targets: [
+        .target(name: "MyHotfixEngine", dependencies: [
+            .product(name: "gaby_vm", package: "gaby-vm"),
+        ]),
+    ],
+    // Required: gaby-vm's public headers use C++20 (std::span, std::variant).
+    // `cxxLanguageStandard` is per-package and does NOT cross the dependency
+    // boundary, so the consumer must set it too — gaby-vm's own `.cxx20` only
+    // applies to gaby-vm's targets.
+    cxxLanguageStandard: .cxx20
+)
+```
+
+Consume the public API from C++ with `#include "gaby_vm/…"` — no module map and
+no Swift/C++ interop are required (the embedder is a C++ target). The consuming
+package MUST compile at C++20 or later (set `cxxLanguageStandard: .cxx20` as
+shown above): the public headers use `std::span` and `std::variant`, and a
+package's C++ standard does not inherit from its dependencies. The product is a
+static library, mirroring the CMake `gaby_vm` library. macOS and iOS are both
+supported; the consuming app's deployment target is the effective floor.
+
+A runnable macOS demo ships in the package. From the repository root:
+
+```sh
+swift run gaby_vm_spm_demo   # builds the library, links a C++ demo, prints version + host_add result
+```
+
+The demo is an executable target, not a library product, so projects that
+depend on the `gaby_vm` product never build it.
