@@ -110,6 +110,12 @@ mixed 64643 insn/pass，smoke 32 insn/pass。
   真要冲 50×，唯一现实路线是把 NEON/FP leaf 用**宿主 SIMD intrinsics** 重写
   （SIMD-on-SIMD，§6 Phase 4），那是一个大且语义高风险的工程。
 
+> **目标再校准（重要，后补）**：这套「50× native」拆解是个 proxy。后续讨论把
+> 真正该对标的尺子改成了「不慢于 Lua / JS（iOS app 内能用的解释器）」，并发现
+> native baseline 高估了业务逻辑的 slowdown（这里的 113×/350× 是跟「4 IPC 理想
+> native」比出来的；按真实业务逻辑的 native 算，标量的有效 slowdown 是 ~15–25×）。
+> 详见 §8.2——读这一节结论时请连 §8.2 一起看。
+
 ## 4. Mixed fresh profile（7851 样本）
 
 top-of-stack ≥ ~45 样本的项，归桶：
@@ -168,12 +174,14 @@ phase，按 ROI / 风险从低到高排。**每个 phase 各开一个 OpenSpec c
 
 打 `ExecuteInstructionCached` 的固定税（smoke 39% / mixed 12%）：
 
-- **干掉 pmf 双重间接**。现在每条指令：load `entry->leaf`（一个指针）→
-  deref 拿到 16 字节 pointer-to-member-function → pmf call（还要查虚位）。
-  改成在 predecode 阶段生成一张普通 `void(*)(Simulator*, const Instruction*)`
-  thunk 表，把 8 字节普通函数指针直接存进 `entry->leaf`——省一次 load，
-  并把 pmf-call 降成普通 call。`PredecodedEntry` 仍是 16 字节，不破坏 flat
-  array 不变量。
+- **收缩虚函数 dispatch（thunk 表）**。`Visit*` 是 **virtual** 的，所以现在
+  每条指令是一条 **3 层依赖 load 链**：load `entry->leaf` 指针 → load 16B 虚
+  pmf（map 节点）→ load vtable（从 this）→ load fnaddr → `blr`。用 thunk 表把
+  去虚化搬到编译期：thunk 体 `s->Simulator::VisitX(i)`（限定调用 = 非虚直接
+  call），存 8 字节普通函数指针进 `entry->leaf`，运行期收成「1 层 load + 一次
+  普通间接 call」。`PredecodedEntry` 仍 16 字节。**注意**：因为是虚函数，
+  「抽 pmf word0 当代码地址」那条捷径不可行（word0 是 vtable offset）。完整
+  机制、接线、收益校准见 §8.1。
 - **movprfx 检查 gate 到 SVE-relevant flag bit**。现在每条指令算两次
   `"movprfx_z_z"_h` / `"movprfx_z_p_z"_h` 比较；挪到 predecode 阶段往
   `entry->flags` 写一个 bit，运行期只在该 bit 命中时才做（非 SVE workload
@@ -182,8 +190,16 @@ phase，按 ROI / 风险从低到高排。**每个 phase 各开一个 OpenSpec c
   `RunFrom` → `while(StepOnce())` → 每条都 `IsSimulationFinished()` +
   函数调用边界（`RunFrom` 自己占 smoke 5.5%）。改成 simulator 内部一个
   直线指令循环，减少每指令的 re-check 和调用边界。
+- **（Phase 1.5）threaded dispatch——dispatch 的真天花板**。上面三项缩短的是
+  每指令的固定延迟，但派发仍是**单个多态 `blr`**；对不规则代码 misprediction
+  才是 dispatch 的大头，而这三项都不动它。治本是让每个 form 各自一个 `blr`
+  （各自的分支预测历史），即 computed-goto / threaded code。这是更大、单独的
+  一步，收益也更大；详见 §8.1 结尾。
 
-预期：smoke ~1.3–1.6×，mixed ~1.1×。
+预期（诚实，未实测）：thunk + movprfx + block-loop 三项合起来 smoke 大概低-到-
+中个位数 % 到 ~1.2×，mixed 近乎无感。想要 §3 那种 smoke 往 50× 的量级，得靠
+threaded dispatch（Phase 1.5）+ Phase 2 操作数预解码一起上。先按 spike 实测
+thunk 这一项的真实数，别拍脑袋（§8.1）。
 
 ### Phase 2 — 操作数预解码 + fast-form leaves（共享，风险中）
 
@@ -243,7 +259,132 @@ intrinsics 重写（SIMD-on-SIMD），别再标量化成 lane 循环。工程量
 从 Phase 1 dispatch 收缩起步，因为它现在是两个 workload 各自的第一名单
 函数、风险最低、两边都受益）。
 
-## 8. 数据/方法的局限
+> 后补：后续讨论又把目标重新校准到「不慢于 Lua / JS」，并提出优化前先做一个
+> 代表性业务逻辑的真机 head-to-head 基准（§8.2 的 Step 0）。所以真正的第一步
+> 很可能是那个基准，而不是直接进 Phase 1。
+
+## 8. 后续发现（同日 dispatch 深挖 + 目标再校准）
+
+> 这一节是 profile 写完后、同日继续讨论挖出来的。两块：8.1 把 Phase 1 的
+> dispatch lever 挖到底、纠正了一个判断；8.2 把整份 doc 的「50× native」目标
+> 重新校准成「不慢于 Lua / JS」。
+
+### 8.1 Phase 1 dispatch lever 深挖：它是个虚函数 dispatch
+
+挖 `ExecuteInstructionCached` 的 pmf 调用时发现一个关键事实：**`Visit*` 是
+virtual 的**（`simulator-aarch64.h:1756`：`#define DECLARE(A) virtual void
+Visit##A(const Instruction*)`），`Simulator : public DecoderVisitor` 单继承。
+这改了两件事：
+
+1. **当前每条指令的成本比「pmf 双重间接」更重——是一条 3 层依赖 load 链。**
+   `&Simulator::VisitX` 是 pointer-to-**virtual**-member，所以
+   `(this->*pmf)(pc_)` 实际是：
+
+   ```
+   load entry->leaf            ; 指向 map 里 pmf 的指针
+   load 16B pmf from there      ; HOP 1（map 节点）
+        ; word0 低位置位 → 虚
+   load vtable from *this        ; 额外 load
+   load fnaddr from vtable+off    ; 额外 load
+   blr fnaddr                    ; HOP 2
+   ```
+
+   即「pmf 从 map 取 + 完整虚分派（两次 vtable load）+ 间接 call」。
+
+2. **「抽 pmf word0 当代码地址」这条捷径对虚函数不可行——之前的设想作废。**
+   虚 pmf 的 word0 是 `vtable_offset + 1`（低位置位），不是代码地址，抽出来
+   不能调；之前提的 `(& 1) == 0` guard 反而会 fire。记下来防止以后再踩。
+
+**正确的收缩 = thunk 表，把去虚化搬到编译期。** thunk 体用**限定调用**：
+
+```cpp
+static void Visit_AddSub(Simulator* s, const Instruction* i) {
+  s->Simulator::VisitAddSub(i);   // 限定 Simulator:: → 非虚 → 直接 call 到 override
+}
+```
+
+`s->Simulator::VisitAddSub(i)` 绕过 vtable，编译成一条直接 tail-branch
+`b Simulator::VisitAddSub`。它的**地址**是个 8 字节普通函数指针，存进
+`entry->leaf`，运行期从「3 层 load 链 + 虚分派」收成「1 层 load + 一次普通
+间接 call（到 thunk）+ 一条直接 branch」。
+
+**接线干净、DRY（复用现有宏，不复制 form 表、不改共享宏）：** 关键是让
+thunk-holder 的 `Visit*` 是 **static** 成员，这样 `&Holder::VisitX` 是普通
+函数指针而不是 pmf：
+
+```cpp
+struct GabyLeafThunks {
+#define GABY_THUNK(A) \
+  static void Visit##A(Simulator* s, const Instruction* i) { s->Simulator::Visit##A(i); }
+  VISITOR_LIST_THAT_RETURN(GABY_THUNK)
+  SIM_AUD_VISITOR_LIST_THAT_RETURN(GABY_THUNK)
+  VISITOR_LIST_THAT_DONT_RETURN(GABY_THUNK)
+#undef GABY_THUNK
+};
+// 用同一张共享宏喂这个 struct，得到一张 cache 专用的「普通函数指针」表：
+using LeafFnMap = std::unordered_map<uint32_t, void (*)(Simulator*, const Instruction*)>;
+static const LeafFnMap m = { DEFAULT_FORM_TO_VISITOR_MAP(GabyLeafThunks) };
+```
+
+改动 4 处、都在 gaby-vm marker block：(1) `GabyLeafThunks` struct（~5 行宏
+生成 ~几百个 1 行 thunk）；(2) cache 专用 `LeafFnMap` builder；(3)
+`ResolvePredecodeLeaf` 返回函数指针值（8B）而不是 `&pmf`；(4) 调用点一次普通
+间接 call。约 30–50 行。需确认 `Simulator::VisitX` 对 `GabyLeafThunks` 可见
+（public 或加 friend）。现有共享 pmf map 原样保留给 disasm / auditor。
+
+**收益校准（诚实，未实测）：** 把 3 层 load 链收成 1 层。收益取决于「这条依赖
+链能不能被 leaf 执行盖住」——OOO 核会拿下一条指令的派发去跟当前 leaf 重叠：
+
+- smoke 的 leaf 小（`LogicalHelper` / `AddSubHelper`），盖不住 → 看得见，大概
+  低-到-中个位数 %。
+- mixed 的 leaf 大（NEON），load 延迟早被盖住 → 几乎无感。
+
+**它不动 dispatch 的真天花板。** 仍是**单个多态 `blr`** 派发点，它的
+misprediction 不变；对不规则代码（mixed、真实分支多的负载）misprediction 才是
+dispatch 的大头。治本要 **threaded dispatch**：每个 form 各自一个 `blr`、各自
+的分支预测历史（computed-goto / threaded code），roadmap 记为 Phase 1.5，
+是更大、单独的一步，收益也更大。**所以 thunk 表是便宜干净的清理，不是冲 50×
+的主力**；要数就先跑 spike 实测 thunk 这一项，别拍脑袋。
+
+### 8.2 目标再校准：真正的标尺是 Lua / JS，不是 native
+
+`50× native` 是个 proxy。对 iOS 热修这个真实用例，该对标的是**在 app 内真能
+用的解释器**：
+
+- **Lua（PUC 5.4）**：相对 native C ~15–45×。
+- **JS（JavaScriptCore LLInt）**：app 内嵌 JSC 拿不到 JIT 权限（只有 Safari /
+  WKWebView 那条特殊 entitlement 才有），只能跑 LLInt 解释器，数值代码
+  ~15–60×，对象 / 属性更慢。
+
+目标改成：**不慢于这俩，最好快一点。** 三个支撑这个目标可达的发现：
+
+1. **native baseline 高估了业务逻辑的 slowdown。** smoke 的 native
+   0.057 ns/insn = 4.4 GHz 下 4 IPC，是纯独立 ALU 合成负载的 ILP 峰值。真实
+   业务逻辑（分支 / 依赖 / cache miss）native 跑 ~0.3–0.5 ns/insn。按真实 native
+   算，gaby-vm 标量的**有效 slowdown 是 ~15–25×，不是 §2/§3 那个 113×**——也就
+   是说今天大概已经追平 Lua、超过 in-app JS。§2/§3 的 113×/350× 是跟「4 IPC
+   理想 native」比出来的，对业务逻辑虚高。
+2. **gaby-vm 有结构性优势：跑的是编出来的真机器码，没有动态类型税**（无 tag
+   check / 装箱 / GC）。指令多但每条便宜；Lua/JS 字节码少但每条重（动态分派 +
+   类型检查）。对自定义算术 / 控制流 / 结构体操作，这俩大致抵消，甚至 gaby-vm
+   占优。
+3. **对手能赢的地方有解，而且解法是 gaby-vm 的强项。** Lua/JS 的重内置原语
+   （字符串 / 字典 / 正则 / JSON / 排序）是 native C 实现、跑原生速度；gaby-vm
+   逐条解释等价机器码会输。解法：**guest 对热点库函数的调用（`bl memcpy` /
+   `bl malloc` / ...）用 native bridge 直接派发到宿主原生实现**（guest 是真机器
+   码，这条路顺；项目已有 branch hook 雏形）。「精简解释器跑自定义逻辑 +
+   native bridge 扛重原语」理论上能同时赢 Lua 和 JS。
+
+**Step 0（优化前先做）：建一个代表性业务逻辑的真机 head-to-head 基准。** 现有
+smoke（纯 ALU）/ mixed（68% NEON）都回答不了「vs Lua/JS」。需要选一段真实味儿
+的业务逻辑（带分支和循环的校验 + 一点 struct 操作 + 一次小 JSON / 字段解析 +
+几次原生调用），同一语义分别用 gaby-vm（跑编出的 ARM64）/ Lua 5.4 / JSC（强制
+LLInt）在**真机**上量端到端 wall time。有了它，「不慢于 Lua/JS」才从口号变成能
+盯着优化的硬指标，也可能一量就发现自定义逻辑已经赢了、优化重点应转向 native
+bridge 覆盖重原语（ROI 比硬抠 dispatch 高得多）。这一步不写优化代码，只建测量
+基准，跟「先量再压」一致。
+
+## 9. 数据/方法的局限
 
 - 单次 sampling，无重复。前 ~20 项稳定，尾部 ≤20 样本噪声大。
 - mixed 是 VIXL 生成器随机出来的合成负载，**68% NEON 不代表任何真实负载**
@@ -257,7 +398,7 @@ intrinsics 重写（SIMD-on-SIMD），别再标量化成 lane 循环。工程量
   少数早期分支走向不同），但 committed workload 的分支会 reconverge，
   `iterations_per_second`（整段 workload 每秒跑几遍）是严格可比的指标。
 
-## 9. 索引
+## 10. 索引
 
 - 前两份 profile：
   [`2026-05`](./gaby-vm-cache-hotpath-profile-2026-05.md)（mixed only）、
@@ -266,6 +407,12 @@ intrinsics 重写（SIMD-on-SIMD），别再标量化成 lane 循环。工程量
   （§4.2.1 / §4.6 是操作数预解码 / per-form thunk 的原始设计预留）。
 - 当前 `ExecuteInstructionCached` 实现：
   `Sources/gaby_vm/src/aarch64/simulator-aarch64.h:1530-1609`。
+- §8.1 涉及的代码位置（`Sources/gaby_vm/src/aarch64/`）：
+  `simulator-aarch64.h:1756`（`Visit*` 的 `virtual` 声明宏）、
+  `:1695`（`ResolvePredecodeLeaf`，返回 `&pmf`）、
+  `:5780`（`FormToVisitorFnMap` typedef + pmf-size `static_assert`）、
+  `decoder-visitor-map-aarch64.h`（`DEFAULT_FORM_TO_VISITOR_MAP` 共享宏）、
+  `simulator-aarch64.cc:105`（`GetFormToVisitorFnMap` 的 map builder）。
 - bench harness + native baseline 说明：[`bench/README.md`](../../bench/README.md)。
 - raw profile dumps（local-only，未 commit）：
   `/tmp/mixed_cache_profile_fresh.txt`、`/tmp/smoke_cache_profile_fresh.txt`。
