@@ -11,6 +11,12 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 option(GABY_VM_BUILD_TESTS "Build gaby-vm tests" ${PROJECT_IS_TOP_LEVEL})
 option(GABY_VM_BUILD_DEMOS "Build gaby-vm demos" ${PROJECT_IS_TOP_LEVEL})
 option(GABY_VM_BUILD_BENCHMARKS "Build gaby-vm benchmarks" ${PROJECT_IS_TOP_LEVEL})
+# Dev-only "relative to native" baseline. OFF by default: it executes guest
+# AArch64 code directly on the host (host must be arm64), needs executable
+# memory (MAP_JIT + a JIT entitlement on Apple), and is consumed inside the
+# bench subdirectory, so it also requires GABY_VM_BUILD_BENCHMARKS.
+option(GABY_VM_BUILD_NATIVE_BASELINE
+       "Build the dev-only native (host-CPU) workload baseline tools" OFF)
 
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/CompileFlags.cmake)
 

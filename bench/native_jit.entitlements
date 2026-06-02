@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <!--
+    Apple Silicon enforces W^X: MAP_JIT pages are executable only for a process
+    that carries this entitlement. The native baseline tools (native_smoke /
+    native_baseline) copy committed guest code into a MAP_JIT region and call
+    it, so bench/CMakeLists.txt adhoc-signs them with this entitlement after
+    linking. This is the measurement tool allocating executable memory, not the
+    gaby-vm simulator — the simulator still generates no code.
+  -->
+  <key>com.apple.security.cs.allow-jit</key>
+  <true/>
+</dict>
+</plist>

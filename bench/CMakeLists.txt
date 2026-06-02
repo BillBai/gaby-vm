@@ -56,3 +56,50 @@ target_compile_definitions(bench_baseline PRIVATE
   VIXL_INCLUDE_SIMULATOR_AARCH64
   $<$<CONFIG:Debug>:VIXL_DEBUG>)
 gaby_vm_apply_compile_flags(bench_baseline)
+
+# native_smoke / native_baseline — dev-only "relative to native" reference.
+# They copy the SAME committed workload bytes (smoke / mixed) into executable
+# memory and run them directly on the host CPU, so decoder- and cache-mode
+# numbers can be quoted against native. They do NOT link gaby_vm — there is no
+# simulator involved on this path; the only dependency is the shared
+# native_runner (MAP_JIT setup + timing loop + reporting).
+#
+# Opt-in via GABY_VM_BUILD_NATIVE_BASELINE. The host must be arm64 (guest ISA ==
+# host ISA); on a non-arm64 host we warn and skip rather than emit a target that
+# cannot run. Not registered with CTest — benchmarks stay out of the
+# correctness suite.
+if(GABY_VM_BUILD_NATIVE_BASELINE)
+  if(NOT CMAKE_SYSTEM_PROCESSOR MATCHES "arm64|aarch64|ARM64")
+    message(WARNING
+      "GABY_VM_BUILD_NATIVE_BASELINE is ON but the host processor is "
+      "'${CMAKE_SYSTEM_PROCESSOR}', not arm64. The native baseline runs guest "
+      "AArch64 code on the host CPU, so it is skipped on non-arm64 hosts.")
+  else()
+    add_library(native_runner OBJECT native_runner.cc)
+    target_compile_definitions(native_runner PRIVATE
+      GABY_VM_BENCH_BUILD_TYPE="$<CONFIG>")
+    gaby_vm_apply_compile_flags(native_runner)
+
+    add_executable(native_smoke native_smoke.cc)
+    target_link_libraries(native_smoke PRIVATE native_runner)
+    gaby_vm_apply_compile_flags(native_smoke)
+
+    add_executable(native_baseline native_baseline.cc)
+    target_link_libraries(native_baseline PRIVATE native_runner)
+    gaby_vm_apply_compile_flags(native_baseline)
+
+    if(APPLE)
+      # Apple Silicon executes MAP_JIT pages only for a process carrying the
+      # allow-jit entitlement. Adhoc-sign each tool post-build with it; see
+      # native_jit.entitlements.
+      foreach(_tgt native_smoke native_baseline)
+        add_custom_command(TARGET ${_tgt} POST_BUILD
+          COMMAND codesign -s - --entitlements
+                  "${CMAKE_CURRENT_SOURCE_DIR}/native_jit.entitlements" -f
+                  "$<TARGET_FILE:${_tgt}>"
+          COMMENT "codesign ${_tgt} with the JIT entitlement (MAP_JIT)"
+          VERBATIM)
+      endforeach()
+    endif()
+  endif()
+endif()

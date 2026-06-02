@@ -130,6 +130,68 @@ percent (see *Host hygiene* below).
 needs at least `--seconds 1.0` for the cache-mode side to see enough
 iterations to be stable.
 
+## Native baseline (relative-to-native reference)
+
+`bench_baseline` / `bench_smoke` answer "decoder vs cache". The native
+baseline answers the next question: "how far is either mode from running
+the same code directly on the host CPU?" Two extra tools —
+`native_baseline` (mixed) and `native_smoke` — copy the **same committed
+workload bytes** into executable memory and call them as a function on the
+host, reporting in the same `key: value` format with `mode: native`.
+
+This is a developer tool, off by default. Enable it explicitly:
+
+```sh
+cmake --preset dev-release \
+    -DGABY_VM_BUILD_BENCHMARKS=ON -DGABY_VM_BUILD_NATIVE_BASELINE=ON
+cmake --build --preset dev-release
+```
+
+```sh
+./build/release/bench/native_baseline --seconds 1.0    # mixed, on host CPU
+./build/release/bench/native_smoke    --seconds 0.5    # smoke, on host CPU
+```
+
+Why this is sound, and its limits:
+
+- **Same bytes.** Both committed workloads are self-contained,
+  AAPCS-balanced functions: all memory access is stack-relative (the mixed
+  workload keeps every access relative to `x28`, which upstream
+  `BenchCodeGenerator` sets to `sp` after claiming stack scratch), all
+  branches target in-code labels, and each returns via `RET`. So the bytes
+  the simulator runs can be called directly, with no special register or
+  memory setup.
+- **`iterations_per_second` is the exact cross-mode metric.** It is "full
+  workload passes per second", well-defined for native, decoder, and cache
+  alike. The native run may take a marginally different *dynamic* path than
+  the simulator (initial register values differ, so a few early branch
+  outcomes differ), but both workloads reconverge their branches, so the
+  per-pass instruction count is effectively path-independent;
+  `throughput_insn_per_sec` / `ns_per_instruction` reuse the simulator's
+  committed dynamic count as a close approximation.
+- **Host must be arm64** (guest ISA == host ISA). CMake builds these
+  targets only on an arm64 host and warns + skips otherwise.
+- **Executable memory.** This is the *measurement tool* allocating a
+  MAP_JIT region, not the gaby-vm simulator — the simulator still generates
+  no code. On Apple Silicon, MAP_JIT pages execute only for a process
+  carrying the `com.apple.security.cs.allow-jit` entitlement, so CMake
+  adhoc-signs each tool post-build with `bench/native_jit.entitlements`;
+  other arm64 hosts use `mmap` + `mprotect`.
+
+A full three-way comparison on one workload:
+
+```sh
+./build/release/bench/bench_baseline   --mode decoder --seconds 1.0
+./build/release/bench/bench_baseline   --mode cache   --seconds 1.0
+./build/release/bench/native_baseline                 --seconds 1.0
+```
+
+Expect the slowdown-vs-native ratio to be strongly workload-dependent: the
+branch-free smoke workload is the cache's best case (it eliminates the most
+relative dispatch overhead there), so its ratio is the optimistic end; the
+branchy mixed workload is more representative of real code. Read these as
+order-of-magnitude, per *Host hygiene* below.
+
 ## Regenerating `bench/workloads/smoke_workload_data.h`
 
 The smoke workload is `bench/workloads/smoke_workload.s` (32 instructions:

@@ -21,6 +21,12 @@ structure** of the build — what's worth understanding when you change
 - `GABY_VM_BUILD_TESTS` — defaults to `${PROJECT_IS_TOP_LEVEL}`. Off when
   consumed via `add_subdirectory`.
 - `GABY_VM_BUILD_DEMOS` — same default.
+- `GABY_VM_BUILD_BENCHMARKS` — same default. Builds the `bench/` throughput
+  harness (`bench_baseline`, `bench_smoke`).
+- `GABY_VM_BUILD_NATIVE_BASELINE` — defaults `OFF`. Dev-only "relative to
+  native" tools that run the committed workloads directly on the host CPU;
+  requires `GABY_VM_BUILD_BENCHMARKS` and an arm64 host (it executes guest
+  AArch64 code natively). See [`../bench/README.md`](../bench/README.md).
 
 ## Targets
 
