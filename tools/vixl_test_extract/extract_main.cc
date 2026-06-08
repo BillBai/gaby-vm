@@ -68,6 +68,14 @@ const char* kQuarantineByName[] = {
 sigjmp_buf g_jmp;
 volatile sig_atomic_t g_fatal_signal = 0;
 
+// Host-level hang backstop, for a body stuck OUTSIDE the simulator loop (the
+// in-sim instruction cap, capture_macros.h kMaxInstructions, handles loops with
+// a stable, descriptive skip reason). This must comfortably exceed the time to
+// execute the in-sim cap under -O2 so that, for a merely slow body, the in-sim
+// cap fires first and the manifest reason stays deterministic — the alarm is a
+// last resort for a genuinely wedged host call.
+constexpr unsigned kHostWatchdogSeconds = 8;
+
 extern "C" void OnFatalSignal(int sig) {
   g_fatal_signal = sig;
   siglongjmp(g_jmp, 1);
@@ -125,7 +133,7 @@ int main(int argc, char** argv) {
 
     g_fatal_signal = 0;
     if (sigsetjmp(g_jmp, 1) == 0) {
-      alarm(8);  // host-level hang backstop (the in-sim cap is finer-grained)
+      alarm(kHostWatchdogSeconds);
       t->run();  // invokes the TEST body -> capture macros fill Current()
       alarm(0);
     } else {
@@ -166,5 +174,25 @@ int main(int argc, char** argv) {
               total,
               included,
               prefix.c_str());
-  return (included >= 0) ? 0 : 1;
+  // Fail loudly rather than silently blanking a committed family: walking zero
+  // TESTs (mis-set VIXL_EXTRACT_TEST_CC) or including zero cases is a
+  // misconfig.
+  if (included < 0) {
+    return 1;
+  }
+  if (total == 0) {
+    std::fprintf(stderr,
+                 "vixl_test_extract: ERROR — no TEST() walked. Is "
+                 "VIXL_EXTRACT_TEST_CC set to a real upstream test .cc?\n");
+    return 1;
+  }
+  if (included == 0) {
+    std::fprintf(stderr,
+                 "vixl_test_extract: ERROR — 0 of %d TESTs were portable; "
+                 "refusing to write an empty fixture set for '%s'.\n",
+                 total,
+                 prefix.c_str());
+    return 1;
+  }
+  return 0;
 }

@@ -37,10 +37,17 @@ namespace vixl {
 namespace aarch64 {
 
 // Guest-visible output (the simulator's `Printf` runtime call) is routed here
-// so printf-family tests do not spam stdout during extraction. Opened once.
+// so printf-family tests do not spam stdout during extraction. Opened once and
+// intentionally never closed (process-lifetime stream for a one-shot tool).
 inline std::FILE* CaptureNullStream() {
   static std::FILE* f = std::fopen("/dev/null", "w");
-  return f ? f : stderr;
+  if (f == nullptr) {
+    std::fprintf(stderr,
+                 "vixl_test_extract: could not open /dev/null; guest Printf "
+                 "output will go to stderr\n");
+    return stderr;
+  }
+  return f;
 }
 
 // Per-case captured machinery, replacing SETUP()'s bare locals.
@@ -72,13 +79,12 @@ namespace extract {
 // first instruction (there is no prologue between ResetState and the body).
 inline void CaptureEntry(vixl::aarch64::CaptureRig& rig) {
   CapturedCase& c = Current();
-  for (unsigned i = 0; i < 31; ++i) {
+  // x[0..29] only: the LR slot x[30] and sp are overridden by the replay
+  // runner, so leave them 0 (EntryState default) rather than baking the
+  // simulator's host end-of-sim sentinel / stack base into the fixture.
+  for (unsigned i = 0; i < 30; ++i) {
     c.entry.x[i] = static_cast<uint64_t>(rig.simulator.ReadXRegister(i));
   }
-  // sp and the LR slot are overridden by the replay runner; do not bake the
-  // simulator's host stack base / end-of-sim sentinel into the fixture.
-  c.entry.x[30] = 0;
-  c.entry.sp = 0;
   for (unsigned i = 0; i < 32; ++i) {
     vixl::aarch64::SimVRegister& v = rig.simulator.ReadVRegister(i);
     c.entry.v_lo[i] = v.GetLane<uint64_t>(0);
@@ -248,10 +254,16 @@ bool ResultRegCode(const T& r, unsigned& code) {
   }
 }
 
+// Once a case is skipped (e.g. a multi-RUN helper's second invocation), later
+// ASSERTs must not run their self-checks — doing so would overwrite the real
+// skip reason with a misleading "self-check mismatch". Each recorder bails out.
 template <class Exp, class Res>
 void RecordEqual64(vixl::aarch64::RegisterDump& core,
                    const Exp& expected,
                    const Res& result) {
+  if (Current().skipped) {
+    return;
+  }
   bool exp_ok = false;
   uint64_t want = ResolveExpected(expected, core, exp_ok);
   unsigned code = 0;
@@ -271,6 +283,9 @@ template <class Exp, class Res>
 void RecordEqual32(vixl::aarch64::RegisterDump& core,
                    const Exp& expected,
                    const Res& result) {
+  if (Current().skipped) {
+    return;
+  }
   bool exp_ok = false;
   uint64_t want = ResolveExpected(expected, core, exp_ok) & 0xffffffffu;
   unsigned code = 0;
@@ -287,6 +302,9 @@ void RecordEqual32(vixl::aarch64::RegisterDump& core,
 }
 
 inline void RecordNzcv(vixl::aarch64::RegisterDump& core, uint32_t expected) {
+  if (Current().skipped) {
+    return;
+  }
   if (core.flags_nzcv() != expected) {
     Current().skipped = true;
     Current().skip_reason = "self-check: ASSERT_EQUAL_NZCV mismatch under VIXL";
@@ -302,6 +320,9 @@ template <class Res>
 void RecordFP32(vixl::aarch64::RegisterDump& core,
                 float expected,
                 const Res& result) {
+  if (Current().skipped) {
+    return;
+  }
   unsigned code = 0;
   if (!ResultRegCode(result, code)) {
     Current().dropped_asserts += 1;
@@ -320,6 +341,9 @@ template <class Res>
 void RecordFP64(vixl::aarch64::RegisterDump& core,
                 double expected,
                 const Res& result) {
+  if (Current().skipped) {
+    return;
+  }
   unsigned code = 0;
   if (!ResultRegCode(result, code)) {
     Current().dropped_asserts += 1;
@@ -339,6 +363,9 @@ void RecordV128(vixl::aarch64::RegisterDump& core,
                 uint64_t expected_hi,
                 uint64_t expected_lo,
                 const Res& result) {
+  if (Current().skipped) {
+    return;
+  }
   unsigned code = 0;
   if (!ResultRegCode(result, code)) {
     Current().dropped_asserts += 1;
@@ -357,7 +384,11 @@ void RecordV128(vixl::aarch64::RegisterDump& core,
 }
 
 // Mark the in-flight case unportable (an assert form / setup we cannot replay).
+// First reason wins, so an earlier structural skip (e.g. multiple RUN) is kept.
 inline void MarkUnsupported(const char* reason) {
+  if (Current().skipped) {
+    return;
+  }
   Current().skipped = true;
   Current().skip_reason = reason;
 }

@@ -113,6 +113,15 @@ and VIXL upgrades):
 - **oversized / non-terminating bodies** — far-branch padding and large guest
   loops are capped (a poor guard-rail fixture and slow to replay).
 
+A consequence worth stating plainly: because every body containing a load/store
+is dropped, the ported suite covers **no memory-access semantics** — all
+LDR/STR/LDP/STP/atomic/exclusive/CAS tests are skipped (the replay model has no
+relocatable guest memory). The basic load/store coverage in
+`simulator_correctness` still stands, but if the dispatch optimization touches
+the memory-op execution paths, that gap should be closed separately (e.g. a
+relocatable-memory fixture model). The ALU / FP / NEON / branch / flag coverage
+is what makes this suite far wider than `simulator_correctness`.
+
 ## Encoding policy
 
 Tests don't assemble at runtime, and the tree doesn't currently ship an

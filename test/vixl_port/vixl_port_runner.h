@@ -21,11 +21,10 @@ struct RunStats {
   int passed = 0;  // a case passes only if BOTH oracles hold on BOTH tracks
 };
 
-// Runs one fixture; prints [FAIL] detail to stderr on any oracle violation.
-// Returns true iff the case fully passes.
-bool RunFixture(const PortedFixture& fx);
-
-// Runs an array of fixtures, accumulating into stats.
+// Runs an array of fixtures, accumulating into stats. Each fixture is replayed
+// on both tracks under the differential + absolute oracles; prints [FAIL]
+// detail to stderr on any violation. A case counts as passed only if both
+// oracles hold on both tracks.
 void RunAll(const PortedFixture* fixtures, size_t count, RunStats& stats);
 
 }  // namespace gaby_vm::vixl_port

@@ -58,7 +58,8 @@ bool EntryEqual(const EntryState& a, const EntryState& b) {
 // (the replay runner overrides them).
 void EmitEntryBody(std::ostream& os, const EntryState& e) {
   os << "  RegisterFile rf{};\n";
-  for (int i = 0; i < 30; ++i) {
+  for (int i = 0; i < 30;
+       ++i) {  // x[30] (LR) deliberately excluded; see above.
     if (e.x[i]) {
       os << "  rf.x[" << i << "] = " << Hex(e.x[i]) << ";\n";
     }
@@ -234,6 +235,13 @@ int FixtureWriter::Finish() {
           << c.asserts.size() << " assert target(s)";
       if (c.dropped_asserts) {
         man << ", " << c.dropped_asserts << " non-replayable assert(s) dropped";
+      }
+      // Surface host-address absolute targets dropped per design §6.1 (covered
+      // by the differential oracle instead) so the weaker absolute coverage on
+      // these cases is visible, not silent.
+      if (c.address_asserts) {
+        man << ", " << c.address_asserts
+            << " host-address assert(s) dropped (differential-only)";
       }
       if (!c.required_features.empty() &&
           c.required_features != "CPUFeatures{ }") {

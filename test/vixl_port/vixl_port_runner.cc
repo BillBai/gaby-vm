@@ -186,42 +186,6 @@ void TraceFixture(const PortedFixture& fx) {
 
 }  // namespace
 
-bool RunFixture(const PortedFixture& fx) {
-  TraceFixture(fx);
-
-  std::vector<uint32_t> buf(fx.code, fx.code + fx.code_words);
-  buf.push_back(kBrXzr);
-  const uintptr_t entry = reinterpret_cast<uintptr_t>(buf.data());
-  const size_t size_bytes = buf.size() * sizeof(uint32_t);
-
-  // One stack shared by both tracks so the seeded sp matches (see
-  // RunTrackOnSim).
-  StackBuffer stack;
-  PredecodeCache cache;
-  if (cache.RegisterCodeRange(buf.data(), size_bytes) !=
-      PredecodeCache::RegistrationStatus::Ok) {
-    std::fprintf(stderr,
-                 "[FAIL] %s / cache track: RegisterCodeRange failed\n",
-                 fx.name);
-    return false;
-  }
-  Simulator cache_sim(&cache, stack.data(), stack.size());
-  Simulator decoder_sim(nullptr, stack.data(), stack.size());
-
-  RegisterFile cache_state{}, decoder_state{};
-  bool cache_ok =
-      RunTrackOnSim(cache_sim, entry, fx, stack, cache_state, "cache", true);
-  bool decoder_ok = RunTrackOnSim(decoder_sim,
-                                  entry,
-                                  fx,
-                                  stack,
-                                  decoder_state,
-                                  "decoder",
-                                  false);
-  bool diff_ok = DifferentialEqual(fx, cache_state, decoder_state);
-  return cache_ok && decoder_ok && diff_ok;
-}
-
 void RunAll(const PortedFixture* fixtures, size_t count, RunStats& stats) {
   // Build every fixture's body buffer up front (kept alive for the cache's
   // lifetime) and register them all in ONE PredecodeCache, then reuse two
