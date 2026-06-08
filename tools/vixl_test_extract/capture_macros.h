@@ -20,7 +20,10 @@
 #ifndef GABY_VM_TOOLS_VIXL_TEST_EXTRACT_CAPTURE_MACROS_H_
 #define GABY_VM_TOOLS_VIXL_TEST_EXTRACT_CAPTURE_MACROS_H_
 
+#include <cstdio>
 #include <sstream>
+#include <type_traits>
+#include <utility>
 
 #include "capture_state.h"
 #include "test-runner.h"  // vixl::Test + TEST_()
@@ -33,6 +36,13 @@
 namespace vixl {
 namespace aarch64 {
 
+// Guest-visible output (the simulator's `Printf` runtime call) is routed here
+// so printf-family tests do not spam stdout during extraction. Opened once.
+inline std::FILE* CaptureNullStream() {
+  static std::FILE* f = std::fopen("/dev/null", "w");
+  return f ? f : stderr;
+}
+
 // Per-case captured machinery, replacing SETUP()'s bare locals.
 struct CaptureRig {
   MacroAssembler masm;
@@ -42,7 +52,7 @@ struct CaptureRig {
   ptrdiff_t body_start = 0;
   ptrdiff_t body_end = 0;
 
-  CaptureRig() : simulator(&decoder) {
+  CaptureRig() : simulator(&decoder, CaptureNullStream()) {
     // gaby-vm registers code under CPUFeatures::All(); mirror that here so no
     // body is gated out at assemble/run time. Filtering is by *seen* features.
     simulator.SetCPUFeatures(CPUFeatures::All());
@@ -79,67 +89,166 @@ inline void CaptureEntry(vixl::aarch64::CaptureRig& rig) {
   c.entry.fpsr = 0;  // the imported simulator does not model FPSR.
 }
 
-// Run the fully emitted program (body + core.Dump + Ret) on the real VIXL
-// simulator, then harvest the body bytes and the seen-feature set. The Ret
-// returns to ResetState's kEndOfSimAddress sentinel, so the run terminates.
+// True if `word` is an A64 instruction whose execution is not portable to a
+// relocated, different-process replay, classified purely by top-level encoding
+// bits (robust to the exact opcode; survives VIXL upgrades):
+//   * load/store group — tests bake host buffer addresses; gaby would fault;
+//   * ADR/ADRP         — produce a host-PC-relative value;
+//   * register-indirect branch (BR/BLR/RET and PAC variants) — branch to a
+//     register that may hold a non-relocatable / poison address, after which
+//     the decoder track fetches at a wild PC and (ASLR-dependently) crashes.
+// PC-relative branches (B/BL/B.cond/CBZ/TBZ) are NOT flagged: their targets are
+// fixed relative offsets the assembler kept inside the body.
+inline bool IsNonPortableInstr(uint32_t word) {
+  // Loads and stores: op1 (bits[28:25]) == x1x0, i.e. bit27 set and bit25
+  // clear. Covers LDR/STR/LDP/STP/LDUR/STUR, exclusives, atomics, CAS and
+  // load-literal.
+  const bool load_store = ((word >> 27) & 1u) && !((word >> 25) & 1u);
+  // PC-relative addressing (ADR/ADRP): bits[28:24] == 0b10000.
+  const bool pc_rel = ((word >> 24) & 0x1fu) == 0x10u;
+  // Unconditional branch (register) group: bits[31:25] == 0b1101011.
+  const bool br_reg = (word >> 25) == 0x6bu;
+  // SYS / SYSL (the DC/IC/AT/TLBI cache/TLB-maintenance aliases): bits[31:19]
+  // == 0x1AA1 (SYS) or 0x1AA9 (SYSL). These operate on a virtual address, so
+  // tests pass a host pointer and gaby would fault. MSR/MRS, barriers and HINTs
+  // use distinct top-13-bit values and are NOT matched.
+  const bool sys = (word >> 19) == 0x1aa1u || (word >> 19) == 0x1aa9u;
+  return load_store || pc_rel || br_reg || sys;
+}
+
+// Run the fully emitted program (body + core.Dump + Br(xzr)) on the real VIXL
+// simulator, then harvest the body bytes and the seen-feature set. The Br(xzr)
+// branches to address 0, the kEndOfSimAddress sentinel, so the run terminates.
 inline void HarvestRun(vixl::aarch64::CaptureRig& rig) {
   using vixl::aarch64::Instruction;
   CapturedCase& c = Current();
   c.run_count += 1;
   if (c.run_count > 1) {
+    // Some TESTs drive several SETUP/RUN cycles (e.g. via a helper called in a
+    // loop). Our single-case model cannot represent those; skip without running
+    // again (also avoids a second hang).
     c.skipped = true;
     c.skip_reason = "multiple RUN() in one TEST";
+    return;
   }
 
-  rig.simulator.RunFrom(
+  // Open-coded RunFrom with a deterministic instruction cap. Two reasons:
+  //  1. Some bodies loop on a count register that, without VIXL's prologue,
+  //     holds the ResetState poison (0xbadbeef ~= 195M) and would spin forever.
+  //  2. A body that executes a large loop is a poor guard-rail fixture — it
+  //     exercises one leaf 10^5 times and replays slowly on the debug decoder
+  //     track. Real register/ALU tests execute well under 1000 instructions.
+  // The cap bounds the run and marks such cases unportable for the manifest.
+  constexpr uint64_t kMaxInstructions = 8'192;
+  rig.simulator.WritePc(
       rig.masm.GetBuffer()->GetStartAddress<const Instruction*>());
+  uint64_t executed = 0;
+  while (!rig.simulator.IsSimulationFinished()) {
+    if (executed++ >= kMaxInstructions) {
+      c.skipped = true;
+      c.skip_reason = "instruction cap exceeded (looping or multi-RUN body)";
+      return;
+    }
+    rig.simulator.ExecuteInstruction();
+  }
 
   const auto* base = rig.masm.GetBuffer()->GetStartAddress<const uint32_t*>();
   size_t first = static_cast<size_t>(rig.body_start) / sizeof(uint32_t);
   size_t last = static_cast<size_t>(rig.body_end) / sizeof(uint32_t);
   c.body_words.clear();
+  bool non_portable = false;
   for (size_t i = first; i < last; ++i) {
     c.body_words.push_back(base[i]);
+    if (IsNonPortableInstr(base[i])) {
+      non_portable = true;
+    }
   }
+
+  // Record this case's code-buffer host range so the writer can drop ASSERT
+  // targets whose expected value is a host address.
+  c.code_lo = rig.masm.GetBuffer()->GetStartAddress<uintptr_t>();
+  c.code_hi = rig.masm.GetBuffer()->GetEndAddress<uintptr_t>();
 
   std::ostringstream os;
   os << rig.simulator.GetSeenFeatures();
   c.required_features = os.str();
+
+  if (non_portable) {
+    c.skipped = true;
+    c.skip_reason =
+        "body uses load/store, PC-relative addressing, or a register-indirect "
+        "branch (host-memory/host-address-dependent; not portable to replay)";
+    return;
+  }
+
+  // Far-branch-range tests emit hundreds of thousands of padding instructions
+  // to overflow a branch's reach. Such a body is absurd as a guard-rail fixture
+  // (it bloats the committed .inc and is slow to predecode), and it exercises
+  // assembler range handling rather than a leaf's semantics. Cap the size: real
+  // ported bodies are well under 100 words.
+  constexpr size_t kMaxBodyWords = 4096;
+  if (c.body_words.size() > kMaxBodyWords) {
+    c.skipped = true;
+    c.skip_reason = "body too large (far-branch range padding)";
+  }
 }
 
 // --- ASSERT_EQUAL_* recorders ----------------------------------------------
 //
-// The upstream ASSERT_EQUAL_64 / _32 admit several argument shapes:
-//   ASSERT_EQUAL_64(literal, xreg)          — the common, replayable case
-//   ASSERT_EQUAL_64(xreg, xreg)             — expected is itself a register
-//   ASSERT_EQUAL_64(literal, computed_expr) — result is not a register
-// The helpers below resolve each shape at compile time so the whole upstream
-// .cc compiles, while only the replayable shapes become AssertTargets.
+// The upstream ASSERT_EQUAL_64 / _32 admit many argument shapes across 280+
+// tests:
+//   ASSERT_EQUAL_64(literal, xreg)            — the common, replayable case
+//   ASSERT_EQUAL_64(xreg, xreg)               — expected is itself a register
+//   ASSERT_EQUAL_64(literal, computed_expr)   — result is not a register
+//   ASSERT_EQUAL_64(std::vector<...>, xreg)   — exotic "set of allowed" forms
+// To keep the whole upstream .cc compiling while only turning the replayable
+// shapes into AssertTargets, the operands are classified by DUCK TYPING:
+// anything with .GetCode() is a register, anything convertible to uint64_t is a
+// scalar, anything else makes the assert non-replayable (dropped, not a
+// target).
 
-inline uint64_t ResolveExpected(uint64_t v, vixl::aarch64::RegisterDump&) {
-  return v;
-}
-inline uint64_t ResolveExpected(const vixl::aarch64::Register& r,
-                                vixl::aarch64::RegisterDump& core) {
-  return static_cast<uint64_t>(core.xreg(r.GetCode()));
-}
-
-inline bool ResultRegCode(const vixl::aarch64::Register& r, unsigned& code) {
-  code = r.GetCode();
-  return true;
-}
+template <class T, class = void>
+struct HasGetCode : std::false_type {};
 template <class T>
-inline bool ResultRegCode(const T&, unsigned&) {
-  return false;  // computed result expression: not replayable.
+struct HasGetCode<T, std::void_t<decltype(std::declval<const T&>().GetCode())>>
+    : std::true_type {};
+
+// Resolve an "expected" operand to bits. ok=false => not a value we can use.
+template <class T>
+uint64_t ResolveExpected(const T& v,
+                         vixl::aarch64::RegisterDump& core,
+                         bool& ok) {
+  if constexpr (HasGetCode<T>::value) {
+    ok = true;
+    return static_cast<uint64_t>(core.xreg(v.GetCode()));
+  } else if constexpr (std::is_convertible_v<T, uint64_t>) {
+    ok = true;
+    return static_cast<uint64_t>(v);
+  } else {
+    ok = false;
+    return 0;
+  }
+}
+
+// Extract a register code from a "result" operand. false => not a register.
+template <class T>
+bool ResultRegCode(const T& r, unsigned& code) {
+  if constexpr (HasGetCode<T>::value) {
+    code = r.GetCode();
+    return true;
+  } else {
+    return false;
+  }
 }
 
 template <class Exp, class Res>
 void RecordEqual64(vixl::aarch64::RegisterDump& core,
                    const Exp& expected,
                    const Res& result) {
-  uint64_t want = ResolveExpected(expected, core);
+  bool exp_ok = false;
+  uint64_t want = ResolveExpected(expected, core, exp_ok);
   unsigned code = 0;
-  if (!ResultRegCode(result, code)) {
+  if (!exp_ok || !ResultRegCode(result, code)) {
     Current().dropped_asserts += 1;
     return;
   }
@@ -155,9 +264,10 @@ template <class Exp, class Res>
 void RecordEqual32(vixl::aarch64::RegisterDump& core,
                    const Exp& expected,
                    const Res& result) {
-  uint64_t want = ResolveExpected(expected, core) & 0xffffffffu;
+  bool exp_ok = false;
+  uint64_t want = ResolveExpected(expected, core, exp_ok) & 0xffffffffu;
   unsigned code = 0;
-  if (!ResultRegCode(result, code)) {
+  if (!exp_ok || !ResultRegCode(result, code)) {
     Current().dropped_asserts += 1;
     return;
   }
@@ -258,10 +368,14 @@ inline void MarkUnsupported(const char* reason) {
   ::gaby_vm::extract::CaptureEntry(rig_);        \
   rig_.body_start = masm.GetCursorOffset()
 
+// Dump body-exit state, then terminate via `Br(xzr)` (branch to register 31 =
+// the zero register = address 0, VIXL's end-of-sim sentinel). This is immune to
+// bodies that clobber LR (e.g. `Mov(x30, ...)`): unlike Ret, it does not read
+// x30. No prologue/epilogue is emitted, so the body slice stays pure.
 #define END()                             \
   rig_.body_end = masm.GetCursorOffset(); \
   core.Dump(&masm);                       \
-  masm.Ret();                             \
+  masm.Br(xzr);                           \
   masm.FinalizeCode()
 
 #define RUN() ::gaby_vm::extract::HarvestRun(rig_)

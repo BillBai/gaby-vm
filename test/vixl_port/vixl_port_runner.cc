@@ -5,6 +5,7 @@
 #include <cinttypes>
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 #include <vector>
 
 #include "embedding_stack.h"
@@ -14,8 +15,12 @@
 namespace gaby_vm::vixl_port {
 namespace {
 
-constexpr uint32_t kRet = 0xd65f03c0u;
-constexpr uint64_t kNullLr = 0u;  // RET to null LR terminates the run.
+// `br xzr` — branch to register 31 (the zero register), i.e. to address 0,
+// gaby-vm's end-of-simulation sentinel. Used as the trailing terminator instead
+// of RET so it works even when the body clobbered LR (e.g. `mov x30, ...`):
+// unlike RET it does not read x30, and it clobbers nothing.
+constexpr uint32_t kBrXzr = 0xd61f03e0u;
+constexpr uint64_t kNullLr = 0u;  // LR seeded to the null sentinel at entry.
 
 // 16-byte-down-aligned top of a StackBuffer, used as the replay SP.
 uint64_t StackTop(StackBuffer& stack) {
@@ -93,45 +98,36 @@ bool CheckAssert(const PortedFixture& fx,
   return false;
 }
 
-// Runs the fixture body+RET on one track and returns the post-run RegisterFile.
-// `use_cache` selects RunFrom (cache) vs DebugRunFrom (decoder).
-bool RunOneTrack(const PortedFixture& fx,
-                 bool use_cache,
-                 RegisterFile& out_state,
-                 const char* track) {
-  // Body words followed by a trailing RET in a contiguous buffer.
-  std::vector<uint32_t> buf(fx.code, fx.code + fx.code_words);
-  buf.push_back(kRet);
-  const uintptr_t entry = reinterpret_cast<uintptr_t>(buf.data());
-  const size_t size_bytes = buf.size() * sizeof(uint32_t);
-
-  StackBuffer stack;
-  bool ok = true;
-  if (use_cache) {
-    PredecodeCache cache;
-    auto st = cache.RegisterCodeRange(buf.data(), size_bytes);
-    if (st != PredecodeCache::RegistrationStatus::Ok) {
-      std::fprintf(stderr,
-                   "[FAIL] %s / %s track: RegisterCodeRange failed "
-                   "(status=%d)\n",
-                   fx.name,
-                   track,
-                   static_cast<int>(st));
-      return false;
-    }
-    Simulator sim(&cache, stack.data(), stack.size());
-    SeatEntry(sim, fx, stack);
-    sim.RunFrom(entry);
-    out_state = sim.ReadAll();
-    for (size_t i = 0; i < fx.assert_count; ++i) {
-      ok &= CheckAssert(fx, fx.asserts[i], sim, track);
-    }
-    return ok;
-  }
-  Simulator sim(nullptr, stack.data(), stack.size());
+// Seats `fx`'s entry state on an already-constructed Simulator, runs the body
+// from `entry` to termination on one track, and returns the post-run state plus
+// the absolute-oracle verdict. The Simulator is reused across fixtures (see
+// RunAll): constructing one is ~100ms in a debug build, so amortising it over a
+// whole family turns minutes of setup into milliseconds. Both tracks must share
+// ONE stack so the seeded sp matches — otherwise the differential oracle would
+// report a spurious sp divergence.
+//
+// RunFrom is unbounded; a non-terminating body would hang. That cannot happen
+// for the committed fixtures (the extraction tool excludes every instruction
+// family whose gaby behaviour is not load-address-stable), and a *future*
+// regression that broke termination is caught by the CTest TIMEOUT on this test
+// (see CMakeLists.txt) — a reported failure, not a silent CI hang. That
+// backstop is far cheaper than per-instruction StepOnce capping (~20x slower
+// here).
+bool RunTrackOnSim(Simulator& sim,
+                   uintptr_t entry,
+                   const PortedFixture& fx,
+                   StackBuffer& stack,
+                   RegisterFile& out_state,
+                   const char* track,
+                   bool use_cache) {
   SeatEntry(sim, fx, stack);
-  sim.DebugRunFrom(entry);
+  if (use_cache) {
+    sim.RunFrom(entry);
+  } else {
+    sim.DebugRunFrom(entry);
+  }
   out_state = sim.ReadAll();
+  bool ok = true;
   for (size_t i = 0; i < fx.assert_count; ++i) {
     ok &= CheckAssert(fx, fx.asserts[i], sim, track);
   }
@@ -177,19 +173,102 @@ bool DifferentialEqual(const PortedFixture& fx,
 
 }  // namespace
 
+namespace {
+
+// Emit the optional per-fixture trace (VIXL_PORT_TRACE=1), flushed so it
+// survives an abort mid-fixture — the way a crash/hang is located to its case.
+void TraceFixture(const PortedFixture& fx) {
+  if (std::getenv("VIXL_PORT_TRACE") != nullptr) {
+    std::fprintf(stderr, "[fixture] %s\n", fx.name);
+    std::fflush(stderr);
+  }
+}
+
+}  // namespace
+
 bool RunFixture(const PortedFixture& fx) {
+  TraceFixture(fx);
+
+  std::vector<uint32_t> buf(fx.code, fx.code + fx.code_words);
+  buf.push_back(kBrXzr);
+  const uintptr_t entry = reinterpret_cast<uintptr_t>(buf.data());
+  const size_t size_bytes = buf.size() * sizeof(uint32_t);
+
+  // One stack shared by both tracks so the seeded sp matches (see
+  // RunTrackOnSim).
+  StackBuffer stack;
+  PredecodeCache cache;
+  if (cache.RegisterCodeRange(buf.data(), size_bytes) !=
+      PredecodeCache::RegistrationStatus::Ok) {
+    std::fprintf(stderr,
+                 "[FAIL] %s / cache track: RegisterCodeRange failed\n",
+                 fx.name);
+    return false;
+  }
+  Simulator cache_sim(&cache, stack.data(), stack.size());
+  Simulator decoder_sim(nullptr, stack.data(), stack.size());
+
   RegisterFile cache_state{}, decoder_state{};
-  bool cache_ok = RunOneTrack(fx, /*use_cache=*/true, cache_state, "cache");
-  bool decoder_ok =
-      RunOneTrack(fx, /*use_cache=*/false, decoder_state, "decoder");
+  bool cache_ok =
+      RunTrackOnSim(cache_sim, entry, fx, stack, cache_state, "cache", true);
+  bool decoder_ok = RunTrackOnSim(decoder_sim,
+                                  entry,
+                                  fx,
+                                  stack,
+                                  decoder_state,
+                                  "decoder",
+                                  false);
   bool diff_ok = DifferentialEqual(fx, cache_state, decoder_state);
   return cache_ok && decoder_ok && diff_ok;
 }
 
 void RunAll(const PortedFixture* fixtures, size_t count, RunStats& stats) {
+  // Build every fixture's body buffer up front (kept alive for the cache's
+  // lifetime) and register them all in ONE PredecodeCache, then reuse two
+  // Simulators (and one shared stack) across the whole family. Constructing a
+  // Simulator is ~100ms in a debug build; amortising it this way turns minutes
+  // of setup into milliseconds and scales to the larger FP/NEON families.
+  std::vector<std::vector<uint32_t>> bufs;
+  bufs.reserve(count);
+  PredecodeCache cache;
+  std::vector<bool> registered(count, false);
   for (size_t i = 0; i < count; ++i) {
+    bufs.emplace_back(fixtures[i].code,
+                      fixtures[i].code + fixtures[i].code_words);
+    bufs[i].push_back(kBrXzr);
+    registered[i] =
+        cache.RegisterCodeRange(bufs[i].data(),
+                                bufs[i].size() * sizeof(uint32_t)) ==
+        PredecodeCache::RegistrationStatus::Ok;
+  }
+
+  StackBuffer stack;
+  Simulator cache_sim(&cache, stack.data(), stack.size());
+  Simulator decoder_sim(nullptr, stack.data(), stack.size());
+
+  for (size_t i = 0; i < count; ++i) {
+    const PortedFixture& fx = fixtures[i];
     stats.cases += 1;
-    if (RunFixture(fixtures[i])) {
+    TraceFixture(fx);
+    if (!registered[i]) {
+      std::fprintf(stderr,
+                   "[FAIL] %s / cache track: RegisterCodeRange failed\n",
+                   fx.name);
+      continue;
+    }
+    const uintptr_t entry = reinterpret_cast<uintptr_t>(bufs[i].data());
+    RegisterFile cache_state{}, decoder_state{};
+    bool cache_ok =
+        RunTrackOnSim(cache_sim, entry, fx, stack, cache_state, "cache", true);
+    bool decoder_ok = RunTrackOnSim(decoder_sim,
+                                    entry,
+                                    fx,
+                                    stack,
+                                    decoder_state,
+                                    "decoder",
+                                    false);
+    if (cache_ok && decoder_ok &&
+        DifferentialEqual(fx, cache_state, decoder_state)) {
       stats.passed += 1;
     }
   }

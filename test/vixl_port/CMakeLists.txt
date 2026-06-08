@@ -14,3 +14,7 @@ target_include_directories(vixl_port_integer PRIVATE
   ${PROJECT_SOURCE_DIR}/test)     # embedding_stack.h
 gaby_vm_apply_compile_flags(vixl_port_integer)
 add_test(NAME vixl_port_integer COMMAND vixl_port_integer)
+# Runaway backstop: a regression that broke termination would otherwise hang
+# (the runner uses unbounded RunFrom for speed). CTest turns the overrun into a
+# reported failure instead of a silent CI hang. Generous vs the ~1s normal run.
+set_tests_properties(vixl_port_integer PROPERTIES TIMEOUT 120)

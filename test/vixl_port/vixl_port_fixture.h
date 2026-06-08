@@ -34,9 +34,11 @@ struct AssertTarget {
 };
 
 // One ported test case. `code` points at the body words ONLY; the replay
-// runner appends a terminating RET (0xd65f03c0) so RunFrom stops on the
-// null-LR contract. `entry` is the architectural state at body entry; sp and
-// LR are overridden at replay time (sp -> the replay stack, LR -> null).
+// runner appends a terminating `br xzr` (0xd61f03e0) — a branch to the zero
+// register, i.e. to address 0 (gaby-vm's end-of-sim sentinel). This terminates
+// even when the body clobbered LR, which a trailing RET could not. `entry` is
+// the architectural state at body entry; sp and LR are overridden at replay
+// time (sp -> the replay stack, LR -> null).
 struct PortedFixture {
   const char* name;
   const uint32_t* code;

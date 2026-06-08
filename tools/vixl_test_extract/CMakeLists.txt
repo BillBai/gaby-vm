@@ -45,10 +45,36 @@ set(_vixl_test_srcs
   ${VIXL_SRC_DIR}/test/test-utils.cc
   ${VIXL_SRC_DIR}/test/aarch64/test-utils-aarch64.cc)
 
-# The upstream test bodies under capture. Phase 0 uses a small sample file;
-# Phase 1+ swap in an include-stripped copy of the real upstream .cc.
-set(_capture_test_srcs
-  phase0_sample_tests.cc)
+# The upstream test bodies under capture. Phase 0 uses a small sample file.
+# Phase 1+ point VIXL_EXTRACT_TEST_CC at a real upstream test .cc; the build
+# strips that file's self-include of test-assembler-aarch64.h (which has no
+# include guard, so it cannot be neutralised any other way) and compiles a
+# wrapper that pulls in our capture macros first, then the stripped body.
+set(VIXL_EXTRACT_TEST_CC "" CACHE FILEPATH
+  "Upstream VIXL test .cc to capture (empty = the phase-0 sample)")
+
+if(VIXL_EXTRACT_TEST_CC)
+  if(NOT EXISTS "${VIXL_EXTRACT_TEST_CC}")
+    message(FATAL_ERROR "VIXL_EXTRACT_TEST_CC='${VIXL_EXTRACT_TEST_CC}' not found")
+  endif()
+  get_filename_component(_cc_name "${VIXL_EXTRACT_TEST_CC}" NAME)
+  set(_stripped "${CMAKE_CURRENT_BINARY_DIR}/${_cc_name}")
+  file(READ "${VIXL_EXTRACT_TEST_CC}" _cc_text)
+  string(REPLACE
+    "#include \"test-assembler-aarch64.h\""
+    "/* test-assembler-aarch64.h stripped by gaby-vm vixl_test_extract */"
+    _cc_text "${_cc_text}")
+  file(WRITE "${_stripped}" "${_cc_text}")
+  set(_wrapper "${CMAKE_CURRENT_BINARY_DIR}/capture_${_cc_name}")
+  file(WRITE "${_wrapper}"
+    "// GENERATED: pulls in the capture macros, then the include-stripped body.\n"
+    "#include \"capture_macros.h\"\n"
+    "#include \"${_cc_name}\"\n")
+  set(_capture_test_srcs "${_wrapper}")
+  message(STATUS "vixl_test_extract: capturing ${_cc_name}")
+else()
+  set(_capture_test_srcs phase0_sample_tests.cc)
+endif()
 
 add_executable(vixl_test_extract
   extract_main.cc
@@ -60,6 +86,7 @@ add_executable(vixl_test_extract
 
 target_include_directories(vixl_test_extract PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}
+  ${CMAKE_CURRENT_BINARY_DIR}  # generated stripped .cc + capture wrapper
   ${VIXL_SRC_DIR}/src
   ${VIXL_SRC_DIR}/test
   ${VIXL_SRC_DIR}/test/aarch64)
@@ -81,6 +108,12 @@ set_target_properties(vixl_test_extract PROPERTIES
   CXX_STANDARD 17
   CXX_STANDARD_REQUIRED ON
   CXX_EXTENSIONS OFF)
+
+# Always optimise this tool, even under the Debug preset: it runs the VIXL
+# simulator over ~600 test bodies (some up to the instruction cap), and an
+# unoptimised simulator makes regeneration painfully slow. Optimisation does not
+# affect the captured data — only how fast we capture it.
+target_compile_options(vixl_test_extract PRIVATE -O2)
 
 # Imported VIXL + test sources carry their own warning profile; silence them so
 # the tool's own diagnostics stand out. The tool's own .cc keep default flags.

@@ -51,9 +51,17 @@ struct CapturedCase {
   EntryState entry;
   std::vector<AssertTarget> asserts;
   std::string
-      required_features;    // human-readable, from Simulator::GetSeenFeatures
+      required_features;  // human-readable, from Simulator::GetSeenFeatures
+  // The masm code-buffer host-address range for this case. ASSERT targets whose
+  // expected value lands inside it are host addresses (ADR/ADRP/label/LR),
+  // which do not survive relocation to gaby's load address; the writer drops
+  // those absolute targets and lets the differential oracle cover them (design
+  // §6.1).
+  uint64_t code_lo = 0;
+  uint64_t code_hi = 0;
   int run_count = 0;        // RUN() invocations; >1 means we cannot port it
   int dropped_asserts = 0;  // assert forms we could not turn into a target
+  int address_asserts = 0;  // absolute targets dropped as host addresses
   bool skipped = false;
   std::string skip_reason;
 };

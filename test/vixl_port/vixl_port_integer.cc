@@ -8,15 +8,15 @@
 
 #include "vixl_port_runner.h"
 
-// Phase 0: machine-extracted fixtures (from the VIXL-style sample tests),
-// proving the capture->generate->replay pipeline end-to-end. Replaced by the
-// real integer family include in Phase 1.
-#include "generated/phase0_extracted.inc"
+// Integer/logical/loadstore/branch family, machine-extracted from the upstream
+// test-assembler-aarch64.cc. Regenerate via tools/vixl_test_extract; see the
+// sibling manifest_integer.md for the included/skipped breakdown.
+#include "generated/integer_fixtures.inc"
 
 int main() {
   using namespace gaby_vm::vixl_port;
   size_t count = 0;
-  const PortedFixture* fixtures = Phase0Fixtures(&count);
+  const PortedFixture* fixtures = IntegerFixtures(&count);
 
   RunStats stats;
   RunAll(fixtures, count, stats);

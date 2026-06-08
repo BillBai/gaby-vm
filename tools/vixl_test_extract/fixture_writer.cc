@@ -107,6 +107,27 @@ void FixtureWriter::Add(const CapturedCase& c) {
 }
 
 int FixtureWriter::Finish() {
+  // Drop absolute targets whose expected value is a host address (it lands in
+  // this case's code buffer): ADR/ADRP/label/LR values do not survive
+  // relocation to gaby's load address. The differential oracle still covers the
+  // case. (Most address-producing bodies are already skipped wholesale by the
+  // load/store + PC-rel filter; this catches the residue, e.g.
+  // branch-to-label.)
+  for (CapturedCase& c : included_) {
+    std::vector<AssertTarget> kept;
+    for (const AssertTarget& a : c.asserts) {
+      const bool is_addr = c.code_hi > c.code_lo &&
+                           a.expected_lo >= c.code_lo &&
+                           a.expected_lo < c.code_hi;
+      if (is_addr) {
+        c.address_asserts += 1;
+      } else {
+        kept.push_back(a);
+      }
+    }
+    c.asserts = std::move(kept);
+  }
+
   std::ofstream inc(inc_path_);
   if (!inc) {
     std::fprintf(stderr, "fixture_writer: cannot open %s\n", inc_path_.c_str());
