@@ -17,6 +17,11 @@ option(GABY_VM_BUILD_BENCHMARKS "Build gaby-vm benchmarks" ${PROJECT_IS_TOP_LEVE
 # bench subdirectory, so it also requires GABY_VM_BUILD_BENCHMARKS.
 option(GABY_VM_BUILD_NATIVE_BASELINE
        "Build the dev-only native (host-CPU) workload baseline tools" OFF)
+# Authorship-time only. Builds the VIXL test-extraction tool, which links the
+# reference VIXL (Tier-0) to regenerate the committed vixl_port fixtures. OFF by
+# default and never part of CI/iOS; requires -DVIXL_SRC_DIR=/path/to/vixl.
+option(GABY_VM_BUILD_VIXL_EXTRACT
+       "Build the authorship-time VIXL test extraction tool (needs VIXL_SRC_DIR)" OFF)
 
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/CompileFlags.cmake)
 
@@ -33,4 +38,8 @@ endif()
 
 if(GABY_VM_BUILD_BENCHMARKS)
   add_subdirectory(bench)
+endif()
+
+if(GABY_VM_BUILD_VIXL_EXTRACT)
+  add_subdirectory(tools/vixl_test_extract)
 endif()

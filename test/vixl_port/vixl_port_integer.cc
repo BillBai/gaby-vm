@@ -8,9 +8,10 @@
 
 #include "vixl_port_runner.h"
 
-// Phase 0: hand-authored fixtures. Replaced by the generated include in
-// Phase 1.
-#include "generated/phase0_handwritten.inc"
+// Phase 0: machine-extracted fixtures (from the VIXL-style sample tests),
+// proving the capture->generate->replay pipeline end-to-end. Replaced by the
+// real integer family include in Phase 1.
+#include "generated/phase0_extracted.inc"
 
 int main() {
   using namespace gaby_vm::vixl_port;
