@@ -24,3 +24,4 @@ endfunction()
 
 gaby_vm_add_vixl_port_test(vixl_port_integer vixl_port_integer.cc)
 gaby_vm_add_vixl_port_test(vixl_port_fp vixl_port_fp.cc)
+gaby_vm_add_vixl_port_test(vixl_port_neon vixl_port_neon.cc)
