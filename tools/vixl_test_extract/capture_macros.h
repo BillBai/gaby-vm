@@ -101,9 +101,16 @@ inline void CaptureEntry(vixl::aarch64::CaptureRig& rig) {
 // fixed relative offsets the assembler kept inside the body.
 inline bool IsNonPortableInstr(uint32_t word) {
   // Loads and stores: op1 (bits[28:25]) == x1x0, i.e. bit27 set and bit25
-  // clear. Covers LDR/STR/LDP/STP/LDUR/STUR, exclusives, atomics, CAS and
-  // load-literal.
-  const bool load_store = ((word >> 27) & 1u) && !((word >> 25) & 1u);
+  // clear. Covers LDR/STR/LDP/STP/LDUR/STUR, exclusives, atomics, CAS.
+  bool load_store = ((word >> 27) & 1u) && !((word >> 25) & 1u);
+  // ...but LDR (literal) — bits[29:27]==0b011, bits[25:24]==0b00 — is portable:
+  // END() forces the literal pool into the body slice, so the PC-relative load
+  // travels with the code. Exempt it so FP/constant tests are not all dropped.
+  const bool ldr_literal =
+      ((word >> 27) & 0x7u) == 0x3u && ((word >> 24) & 0x3u) == 0x0u;
+  if (ldr_literal) {
+    load_store = false;
+  }
   // PC-relative addressing (ADR/ADRP): bits[28:24] == 0b10000.
   const bool pc_rel = ((word >> 24) & 0x1fu) == 0x10u;
   // Unconditional branch (register) group: bits[31:25] == 0b1101011.
@@ -287,9 +294,19 @@ inline void RecordNzcv(vixl::aarch64::RegisterDump& core, uint32_t expected) {
   Current().asserts.push_back({AssertKind::kNZCV, 0, expected, 0});
 }
 
-inline void RecordFP32(vixl::aarch64::RegisterDump& core,
-                       float expected,
-                       unsigned code) {
+// FP recorders are templated on the result operand: the upstream
+// ASSERT_EQUAL_FP32/FP64 admit both the "(value, S/D register)" form (the
+// replayable one) and the "(value, value)" form (a plain float/double compare,
+// not a register — dropped). Duck-typing keeps the whole .cc compiling.
+template <class Res>
+void RecordFP32(vixl::aarch64::RegisterDump& core,
+                float expected,
+                const Res& result) {
+  unsigned code = 0;
+  if (!ResultRegCode(result, code)) {
+    Current().dropped_asserts += 1;
+    return;
+  }
   uint32_t bits = vixl::FloatToRawbits(expected);
   if (core.sreg_bits(code) != bits) {
     Current().skipped = true;
@@ -299,9 +316,15 @@ inline void RecordFP32(vixl::aarch64::RegisterDump& core,
       {AssertKind::kFP32, static_cast<uint8_t>(code), bits, 0});
 }
 
-inline void RecordFP64(vixl::aarch64::RegisterDump& core,
-                       double expected,
-                       unsigned code) {
+template <class Res>
+void RecordFP64(vixl::aarch64::RegisterDump& core,
+                double expected,
+                const Res& result) {
+  unsigned code = 0;
+  if (!ResultRegCode(result, code)) {
+    Current().dropped_asserts += 1;
+    return;
+  }
   uint64_t bits = vixl::DoubleToRawbits(expected);
   if (core.dreg_bits(code) != bits) {
     Current().skipped = true;
@@ -311,10 +334,16 @@ inline void RecordFP64(vixl::aarch64::RegisterDump& core,
       {AssertKind::kFP64, static_cast<uint8_t>(code), bits, 0});
 }
 
-inline void RecordV128(vixl::aarch64::RegisterDump& core,
-                       uint64_t expected_hi,
-                       uint64_t expected_lo,
-                       unsigned code) {
+template <class Res>
+void RecordV128(vixl::aarch64::RegisterDump& core,
+                uint64_t expected_hi,
+                uint64_t expected_lo,
+                const Res& result) {
+  unsigned code = 0;
+  if (!ResultRegCode(result, code)) {
+    Current().dropped_asserts += 1;
+    return;
+  }
   vixl::aarch64::QRegisterValue q = core.qreg(code);
   if (q.GetLane<uint64_t>(0) != expected_lo ||
       q.GetLane<uint64_t>(1) != expected_hi) {
@@ -372,10 +401,17 @@ inline void MarkUnsupported(const char* reason) {
 // the zero register = address 0, VIXL's end-of-sim sentinel). This is immune to
 // bodies that clobber LR (e.g. `Mov(x30, ...)`): unlike Ret, it does not read
 // x30. No prologue/epilogue is emitted, so the body slice stays pure.
-#define END()                             \
-  rig_.body_end = masm.GetCursorOffset(); \
-  core.Dump(&masm);                       \
-  masm.Br(xzr);                           \
+// Force any pending literal pool to be emitted INLINE (with a branch over it)
+// while it is still inside the body slice [0, body_end). FP/constant tests load
+// their inputs via LDR-literal from this pool; keeping the pool in the slice
+// makes those loads PC-relative-portable to gaby (the constant data travels
+// with the code), and the emitted branch skips the pool to land on body_end —
+// i.e. the runner's appended terminator. Empty when the body uses no literals.
+#define END()                                                        \
+  masm.EmitLiteralPool(vixl::aarch64::LiteralPool::kBranchRequired); \
+  rig_.body_end = masm.GetCursorOffset();                            \
+  core.Dump(&masm);                                                  \
+  masm.Br(xzr);                                                      \
   masm.FinalizeCode()
 
 #define RUN() ::gaby_vm::extract::HarvestRun(rig_)
@@ -392,14 +428,11 @@ inline void MarkUnsupported(const char* reason) {
 #define ASSERT_EQUAL_NZCV(expected) \
   ::gaby_vm::extract::RecordNzcv(core, (expected))
 #define ASSERT_EQUAL_FP32(expected, result) \
-  ::gaby_vm::extract::RecordFP32(core, (expected), (result).GetCode())
+  ::gaby_vm::extract::RecordFP32(core, (expected), (result))
 #define ASSERT_EQUAL_FP64(expected, result) \
-  ::gaby_vm::extract::RecordFP64(core, (expected), (result).GetCode())
+  ::gaby_vm::extract::RecordFP64(core, (expected), (result))
 #define ASSERT_EQUAL_128(expected_h, expected_l, result) \
-  ::gaby_vm::extract::RecordV128(core,                   \
-                                 (expected_h),           \
-                                 (expected_l),           \
-                                 (result).GetCode())
+  ::gaby_vm::extract::RecordV128(core, (expected_h), (expected_l), (result))
 
 // Forms we do not turn into replayable targets. They must still COMPILE (the
 // whole upstream .cc is one TU), so they expand to a no-op or a skip mark.
