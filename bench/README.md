@@ -10,15 +10,20 @@ touch either execution path (leaf tweaks, cache changes, etc.) compare
 against numbers from this harness, and the same flag picks the mode
 to compare under.
 
-There are two binaries:
+There are three binaries:
 
 - **`bench_baseline`** — drives the upstream-VIXL `BenchCodeGenerator` mixed
-  workload (~64k dynamically executed instructions per `RunFrom`). This is
-  the binary to cite for performance numbers.
+  workload (~64k dynamically executed instructions per `RunFrom`). 68% NEON, so
+  it is a synthetic stress test, not representative of app business logic.
 - **`bench_smoke`** — drives a 32-instruction straight-line workload
   assembled by `llvm-mc`. Completes in milliseconds. Use it to verify the
   harness pipeline (timing loop, output format) end-to-end without paying
   the full mixed-workload run cost.
+- **`bench_business`** — drives a suite of four compiled-C scalar microkernels
+  (`parse`, `hash`, `struct`, `fsm`) that model the iOS hot-fix business-logic
+  scenario (no NEON, no syscall, no external calls). This is the binary to cite
+  for **representative** slowdown-vs-native numbers; see "Business-logic
+  microkernels" below.
 
 Neither binary is registered with CTest — `ctest` is for correctness, not
 performance. Run them directly from the build output directory.
@@ -191,6 +196,71 @@ branch-free smoke workload is the cache's best case (it eliminates the most
 relative dispatch overhead there), so its ratio is the optimistic end; the
 branchy mixed workload is more representative of real code. Read these as
 order-of-magnitude, per *Host hygiene* below.
+
+## Business-logic microkernels (`bench_business` / `native_business`)
+
+`bench_smoke` is too simple (one straight-line ALU shape) and `bench_baseline`
+is 68% NEON, so neither answers "how slow is the interpreter on real iOS
+business logic?". `bench_business` does: four self-contained, scalar microkernels
+that each model a business-logic shape, reported separately so the slowdown
+spread is visible per shape. The companion `native_business` runs the **same
+committed bytes** on the host CPU for the honest denominator.
+
+The four kernels (sources in `bench/workloads/business/<name>.c`):
+
+| Kernel | Shape | Stresses |
+|--------|-------|----------|
+| `parse` | varint/TLV record decode + validate | data-dependent branches, byte loads, wire-type dispatch |
+| `hash` | FNV-1a + avalanche digest | integer ALU dependency chain, branch-light (best case) |
+| `struct` | struct-array transform | offset load/store, pointer arithmetic, mixed branches |
+| `fsm` | state-machine scanner | unpredictable per-byte dispatch (worst case) |
+
+Each kernel is a single relocation-free function (no external calls, no `.rodata`
+tables, all working memory on the stack), so the same bytes run both inside the
+simulator and as the native baseline.
+
+```sh
+cmake --preset dev-release \
+    -DGABY_VM_BUILD_BENCHMARKS=ON -DGABY_VM_BUILD_NATIVE_BASELINE=ON
+cmake --build --preset dev-release --target bench_business native_business
+
+./build/release/bench/bench_business --mode cache   --seconds 2.0   # all kernels
+./build/release/bench/bench_business --mode decoder  --seconds 1.0
+./build/release/bench/bench_business --kernel hash --mode cache       # one kernel
+./build/release/bench/native_business                --seconds 1.0   # host arm64
+./build/release/bench/bench_business --verify                        # correctness gate
+```
+
+`--kernel {all|parse|hash|struct|fsm}` selects a kernel (default `all`). All the
+shared flags (`--mode`, `--seconds`, `--hook`) pass through. `--verify`
+single-steps each kernel on both the cache and decoder tracks, counts dynamic
+instructions, and cross-checks the x0 result across both tracks and the committed
+expected value — run it after any kernel or leaf change.
+
+First measured baseline and its interpretation live in
+[`docs/refs/gaby-vm-business-bench-2026-06-08.md`](../docs/refs/gaby-vm-business-bench-2026-06-08.md).
+Headline: the cache track is a near-constant ~6.5 ns/insn across all four shapes,
+so the slowdown ratio (≈19× hash … ≈211× struct) is set by the *native* side's
+IPC, not by gaby.
+
+### Regenerating the business workload headers
+
+```sh
+sh bench/workloads/business/gen_business_workloads.sh   # compile C -> committed bytes
+cmake --build --preset dev-release --target bench_business
+./build/release/bench/bench_business --verify           # prints Dynamic= / Expected= to patch in
+```
+
+The gen script compiles each `<name>.c` with the self-contained flag set
+(`-O2 -mgeneral-regs-only -fno-jump-tables -fno-builtin -ffreestanding
+-ffixed-x18`), gates on `llvm-objdump -r` reporting **zero relocations** (the
+self-containment invariant), extracts `.text`, and writes
+`<name>_workload_data.h` (bytes +
+static word count + tag only). The per-kernel dynamic instruction count and
+expected x0 need the simulator, so they live in the hand-maintained
+`oracle_data.h`, which the gen script never touches: `--verify` prints the
+current values and you paste any change in by hand. Keeping them out of the
+generated header means a regeneration can never silently reset the oracle.
 
 ## Regenerating `bench/workloads/smoke_workload_data.h`
 

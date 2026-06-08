@@ -57,6 +57,23 @@ target_compile_definitions(bench_baseline PRIVATE
   $<$<CONFIG:Debug>:VIXL_DEBUG>)
 gaby_vm_apply_compile_flags(bench_baseline)
 
+# bench_business — business-logic microkernel suite (parse/hash/struct/fsm).
+# These compiled-C scalar kernels model the iOS hot-fix scenario (business
+# logic, no NEON/syscall/external calls), so their cache-vs-native numbers are
+# the representative slowdown figure that smoke (too simple) and mixed (68%
+# NEON) cannot give. Beyond the shared runner it reaches the gaby_vm public
+# Simulator API directly for its --verify track-equivalence + dynamic-count
+# pass, which rides in transitively through bench_runner's PUBLIC gaby_vm link.
+# Not registered with CTest (benchmarks stay out of the correctness suite).
+add_executable(bench_business business.cc)
+target_link_libraries(bench_business PRIVATE bench_runner)
+target_include_directories(bench_business PRIVATE ${PROJECT_SOURCE_DIR}/Sources/gaby_vm/src)
+target_compile_definitions(bench_business PRIVATE
+  VIXL_INCLUDE_TARGET_A64
+  VIXL_INCLUDE_SIMULATOR_AARCH64
+  $<$<CONFIG:Debug>:VIXL_DEBUG>)
+gaby_vm_apply_compile_flags(bench_business)
+
 # native_smoke / native_baseline — dev-only "relative to native" reference.
 # They copy the SAME committed workload bytes (smoke / mixed) into executable
 # memory and run them directly on the host CPU, so decoder- and cache-mode
@@ -88,11 +105,22 @@ if(GABY_VM_BUILD_NATIVE_BASELINE)
     target_link_libraries(native_baseline PRIVATE native_runner)
     gaby_vm_apply_compile_flags(native_baseline)
 
+    # native_business — host-CPU baseline for the business-logic microkernels.
+    # The honest denominator for the slowdown figure: same committed kernel
+    # bytes, run directly on the host. Needs the gaby_vm headers only for the
+    # committed workload arrays (header-only), so like the other native tools it
+    # does NOT link gaby_vm — but it does need the include path to reach
+    # bench/workloads/business/*.h via the bench source dir (already the include
+    # root for native_*.cc).
+    add_executable(native_business native_business.cc)
+    target_link_libraries(native_business PRIVATE native_runner)
+    gaby_vm_apply_compile_flags(native_business)
+
     if(APPLE)
       # Apple Silicon executes MAP_JIT pages only for a process carrying the
       # allow-jit entitlement. Adhoc-sign each tool post-build with it; see
       # native_jit.entitlements.
-      foreach(_tgt native_smoke native_baseline)
+      foreach(_tgt native_smoke native_baseline native_business)
         add_custom_command(TARGET ${_tgt} POST_BUILD
           COMMAND codesign -s - --entitlements
                   "${CMAKE_CURRENT_SOURCE_DIR}/native_jit.entitlements" -f
