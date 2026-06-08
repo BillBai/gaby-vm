@@ -135,3 +135,8 @@ target_link_libraries(branch_hook_reentrancy_test PRIVATE gaby_vm::gaby_vm)
 gaby_vm_apply_compile_flags(branch_hook_reentrancy_test)
 
 add_test(NAME branch_hook_reentrancy COMMAND branch_hook_reentrancy_test)
+
+# Ported VIXL simulator tests: the replay side of the authorship-time test
+# port (docs/refs/gaby-vm-vixl-sim-test-port-*). Self-contained — no ../vixl,
+# no privileged build — it replays committed fixtures under vixl_port/generated.
+add_subdirectory(vixl_port)

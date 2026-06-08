@@ -33,9 +33,10 @@ struct AssertTarget {
   uint64_t expected_hi;  // only meaningful for kV128
 };
 
-// One ported test case. `code` points at body words followed by a trailing
-// RET (0xd65f03c0) so RunFrom terminates on the null-LR contract. `entry` is
-// the architectural state at body entry (sp/LR are overridden at replay).
+// One ported test case. `code` points at the body words ONLY; the replay
+// runner appends a terminating RET (0xd65f03c0) so RunFrom stops on the
+// null-LR contract. `entry` is the architectural state at body entry; sp and
+// LR are overridden at replay time (sp -> the replay stack, LR -> null).
 struct PortedFixture {
   const char* name;
   const uint32_t* code;
