@@ -41,6 +41,77 @@ the public API don't need that privilege.
   trailing `RET` to a NULL link register, relying on the
   `LR == kEndOfSimAddress` invariant established by
   `Simulator::ResetRegisters`.
+- `vixl_port_integer` / `vixl_port_fp` / `vixl_port_neon` — the broad
+  correctness guard rail, machine-ported from VIXL's own
+  `test-assembler-{aarch64,fp-aarch64,neon-aarch64}.cc`. Far wider coverage
+  than `simulator_correctness` (hundreds of instruction forms). See
+  [Ported VIXL tests](#ported-vixl-tests-vixl_port) below.
+
+## Ported VIXL tests (`vixl_port`)
+
+`test/vixl_port/` holds a large correctness guard rail ported from VIXL's own
+execution test suite, built specifically to catch regressions in the shared
+execution hot path before the dispatch / operand-predecode performance work.
+Design and plan:
+[`refs/gaby-vm-vixl-sim-test-port-design-2026-06-08.md`](refs/gaby-vm-vixl-sim-test-port-design-2026-06-08.md)
+and the sibling `-plan-`.
+
+It is split into two halves:
+
+- **Authorship-time extraction tool** — `tools/vixl_test_extract/`. Links the
+  reference VIXL (`../vixl`) MacroAssembler + Simulator and, via macro
+  redefinition, captures each upstream `TEST()` body into a fixture: the body
+  instruction words, the entry register state, and the `ASSERT_EQUAL_*`
+  targets. Built **only** behind `-DGABY_VM_BUILD_VIXL_EXTRACT=ON`
+  `-DVIXL_SRC_DIR=…`; it is never part of the shipping build (no Tier-0 in
+  CI/iOS). Each captured body is self-verified against the *real* VIXL
+  simulator before export, so a wrong expectation can never be committed.
+- **Shipping replay harness** — `test/vixl_port/vixl_port_runner.*` plus the
+  three CTest mains. Consumes only the committed `generated/*.inc` fixtures and
+  the gaby_vm public API. Each fixture is replayed on **both** tracks (cache via
+  `RunFrom`, decoder via `DebugRunFrom`) under two oracles: a **differential**
+  oracle (the two tracks' full `RegisterFile` must match — this is what catches
+  a cache-track regression) and an **absolute** oracle (every harvested
+  `ASSERT_EQUAL_*` target must hold). The committed fixtures make `ctest`
+  completely self-contained: no `../vixl`, no assembler, no extraction tool.
+
+### Refreshing the fixtures
+
+The `generated/*.inc` files and their `manifest_<family>.md` reports are
+committed. Regenerate them (e.g. after a VIXL upgrade, or to widen coverage)
+with, per family:
+
+```sh
+cmake --preset dev-debug -DGABY_VM_BUILD_VIXL_EXTRACT=ON \
+  -DVIXL_SRC_DIR=$PWD/../vixl \
+  -DVIXL_EXTRACT_TEST_CC=$PWD/../vixl/test/aarch64/test-assembler-aarch64.cc
+cmake --build build/debug --target vixl_test_extract
+./build/debug/tools/vixl_test_extract/vixl_test_extract \
+  test/vixl_port/generated/integer_fixtures.inc Integer
+```
+
+Repeat with `test-assembler-fp-aarch64.cc` → `fp_fixtures.inc Fp` and
+`test-assembler-neon-aarch64.cc` → `neon_fixtures.inc Neon`.
+
+### What gets dropped, and why (the manifest)
+
+Many upstream tests are not portable to a relocated, different-process replay
+and are excluded — but never silently: `manifest_<family>.md` lists every
+skipped test with a reason. The filters are structural (robust to opcode detail
+and VIXL upgrades):
+
+- **load/store, ADR/ADRP, register-indirect branch, SYS/SYSL** — bake host
+  memory/addresses or branch to a host-derived target, which would fault or
+  diverge on gaby's load address (`LDR`-literal is exempted: the literal pool is
+  forced inline so it travels PC-relative with the body).
+- **feature-deny** — MTE / PAuth / GCS / HBC / BF16 / TME / WFXT (gaby cannot
+  execute them, or their results are key/modifier/host-address dependent).
+- **name-quarantine** — simulator-runtime / system bodies (printf, runtime
+  calls, branch interception, MOPS, …).
+- **multi-RUN** — tests that drive several SETUP/RUN cycles via a helper called
+  in a loop do not fit the single-case fixture model.
+- **oversized / non-terminating bodies** — far-branch padding and large guest
+  loops are capped (a poor guard-rail fixture and slow to replay).
 
 ## Encoding policy
 
