@@ -59,6 +59,7 @@ Traps, unsupported instructions, syscall-like instructions, or simulated faults 
 
 - Study `../vixl` before changing related code.
 - Prioritize correctness first, then interpreter execution speed. Structural changes are acceptable when they clearly serve performance or standalone maintainability.
+- Guard rail before *and* after touching the shared execution hot path — decode/dispatch, the predecode cache, or imported VIXL leaf semantics — run the ported VIXL correctness suite and keep it green: `ctest --test-dir build/debug -R vixl_port` (self-contained, no `../vixl` needed). It replays hundreds of upstream VIXL `TEST()` bodies on both tracks under a differential oracle (cache track vs decoder track) plus an absolute oracle, and exists specifically to catch a regression introduced by the predecode/dispatch optimization. Don't land perf changes on a red or un-run suite. To widen coverage or after a VIXL upgrade, regenerate the committed fixtures (the extraction tool is dev-only, behind `-DGABY_VM_BUILD_VIXL_EXTRACT=ON`). Details: [`docs/testing.md`](docs/testing.md#ported-vixl-tests-vixl_port).
 - Do not blindly import the entire VIXL repository. Stay within the import tiers defined in [`docs/refs/vixl-extraction-map.md`](docs/refs/vixl-extraction-map.md).
 - Do not invent a new IR.
 - Do not add JIT assumptions: no runtime code generation, no RWX memory, no executable memory allocation. Predecoded data is ordinary data.
@@ -76,7 +77,7 @@ Durable conventions and design facts live in `docs/`. Read these before proposin
 - Architecture, memory model, threading model, VIXL import boundary → [`docs/architecture.md`](docs/architecture.md)
 - Internal build structure (targets, warning-policy split, VIXL define scoping) → [`docs/build.md`](docs/build.md)
 - Coding conventions (formatting, namespaces, license headers, marker convention) → [`docs/conventions.md`](docs/conventions.md)
-- Testing strategy (CTest layout, encoding policy) → [`docs/testing.md`](docs/testing.md)
+- Testing strategy (CTest layout, the ported VIXL correctness guard rail, encoding policy) → [`docs/testing.md`](docs/testing.md)
 - VIXL import tier list → [`docs/refs/vixl-extraction-map.md`](docs/refs/vixl-extraction-map.md)
 - Capability requirements (normative) → [`openspec/specs/`](openspec/specs/)
 - User-facing build and embedding instructions → [`README.md`](README.md)
