@@ -19,11 +19,12 @@ There are three binaries:
   assembled by `llvm-mc`. Completes in milliseconds. Use it to verify the
   harness pipeline (timing loop, output format) end-to-end without paying
   the full mixed-workload run cost.
-- **`bench_business`** — drives a suite of four compiled-C scalar microkernels
-  (`parse`, `hash`, `struct`, `fsm`) that model the iOS hot-fix business-logic
-  scenario (no NEON, no syscall, no external calls). This is the binary to cite
-  for **representative** slowdown-vs-native numbers; see "Business-logic
-  microkernels" below.
+- **`bench_business`** — drives a suite of five compiled-C microkernels
+  (`parse`, `hash`, `struct`, `fsm` — pure scalar integer — plus `applogic`,
+  which adds ~9% FP/NEON for the CGFloat-style layout shape real iOS code carries)
+  that model the iOS hot-fix business-logic scenario (no syscall, no external
+  calls). This is the binary to cite for **representative** slowdown-vs-native
+  numbers; see "Business-logic microkernels" below.
 
 Neither binary is registered with CTest — `ctest` is for correctness, not
 performance. Run them directly from the build output directory.
@@ -201,12 +202,12 @@ order-of-magnitude, per *Host hygiene* below.
 
 `bench_smoke` is too simple (one straight-line ALU shape) and `bench_baseline`
 is 68% NEON, so neither answers "how slow is the interpreter on real iOS
-business logic?". `bench_business` does: four self-contained, scalar microkernels
-that each model a business-logic shape, reported separately so the slowdown
-spread is visible per shape. The companion `native_business` runs the **same
-committed bytes** on the host CPU for the honest denominator.
+business logic?". `bench_business` does: five self-contained microkernels that
+each model a business-logic shape, reported separately so the slowdown spread is
+visible per shape. The companion `native_business` runs the **same committed
+bytes** on the host CPU for the honest denominator.
 
-The four kernels (sources in `bench/workloads/business/<name>.c`):
+The five kernels (sources in `bench/workloads/business/<name>.c`):
 
 | Kernel | Shape | Stresses |
 |--------|-------|----------|
@@ -214,6 +215,16 @@ The four kernels (sources in `bench/workloads/business/<name>.c`):
 | `hash` | FNV-1a + avalanche digest | integer ALU dependency chain, branch-light (best case) |
 | `struct` | struct-array transform | offset load/store, pointer arithmetic, mixed branches |
 | `fsm` | state-machine scanner | unpredictable per-byte dispatch (worst case) |
+| `applogic` | mixed UI-element layout + process | integer business logic **plus ~9% scalar-double FP (CGFloat geometry) + a little NEON** — the only FP/NEON kernel |
+
+The first four are pure scalar integer (`-mgeneral-regs-only`). `applogic` is the
+representative *mixed* kernel: real iOS business logic that touches layout or
+geometry is scalar `double` FP (CGFloat == double), with a little simd NEON, so a
+pure-integer suite understates it. It is compiled **without**
+`-mgeneral-regs-only` (and with `-fno-math-errno`, so `sqrt` stays an `fsqrt`
+instruction instead of a `bl sqrt` libcall). Every FP/NEON constant it uses is
+`fmov`-encodable, so nothing lands in a `.rodata` literal pool — keeping the
+extracted `.text` relocation-free like the others.
 
 Each kernel is a single relocation-free function (no external calls, no `.rodata`
 tables, all working memory on the stack), so the same bytes run both inside the
@@ -231,17 +242,22 @@ cmake --build --preset dev-release --target bench_business native_business
 ./build/release/bench/bench_business --verify                        # correctness gate
 ```
 
-`--kernel {all|parse|hash|struct|fsm}` selects a kernel (default `all`). All the
-shared flags (`--mode`, `--seconds`, `--hook`) pass through. `--verify`
+`--kernel {all|parse|hash|struct|fsm|applogic}` selects a kernel (default `all`).
+All the shared flags (`--mode`, `--seconds`, `--hook`) pass through. `--verify`
 single-steps each kernel on both the cache and decoder tracks, counts dynamic
 instructions, and cross-checks the x0 result across both tracks and the committed
 expected value — run it after any kernel or leaf change.
 
 First measured baseline and its interpretation live in
-[`docs/refs/gaby-vm-business-bench-2026-06-08.md`](../docs/refs/gaby-vm-business-bench-2026-06-08.md).
-Headline: the cache track is a near-constant ~6.5 ns/insn across all four shapes,
-so the slowdown ratio (≈19× hash … ≈211× struct) is set by the *native* side's
-IPC, not by gaby.
+[`docs/refs/gaby-vm-business-bench-2026-06-08.md`](../docs/refs/gaby-vm-business-bench-2026-06-08.md);
+the `applogic` (FP/NEON) addition and what it changed live in
+[`docs/refs/gaby-vm-business-bench-applogic-2026-06-09.md`](../docs/refs/gaby-vm-business-bench-applogic-2026-06-09.md).
+Headline: the cache track is a near-constant ~6.5 ns/insn across the four **scalar**
+shapes (so their slowdown, ≈19× hash … ≈210× struct, is set by the *native*
+side's IPC, not by gaby) — but `applogic` breaks that flat line at ~10 ns/insn:
+VIXL's FP/NEON leaves cost more per instruction than the integer ones, which (with
+native running this shape fast) makes the representative FP-carrying case the
+worst at ≈330×.
 
 ### Regenerating the business workload headers
 

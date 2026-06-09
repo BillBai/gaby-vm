@@ -44,6 +44,13 @@ inline constexpr std::uint64_t kFsmWorkloadDynamicInstructionsPerIteration =
 inline constexpr std::uint64_t kFsmWorkloadExpectedResult =
     0x72279a557be93af8ull;
 
+// Captured by `bench_business --verify` (cache and decoder tracks agree on
+// both, so the FP/NEON leaf semantics match between the two execution paths).
+inline constexpr std::uint64_t
+    kApplogicWorkloadDynamicInstructionsPerIteration = 101532;
+inline constexpr std::uint64_t kApplogicWorkloadExpectedResult =
+    0x00000414d717d726ull;
+
 }  // namespace gaby_vm_bench
 
 #endif  // GABY_VM_BENCH_WORKLOADS_BUSINESS_ORACLE_DATA_H_

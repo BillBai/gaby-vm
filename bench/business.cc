@@ -28,6 +28,7 @@
 #include "gaby_vm/registers.h"
 #include "gaby_vm/simulator.h"
 #include "runner.h"
+#include "workloads/business/applogic_workload_data.h"
 #include "workloads/business/fsm_workload_data.h"
 #include "workloads/business/hash_workload_data.h"
 #include "workloads/business/oracle_data.h"
@@ -79,6 +80,15 @@ constexpr Kernel kKernels[] = {
      gaby_vm_bench::kFsmWorkloadStaticWordCount,
      gaby_vm_bench::kFsmWorkloadDynamicInstructionsPerIteration,
      gaby_vm_bench::kFsmWorkloadExpectedResult},
+    {"applogic",
+     "Mixed app-logic kernel: integer business logic + scalar-double-FP layout "
+     "geometry + a little NEON. The only FP/NEON kernel — models the real iOS "
+     "instruction mix (CGFloat geometry is double FP) the scalar four omit.",
+     gaby_vm_bench::kApplogicWorkloadGeneratorTag,
+     gaby_vm_bench::kApplogicWorkloadInstructions,
+     gaby_vm_bench::kApplogicWorkloadStaticWordCount,
+     gaby_vm_bench::kApplogicWorkloadDynamicInstructionsPerIteration,
+     gaby_vm_bench::kApplogicWorkloadExpectedResult},
 };
 
 constexpr std::size_t kKernelCount = sizeof(kKernels) / sizeof(kKernels[0]);
@@ -167,11 +177,11 @@ bool VerifyKernel(const Kernel& k) {
 
 void PrintUsage(const char* prog) {
   std::printf(
-      "Usage: %s [--kernel {all|parse|hash|struct|fsm}] [--verify]\n"
+      "Usage: %s [--kernel {all|parse|hash|struct|fsm|applogic}] [--verify]\n"
       "          [--mode {decoder|cache}] [--hook {none|null|identity}]\n"
       "          [--seconds <float>] [--help|-h]\n"
       "\n"
-      "Business-logic microkernel suite. Without --kernel, runs all four.\n"
+      "Business-logic microkernel suite. Without --kernel, runs all five.\n"
       "--verify single-steps each kernel on both tracks, counts dynamic\n"
       "instructions, and cross-checks the x0 result (cache vs decoder vs\n"
       "committed expected). All other flags pass through to the shared\n"
@@ -213,7 +223,8 @@ int main(int argc, char* argv[]) {
   const bool all = std::strcmp(selected, "all") == 0;
   if (!all && FindKernel(selected) == nullptr) {
     std::fprintf(stderr,
-                 "unknown kernel: %s (expected all|parse|hash|struct|fsm)\n",
+                 "unknown kernel: %s (expected "
+                 "all|parse|hash|struct|fsm|applogic)\n",
                  selected);
     return 2;
   }

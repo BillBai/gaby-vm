@@ -41,10 +41,23 @@ CLANG="$LLVM/clang"
 OBJCOPY="$LLVM/llvm-objcopy"
 OBJDUMP="$LLVM/llvm-objdump"
 
-CFLAGS="--target=aarch64-linux-gnu -O2 -mgeneral-regs-only -fno-jump-tables \
+# Shared flags for every kernel (the self-containment contract).
+CFLAGS_COMMON="--target=aarch64-linux-gnu -O2 -fno-jump-tables \
         -fno-builtin -ffreestanding -fno-asynchronous-unwind-tables -ffixed-x18"
 
-KERNELS="parse hash struct fsm"
+# The first four kernels are pure scalar integer, so they add -mgeneral-regs-only
+# to hard-guarantee NO NEON/FP. `applogic` is the representative MIXED kernel: it
+# deliberately keeps FP + NEON (real iOS business logic touches layout/geometry,
+# which is scalar double FP, plus a little simd NEON), so it drops
+# -mgeneral-regs-only and adds -fno-math-errno. The latter is load-bearing:
+# without it __builtin_sqrt lowers to a `bl sqrt` libcall — an external
+# relocation that fails the self-containment gate below — instead of a single
+# `fsqrt` instruction. Every FP/NEON constant in applogic.c is fmov-encodable, so
+# nothing lands in a .rodata literal pool (which would also be a relocation).
+CFLAGS_SCALAR="-mgeneral-regs-only"
+CFLAGS_MIXED="-fno-math-errno"
+
+KERNELS="parse hash struct fsm applogic"
 
 CLANG_VERSION="$("$CLANG" --version | head -1 | sed 's/ *$//')"
 
@@ -55,8 +68,19 @@ for k in $KERNELS; do
   hdr="$HERE/${k}_workload_data.h"
 
   echo "=== $k ==="
+  # Per-kernel flags + a flag-provenance string for the generator tag.
+  case "$k" in
+    applogic)
+      kflags="$CFLAGS_COMMON $CFLAGS_MIXED"
+      flagtag="O2/fp+neon/no-jump-tables"
+      ;;
+    *)
+      kflags="$CFLAGS_COMMON $CFLAGS_SCALAR"
+      flagtag="O2/general-regs-only/no-jump-tables"
+      ;;
+  esac
   # shellcheck disable=SC2086
-  "$CLANG" $CFLAGS -c "$src" -o "$obj"
+  "$CLANG" $kflags -c "$src" -o "$obj"
 
   # Self-containment gate: any relocation means an external/global reference
   # (a libcall, a .rodata table) that would not survive .text extraction.
@@ -96,8 +120,8 @@ for k in $KERNELS; do
     printf 'inline constexpr std::size_t k%sWorkloadStaticWordCount =\n' "$cap"
     printf '    sizeof(k%sWorkloadInstructions) / sizeof(k%sWorkloadInstructions[0]);\n\n' "$cap" "$cap"
     printf 'inline constexpr char k%sWorkloadGeneratorTag[] =\n' "$cap"
-    printf '    "%s; flags=O2/general-regs-only/no-jump-tables; source_sha256=%s";\n\n' \
-      "$CLANG_VERSION" "$sha"
+    printf '    "%s; flags=%s; source_sha256=%s";\n\n' \
+      "$CLANG_VERSION" "$flagtag" "$sha"
     printf '}  // namespace gaby_vm_bench\n\n'
     printf '#endif\n'
   } > "$hdr"

@@ -18,6 +18,7 @@
 #include <vector>
 
 #include "native_runner.h"
+#include "workloads/business/applogic_workload_data.h"
 #include "workloads/business/fsm_workload_data.h"
 #include "workloads/business/hash_workload_data.h"
 #include "workloads/business/oracle_data.h"
@@ -60,6 +61,13 @@ constexpr Kernel kKernels[] = {
      gaby_vm_bench::kFsmWorkloadInstructions,
      gaby_vm_bench::kFsmWorkloadStaticWordCount,
      gaby_vm_bench::kFsmWorkloadDynamicInstructionsPerIteration},
+    {"applogic",
+     "Execute the mixed app-logic (FP+NEON) microkernel natively on the host "
+     "arm64 CPU.",
+     gaby_vm_bench::kApplogicWorkloadGeneratorTag,
+     gaby_vm_bench::kApplogicWorkloadInstructions,
+     gaby_vm_bench::kApplogicWorkloadStaticWordCount,
+     gaby_vm_bench::kApplogicWorkloadDynamicInstructionsPerIteration},
 };
 
 constexpr std::size_t kKernelCount = sizeof(kKernels) / sizeof(kKernels[0]);
@@ -95,7 +103,8 @@ int main(int argc, char* argv[]) {
   const bool all = std::strcmp(selected, "all") == 0;
   if (!all && !KnownKernel(selected)) {
     std::fprintf(stderr,
-                 "unknown kernel: %s (expected all|parse|hash|struct|fsm)\n",
+                 "unknown kernel: %s (expected "
+                 "all|parse|hash|struct|fsm|applogic)\n",
                  selected);
     return 2;
   }
