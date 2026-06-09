@@ -69,6 +69,7 @@ Traps, unsupported instructions, syscall-like instructions, or simulated faults 
 - Keep iOS/macOS/POSIX portability in mind. Avoid platform assumptions that would make iOS embedding difficult.
 - Preserve upstream license headers; never rewrite VIXL copyrights.
 - Optimize with measurements, but do not avoid necessary architectural changes merely to keep patches small.
+- Measure perf with the benchmark harness, don't eyeball it: `bench/` holds developer-invoked benchmarks (run directly, not via `ctest`, which is for correctness). The representative slowdown-vs-native number is `bench_business` — five iOS-business-logic microkernels (`parse`/`hash`/`struct`/`fsm` scalar + `applogic`, the only FP/NEON one) — run `--mode cache` against `--mode decoder` and the `native_business` host-CPU baseline, reported per shape. Build behind `-DGABY_VM_BUILD_BENCHMARKS=ON` (add `-DGABY_VM_BUILD_NATIVE_BASELINE=ON` for the native denominator; arm64 host only). Run `bench_business --verify` (cache==decoder bit-check) after any leaf or kernel change, and quote a before/after from this harness when a change targets execution speed. Details: [`bench/README.md`](bench/README.md).
 
 ## References
 
@@ -78,6 +79,7 @@ Durable conventions and design facts live in `docs/`. Read these before proposin
 - Internal build structure (targets, warning-policy split, VIXL define scoping) → [`docs/build.md`](docs/build.md)
 - Coding conventions (formatting, namespaces, license headers, marker convention) → [`docs/conventions.md`](docs/conventions.md)
 - Testing strategy (CTest layout, the ported VIXL correctness guard rail, encoding policy) → [`docs/testing.md`](docs/testing.md)
+- Performance measurement (benchmark harness, slowdown-vs-native methodology, the business-logic microkernels) → [`bench/README.md`](bench/README.md)
 - VIXL import tier list → [`docs/refs/vixl-extraction-map.md`](docs/refs/vixl-extraction-map.md)
 - Capability requirements (normative) → [`openspec/specs/`](openspec/specs/)
 - User-facing build and embedding instructions → [`README.md`](README.md)
