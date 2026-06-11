@@ -96,6 +96,24 @@ Do not import these unless a downstream need appears. Rationale:
 Gaby-VM is a *consumer* of pre-existing instruction bytes; it does not
 generate code.
 
+> **Pinned import SHA — `160c445`** (`../vixl` HEAD, 2026-05-14, "Port build
+> and tests to macOS (arm64)"). The imported Tier 1–3 files above were taken
+> at this commit, and a **test-only copy** of selected Tier 0 assembler files
+> (see [`gaby-vm-vixl-port-live-assemble-rewrite-2026-06-09.md`](./gaby-vm-vixl-port-live-assemble-rewrite-2026-06-09.md))
+> is pinned to the *same* SHA. That copy lives under
+> **`test/test_support/vixl_asm/`** — it is used by the `vixl_port` suite to
+> live-assemble upstream VIXL test bodies — and is **excluded from `gaby_vm`**:
+> it compiles into a `gaby_vm_vixl_asm_testonly` library (no `::` alias,
+> PRIVATE-linked, gated on `GABY_VM_BUILD_TESTS`) that is never part of the
+> shipping build. No Tier 0 file appears under `Sources/gaby_vm/src/`. This pin
+> is load-bearing, not bookkeeping: the
+> copied assembler `.cc` files are written against upstream headers but compile
+> against gaby's hand-edited leaf headers (e.g. the constexpr-inline
+> `VectorFormat` helpers), so a SHA skew between the two halves could trigger a
+> **no-diagnostic inline-body ODR** — it would link clean and misbehave at
+> runtime. Re-sync both halves together (`git -C ../vixl checkout <new-sha>`,
+> re-copy, update this line) on any future VIXL upgrade.
+
 ### Code-generation (assembler, macro-assembler, code buffer, pools)
 
 - `src/aarch64/assembler-aarch64.h` / `.cc`

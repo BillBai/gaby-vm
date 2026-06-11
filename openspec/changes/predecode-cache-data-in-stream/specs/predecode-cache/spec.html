@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Predecode Cache · Delta Spec</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+SC:wght@400;500;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css" id="hljs-light">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css" id="hljs-dark" disabled>
+<style>
+  :root{--bg:#fbfbfa;--surface:#ffffff;--ink:#1f2328;--ink-soft:#57606a;--line:#e6e8eb;--accent:#2f6feb;--accent-soft:#ddeaff;--add:#1f883d;--add-bg:#eaf6ee;--info:#2f6feb;--info-bg:#eaf2ff;--warn:#9a6700;--warn-bg:#fff8e6;--code-bg:#f6f8fa;--radius:10px;--maxw:860px;--sidew:280px;--mono:"JetBrains Mono",ui-monospace,Menlo,Consolas,monospace;--sans:"Inter","Noto Sans SC",system-ui,-apple-system,"PingFang SC","Microsoft YaHei",sans-serif}
+  html[data-theme="dark"]{--bg:#0d1117;--surface:#161b22;--ink:#e6edf3;--ink-soft:#9198a1;--line:#30363d;--accent:#4f8cf7;--accent-soft:#16304f;--add:#3fb950;--add-bg:#11271a;--info:#4f8cf7;--info-bg:#0f2238;--warn:#d29922;--warn-bg:#2a210a;--code-bg:#161b22}
+  *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);line-height:1.7;font-size:16px;-webkit-font-smoothing:antialiased}
+  a{color:var(--accent);text-decoration:none}a:hover{text-decoration:underline}
+  code{font-family:var(--mono);font-size:.88em;background:var(--code-bg);padding:.12em .4em;border-radius:5px}
+  pre{background:var(--code-bg);border:1px solid var(--line);border-radius:var(--radius);padding:14px 16px;overflow:auto}pre code{background:none;padding:0;font-size:.85em;line-height:1.6}
+  .topbar{position:sticky;top:0;z-index:20;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 20px;background:color-mix(in srgb,var(--surface) 88%,transparent);backdrop-filter:saturate(1.4) blur(8px);border-bottom:1px solid var(--line)}
+  .brand{font-weight:700;letter-spacing:.02em;font-size:14px}.brand .dot{color:var(--accent)}
+  .theme-btn{cursor:pointer;border:1px solid var(--line);background:var(--surface);color:var(--ink-soft);border-radius:8px;padding:6px 10px;font-size:13px;font-family:var(--sans)}.theme-btn:hover{color:var(--ink);border-color:var(--accent)}
+  .wrap{display:grid;grid-template-columns:var(--sidew) minmax(0,1fr);gap:0;max-width:1240px;margin:0 auto}
+  .sidebar{position:sticky;top:53px;align-self:start;height:calc(100vh - 53px);overflow:auto;padding:24px 16px 40px;border-right:1px solid var(--line)}
+  .sidebar h3{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-soft);margin:0 0 10px 8px}
+  .toc{list-style:none;margin:0;padding:0}.toc li{margin:1px 0}.toc a{display:block;padding:6px 10px;border-radius:7px;color:var(--ink-soft);font-size:14px;border-left:2px solid transparent}.toc a:hover{background:var(--surface);color:var(--ink);text-decoration:none}.toc a.active{color:var(--ink);background:var(--accent-soft);border-left-color:var(--accent);font-weight:600}
+  .main{padding:36px clamp(20px,4vw,56px) 120px;min-width:0}.content{max-width:var(--maxw);margin:0 auto}
+  header.doc{margin-bottom:28px}.doc h1{font-size:30px;line-height:1.25;margin:.1em 0 .3em}.oneliner{font-size:17px;color:var(--ink-soft);margin:0 0 14px}.meta{display:flex;flex-wrap:wrap;gap:8px}.chip{font-size:12px;color:var(--ink-soft);background:var(--surface);border:1px solid var(--line);border-radius:999px;padding:3px 10px;font-family:var(--mono)}
+  .keypoints{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:18px 22px;margin:0 0 34px;border-left:4px solid var(--accent)}
+  .keypoints h2{font-size:14px;text-transform:uppercase;letter-spacing:.06em;color:var(--accent);margin:0 0 12px}.keypoints ol{margin:0;padding-left:1.2em}.keypoints li{margin:7px 0;font-weight:500}
+  .sec{padding-top:14px;margin-bottom:30px;scroll-margin-top:64px}.sec h2{font-size:22px;margin:.2em 0 .15em;padding-bottom:6px;border-bottom:1px solid var(--line)}.sec h3{font-size:17px;margin:1.2em 0 .3em}.sec h4{font-size:15px;margin:1em 0 .2em;color:var(--ink-soft)}.sec-summary{color:var(--ink-soft);font-size:14px;margin:.2em 0 1em;font-style:italic}
+  .callout{border-radius:var(--radius);padding:12px 16px;margin:14px 0;border:1px solid var(--line);font-size:15px}.callout .tag{display:inline-block;font-size:11px;font-weight:700;font-family:var(--mono);padding:1px 7px;border-radius:6px;margin-right:8px;vertical-align:1px}
+  .callout.warn{background:var(--warn-bg)}.callout.warn .tag{background:var(--warn);color:#fff}
+  details.src{border:1px solid var(--line);border-radius:var(--radius);margin:14px 0;background:transparent;border-style:dashed}
+  details summary{cursor:pointer;padding:10px 14px;font-size:13px;font-weight:500;color:var(--ink-soft);font-family:var(--mono);list-style:none}details summary::-webkit-details-marker{display:none}details summary::before{content:"▸";display:inline-block;margin-right:8px;color:var(--accent)}details[open] summary::before{transform:rotate(90deg)}details.src pre{margin:0 16px 14px;white-space:pre-wrap}
+  .scenario{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:14px 18px;margin:12px 0}
+  .scenario h4{margin:0 0 8px;font-size:15px;color:var(--ink)}
+  .scenario ul{margin:0;padding-left:1.2em}.scenario li{margin:4px 0;font-size:15px}
+  .mermaid{margin:18px 0;text-align:center}ul{margin:.5em 0;padding-left:1.4em}li{margin:.3em 0}
+  @media (max-width:880px){.wrap{grid-template-columns:1fr}.sidebar{display:none}}
+</style>
+</head>
+<body>
+  <div class="topbar">
+    <span class="brand">BBA<span class="dot">·</span>doc-visualizer</span>
+    <button class="theme-btn" id="themeBtn">◐ 主题</button>
+  </div>
+  <div class="wrap">
+    <nav class="sidebar">
+      <h3>目录</h3>
+      <ul class="toc" id="toc">
+        <li><a href="#sec-mod" title="放宽 all-or-nothing；不再返回 UnsupportedFeature">MODIFIED</a></li>
+        <li><a href="#sec-mod-scenarios" title="overlap / size / all-or-nothing / UnsupportedFeature">MODIFIED Scenarios</a></li>
+        <li><a href="#sec-add" title="data-in-stream 容忍">ADDED</a></li>
+        <li><a href="#sec-add-scenarios" title="Ok / load / trap / 双 track 一致">ADDED Scenarios</a></li>
+      </ul>
+    </nav>
+    <div class="main">
+      <div class="content">
+        <header class="doc">
+          <h1>Predecode Cache · Delta Spec</h1>
+          <p class="oneliner">normative 变更：<code>RegisterCodeRange</code> 容忍 embedded data；只有结构性问题拒绝 range。</p>
+          <div class="meta">
+            <span class="chip">specs/predecode-cache/spec.md</span>
+            <span class="chip">OpenSpec delta spec</span>
+            <span class="chip">EN → 中文</span>
+            <span class="chip">predecode-cache</span>
+          </div>
+        </header>
+        <div class="keypoints">
+          <h2>本文要点</h2>
+          <ol>
+            <li><strong>MODIFIED：</strong>只有结构性原因（overlap、bad size、OOM）拒绝 range；per-word decode 属性（unallocated、feature-gated）不再导致 rejection。</li>
+            <li><code>RegisterCodeRange</code> SHALL NOT 返回 <code>UnsupportedFeature</code>；enum 值保留（ABI）但不产出。</li>
+            <li><strong>ADDED：</strong>含 embedded read-only data 的 range 注册 <code>Ok</code>；data word 为 non-executable sentinel。</li>
+            <li>cache 不改 range 字节；load 读原始 bytes；PC 到达 data sentinel 时 trap-on-execute。</li>
+            <li>8 个 scenario 覆盖 overlap/size/all-or-nothing/UnsupportedFeature/data-Ok/load/trap/dual-track。</li>
+          </ol>
+        </div>
+
+        <section id="sec-mod" class="sec">
+          <h2>MODIFIED · RegisterCodeRange validates inputs and reports failures all-or-nothing</h2>
+          <p class="sec-summary">放宽 per-word 拒绝；保留结构性 all-or-nothing；不再产出 UnsupportedFeature。</p>
+          <p><code>RegisterCodeRange</code> 通过 <code>PredecodeCache::RegistrationStatus</code> 报告结果：</p>
+          <ul>
+            <li><code>OverlappingRange</code>：与已注册 range 有任何重叠（含 exact duplicate）。</li>
+            <li><code>InvalidArgument</code>：size 为零或非 4 的倍数。</li>
+            <li><code>OutOfMemory</code>：entry storage 分配失败。</li>
+          </ul>
+          <p>只有上述结构性原因才拒绝 range。per-word decode 属性（unallocated encoding，或 stricter auditor 会拒绝的 encoding）不再导致 rejection——此类 word 作为 embedded data 处理（见 ADDED requirement）。</p>
+          <p>任何 non-<code>Ok</code> 结果：不注册任何东西——failed call 中的 instruction 不能通过 cache 执行。</p>
+          <div class="callout warn"><span class="tag">注意</span>
+            <code>RegisterCodeRange</code> SHALL NOT 返回 <code>UnsupportedFeature</code>。<code>RegistrationStatus::UnsupportedFeature</code> enum 值保留（ABI 稳定）但不产出。auditor 配置为 <code>CPUFeatures::All()</code>；需要 feature 的 word 写入 data sentinel 而非 reject range。
+          </div>
+          <div class="mermaid">flowchart TD
+  R["RegisterCodeRange"] --> C{"拒绝原因?"}
+  C -->|overlap| O["OverlappingRange"]
+  C -->|bad size| I["InvalidArgument"]
+  C -->|OOM| M["OutOfMemory"]
+  C -->|unallocated word| OK["Ok + data sentinel"]
+  C -->|feature-gated word| OK
+  C -->|正常指令| OK2["Ok + leaf entry"]</div>
+          <details class="src"><summary>查看原文</summary><pre>### Requirement: RegisterCodeRange validates inputs and reports failures all-or-nothing
+
+`RegisterCodeRange` SHALL report its outcome through a
+`PredecodeCache::RegistrationStatus` value. It SHALL return `OverlappingRange`
+when the requested range overlaps any already-registered range in any way,
+including an exact duplicate. It SHALL return `InvalidArgument` when the size is
+zero or not a multiple of 4. It SHALL return `OutOfMemory` when entry storage
+cannot be allocated. `RegisterCodeRange` SHALL reject a range only for these
+structural reasons; no per-word decode property (an unallocated encoding, or an
+encoding a stricter-than-default auditor would reject) SHALL cause rejection —
+such a word is handled as embedded data (see "RegisterCodeRange tolerates
+read-only data embedded in a code range"). On any non-`Ok` result the call SHALL
+register nothing — no instruction from a failed call SHALL become executable
+through the cache.
+
+`RegisterCodeRange` SHALL NOT return `UnsupportedFeature`. The
+`RegistrationStatus::UnsupportedFeature` enum value SHALL be retained for ABI
+stability but SHALL NOT be produced: the cache's `CPUFeaturesAuditor` is
+configured with `CPUFeatures::All()` (feature checking disabled), and a word
+that needs a feature the auditor rejects is recorded as a data sentinel rather
+than rejecting the range.</pre></details>
+        </section>
+
+        <section id="sec-mod-scenarios" class="sec">
+          <h2>MODIFIED Scenarios</h2>
+          <p class="sec-summary">4 个 scenario：overlap、malformed size、all-or-nothing、UnsupportedFeature never returned。</p>
+
+          <div class="scenario">
+            <h4>Scenario: Overlapping range is rejected</h4>
+            <ul>
+              <li><strong>WHEN</strong> 传入与已注册 range 重叠的 range</li>
+              <li><strong>THEN</strong> 返回 <code>OverlappingRange</code></li>
+              <li><strong>AND</strong> cache-executable instruction 集合不变</li>
+            </ul>
+          </div>
+          <div class="scenario">
+            <h4>Scenario: Malformed size is rejected</h4>
+            <ul>
+              <li><strong>WHEN</strong> size 为零或非 4 的倍数</li>
+              <li><strong>THEN</strong> 返回 <code>InvalidArgument</code> 且不注册</li>
+            </ul>
+          </div>
+          <div class="scenario">
+            <h4>Scenario: A failed registration is all-or-nothing</h4>
+            <ul>
+              <li><strong>WHEN</strong> 返回任何 non-<code>Ok</code> status</li>
+              <li><strong>THEN</strong> 该 call 中无 instruction word 可通过 cache track 执行</li>
+            </ul>
+          </div>
+          <div class="scenario">
+            <h4>Scenario: UnsupportedFeature is never returned</h4>
+            <ul>
+              <li><strong>WHEN</strong> range 含 auditor 不接受的 CPU feature 的 word</li>
+              <li><strong>THEN</strong> 不返回 <code>UnsupportedFeature</code></li>
+              <li><strong>AND</strong> range 注册 <code>Ok</code>，该 word 为 non-executable data sentinel</li>
+            </ul>
+          </div>
+          <details class="src"><summary>查看原文</summary><pre>#### Scenario: Overlapping range is rejected
+...
+#### Scenario: Malformed size is rejected
+...
+#### Scenario: A failed registration is all-or-nothing
+...
+#### Scenario: UnsupportedFeature is never returned
+...</pre></details>
+        </section>
+
+        <section id="sec-add" class="sec">
+          <h2>ADDED · RegisterCodeRange tolerates read-only data embedded in a code range</h2>
+          <p class="sec-summary">data-in-stream 注册 Ok；sentinel + trap-on-execute；不改字节。</p>
+          <p><code>RegisterCodeRange</code> 即使 range 混排只读数据与指令（literal pool、跳转表、内联常量）也 SHALL 成功注册（<code>Ok</code>），即使部分 4-byte word 无法解码为可执行 cached instruction。</p>
+          <p>无法解码的 word（unallocated，或 stricter auditor 下 feature-gated）SHALL 写入 non-executable <strong>data sentinel</strong>，SHALL NOT 导致 range rejection。</p>
+          <ul>
+            <li>cache SHALL NOT 改变 registered range 的字节。</li>
+            <li>load 读 data word SHALL 通过 simulator memory path 观察原始 bytes，非 predecoded entry。</li>
+            <li>正常执行不 dispatch data-sentinel word（well-formed code branch 跳过 data）。</li>
+            <li>cache track 到达 data-sentinel word 时 Simulator SHALL abort 并打印 offending address（trap-on-execute，同 unimplemented form 模型）；SHALL NOT 把 data 当指令执行、静默跳过、或 fallback 到 imported decoder。</li>
+          </ul>
+          <details class="src"><summary>查看原文</summary><pre>### Requirement: RegisterCodeRange tolerates read-only data embedded in a code range
+
+`RegisterCodeRange` SHALL register a code range successfully (`Ok`) even when the
+range interleaves read-only data with instructions — inline literal pools
+(`LDR x, =imm`), jump tables, and inline constants — so that some of its 4-byte
+words do not decode to an executable cached instruction. A word that does not
+decode to an executable cached instruction — whether its encoding is unallocated,
+or (under any auditor stricter than the default `CPUFeatures::All()`) requires a
+rejected CPU feature — SHALL be recorded as a non-executable **data sentinel**
+and SHALL NOT cause the range to be rejected.
+
+The cache SHALL NOT alter the bytes of a registered range. A load that reads a
+data word SHALL therefore observe the original bytes through the simulator's
+memory path, not the predecoded entry. A data-sentinel word SHALL NOT be
+dispatched during normal execution (well-formed code branches over its data). If
+cache-track execution reaches a data-sentinel word, the Simulator SHALL abort
+with a diagnostic that names the offending address (trap-on-execute), the same
+model used for unimplemented forms; it SHALL NOT execute the data as an
+instruction, silently skip it, or fall back to the imported decoder.</pre></details>
+        </section>
+
+        <section id="sec-add-scenarios" class="sec">
+          <h2>ADDED Scenarios</h2>
+          <p class="sec-summary">4 个 scenario：embedded data Ok、load 读字节、trap、双 track 一致。</p>
+
+          <div class="scenario">
+            <h4>Scenario: A range with embedded unallocated data registers Ok</h4>
+            <ul>
+              <li><strong>WHEN</strong> range 含 branch-over embedded unallocated data word 的真实指令（如 literal-pool constant）</li>
+              <li><strong>THEN</strong> 返回 <code>Ok</code></li>
+              <li><strong>AND</strong> data word 为 non-executable data sentinel</li>
+            </ul>
+          </div>
+          <div class="scenario">
+            <h4>Scenario: A load of embedded data reads the original bytes</h4>
+            <ul>
+              <li><strong>WHEN</strong> cache track 执行从 embedded data word load 的代码（如 LDR-literal）</li>
+              <li><strong>THEN</strong> loaded value 为该 word 的原始 bytes</li>
+              <li><strong>AND</strong> 与 debug track 一致</li>
+            </ul>
+          </div>
+          <div class="scenario">
+            <h4>Scenario: Reaching a data-sentinel word on the cache track aborts</h4>
+            <ul>
+              <li><strong>WHEN</strong> cache track 到达 data sentinel word（wild 或 deliberate branch into data）</li>
+              <li><strong>THEN</strong> Simulator abort 并打印 offending address</li>
+              <li><strong>AND</strong> 不把 data 当指令执行，不 fallback 到 imported decoder</li>
+            </ul>
+          </div>
+          <div class="scenario">
+            <h4>Scenario: A range with embedded data executes identically on both tracks</h4>
+            <ul>
+              <li><strong>WHEN</strong> 同一 embedded-data range 分别从相同初始状态经 <code>RunFrom</code> 与 <code>DebugRunFrom</code> 执行</li>
+              <li><strong>THEN</strong> post-run register、flag、memory state 完全一致</li>
+            </ul>
+          </div>
+          <details class="src"><summary>查看原文</summary><pre>#### Scenario: A range with embedded unallocated data registers Ok
+...
+#### Scenario: A load of embedded data reads the original bytes
+...
+#### Scenario: Reaching a data-sentinel word on the cache track aborts
+...
+#### Scenario: A range with embedded data executes identically on both tracks
+...</pre></details>
+        </section>
+      </div>
+    </div>
+  </div>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<script>
+  const root=document.documentElement;const prefersDark=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches;
+  function setTheme(t){root.dataset.theme=t;document.getElementById('hljs-dark').disabled=(t!=='dark');document.getElementById('hljs-light').disabled=(t==='dark');try{mermaid.initialize({startOnLoad:false,theme:t==='dark'?'dark':'default'});renderMermaid();}catch(e){}}setTheme(prefersDark?'dark':'light');
+  document.getElementById('themeBtn').onclick=()=>setTheme(root.dataset.theme==='dark'?'light':'dark');
+  let mermaidSrc=[...document.querySelectorAll('.mermaid')].map(el=>el.textContent);
+  function renderMermaid(){document.querySelectorAll('.mermaid').forEach((el,i)=>{el.removeAttribute('data-processed');el.innerHTML=mermaidSrc[i];});try{mermaid.run({querySelector:'.mermaid'})}catch(e){}}renderMermaid();
+  const links=[...document.querySelectorAll('.toc a')];const map=new Map(links.map(a=>[a.getAttribute('href').slice(1),a]));
+  const obs=new IntersectionObserver(es=>{es.forEach(e=>{if(e.isIntersecting){links.forEach(l=>l.classList.remove('active'));const a=map.get(e.target.id);if(a)a.classList.add('active');}})},{rootMargin:'-10% 0px -80% 0px'});
+  document.querySelectorAll('section.sec').forEach(s=>obs.observe(s));
+</script>
+</body>
+</html>

@@ -296,11 +296,12 @@ class PredecodeCache {
 };
 ```
 
-**all-or-nothing 而不是部分成功**：iOS 补丁场景下，embedder 拿到 dylib 可能事先不
-完全清楚里面用了什么 CPU features。报错应该让 embedder 知道**哪条 PC 用了什么
-feature**，让它能做"补 feature 后重试"或者"放弃这个 dylib"的决策。部分成功（已注册
-的 entry 标记为 `unsupported_thunk`）让 cache 维护一组半成品状态，复杂度收益不
-划算。
+**all-or-nothing 而不是部分成功**：这个约束现在只针对结构性注册失败：size 不合法、
+range 重叠、entry/range 节点分配失败。失败就不注册任何 entry，避免 cache 维护半成品
+状态；成功则整段 range 都有对应 slot。早期设计把 `UnsupportedFeature` 也当作预注册
+失败，用来帮 iOS embedder 发现 dylib 里哪条 PC 需要额外 CPU feature；当前实现里
+cache auditor 使用 `CPUFeatures::All()`，并且 per-word decode 属性不再拒绝整段 range。
+`UnsupportedFeature` 这个返回值为 ABI 稳定保留，但正常注册路径不再产生它。
 
 **为什么 errno+strerror 风格而不是把细节塞进返回码**：错误细节天然多维度（PC、
 form name、feature mask）。返回码保持简单稳定（C-ABI 友好），细节通过单独 query
@@ -667,7 +668,7 @@ deep-dive `vixl-fetch-decode-dispatch-deep-dive.md` §5 列了 R1-R12 共 12 条
 | **R9** | iOS no-JIT | thunk 是普通 C++ 函数（编译期静态生成），entry 是普通 data。不涉及 RWX、不涉及 mprotect |
 | **R10** | Byte-identical correctness 怎么验证 | **ShadowRunner 是 V1 的核心 oracle**（§4.4）。寄存器 + 内存写每步对比，零 divergence 是 V1 验收第三条。这是 R10 的直接答复 |
 | **R11** | 间接分支首次命中无加速 | V1 不优化间接分支预测——`WritePc` 后下一轮 cache lookup 走 cur_range cold path（如果跨 range）。可接受。V2 可加 indirect target 预测器 |
-| **R12** | Unallocated/unimplemented 编码 | populate 阶段碰到 unallocated → ErrorDetail 标 PC 后注册失败。unimplemented（VIXL 已知但未实现）：populate 时映射到一个特殊 `unimplemented_thunk`，运行到该 PC 时 abort 并报 form name |
+| **R12** | Unallocated/unimplemented 编码 | populate 阶段碰到 unallocated，或将来更严格 auditor 拒绝的 feature-gated word，不再拒绝整段 range；该 word 写入 data-in-stream sentinel（`VisitUnallocated`，`form_hash=0`，`flags=0`），正常代码 branch 跳过它，若 PC 落上去则 abort 并报地址。unimplemented（VIXL 已知但未实现）仍映射到特殊 `unimplemented_thunk`，运行到该 PC 时 abort 并报 form name |
 
 **额外的、deep-dive 没列但本设计要警惕的**：
 

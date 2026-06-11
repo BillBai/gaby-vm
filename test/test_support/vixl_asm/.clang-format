@@ -1,0 +1,7 @@
+# TEST-ONLY assembler island — see CMakeLists.txt and the per-file TEST-ONLY
+# markers. The files copied verbatim from upstream VIXL (src/ and test/) are kept
+# byte-for-byte diffable against ../vixl at the pinned import SHA, so formatting
+# is disabled here. Gaby-authored harness code lives under harness/, which has
+# its own .clang-format re-enabling the project style.
+DisableFormat: true
+SortIncludes: false

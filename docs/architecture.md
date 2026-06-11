@@ -61,12 +61,22 @@ gaby-vm is a **standalone project**, not an in-place fork of VIXL. The
 reference VIXL source tree is expected adjacent at `../vixl` for study; only a
 bounded subset is imported into this repository.
 
-- **Import scope** today is Tiers 1, 2, and 3 of
+- **Shipping import scope** (`Sources/gaby_vm/src/`) is Tiers 1, 2, and 3 of
   [`refs/vixl-extraction-map.md`](refs/vixl-extraction-map.md). Tier 0
-  (assembler, macro-assembler, code-buffer, pool-manager, AArch32) is not
-  imported, since the project doesn't currently need those subsystems. If a
-  later capability needs something out of Tier 0, the extraction map gets
-  updated alongside the import.
+  (assembler, macro-assembler, code-buffer, pool-manager, AArch32) is **not**
+  imported into the shipping library, since gaby-vm is a *consumer* of
+  instruction bytes — it doesn't generate code. If a later capability needs
+  something out of Tier 0, the extraction map gets updated alongside the import.
+- **Test-only Tier-0 copy.** One narrow exception lives *outside* the shipping
+  tree, under `test/test_support/vixl_asm/`: a copy of the Tier-0 VIXL assembler
+  + macro-assembler + code-buffer (and the VIXL test infra), pinned to the same
+  import SHA, used by the `vixl_port` suite to live-assemble upstream test bodies
+  at test time. It compiles into a `gaby_vm_vixl_asm_testonly` library that is
+  never linked into `gaby_vm::gaby_vm` (no `::` alias, `_testonly` suffix,
+  PRIVATE-linked, gated on `GABY_VM_BUILD_TESTS`), builds `VIXL_CODE_BUFFER_MALLOC`
+  only (no executable-memory path), and so does not weaken the "consumer, not
+  generator" / no-RWX boundary of the shipping product. See
+  [`testing.md`](testing.md#ported-vixl-tests-vixl_port).
 - **Layout** mirrors upstream byte-for-byte under `Sources/gaby_vm/src/`:
   shared root files (e.g. `utils-vixl.h`, `cpu-features.h`) at
   `Sources/gaby_vm/src/`; AArch64-specific files at

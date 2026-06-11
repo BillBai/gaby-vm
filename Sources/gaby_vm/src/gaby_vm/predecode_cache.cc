@@ -4,19 +4,15 @@
 #include "gaby_vm/predecode_cache.h"
 
 #include <cstdint>
-#include <functional>
-#include <iomanip>
 #include <map>
 #include <memory>
 #include <mutex>
 #include <new>
 #include <shared_mutex>
-#include <sstream>
 #include <string>
 #include <utility>
 
 #include "cpu-features.h"
-#include "globals-vixl.h"
 #include "utils-vixl.h"
 
 #include "aarch64/cpu-features-auditor-aarch64.h"
@@ -44,8 +40,8 @@ using CodeRange = PredecodeCache::CodeRange;
 // (this->*pmf)(pc_). Keep the alias byte-compatible with Simulator's
 // mapped_type — D1 of predecode-cache-hotpath-speedup changed it from
 // std::function to a raw pmf to remove the type-erasure indirection.
-using LeafFn = void (vixl::aarch64::Simulator::*)(
-    const vixl::aarch64::Instruction*);
+using LeafFn =
+    void (vixl::aarch64::Simulator::*)(const vixl::aarch64::Instruction*);
 
 // Sentinel leaf for an instruction whose encoding the VIXL decoder names but
 // for which the Simulator carries no leaf — an "unimplemented" form (design
@@ -61,8 +57,17 @@ using LeafFn = void (vixl::aarch64::Simulator::*)(
 // Held as a function-local static so the pmf has process lifetime — the
 // PredecodedEntry::leaf opaque handle points straight at it.
 const LeafFn* UnimplementedSentinelLeaf() {
-  static const LeafFn sentinel =
-      &vixl::aarch64::Simulator::VisitUnimplemented;
+  static const LeafFn sentinel = &vixl::aarch64::Simulator::VisitUnimplemented;
+  return &sentinel;
+}
+
+// Sentinel leaf for embedded data words that cannot be cached as executable
+// instructions. This covers unallocated encodings and, if a future cache uses a
+// stricter auditor than CPUFeatures::All(), feature-gated words. Registering
+// the range succeeds, but a wild PC that reaches the data aborts through the
+// imported unallocated-instruction path with the offending address.
+const LeafFn* DataInStreamSentinelLeaf() {
+  static const LeafFn sentinel = &vixl::aarch64::Simulator::VisitUnallocated;
   return &sentinel;
 }
 
@@ -256,23 +261,11 @@ RegistrationStatus PredecodeCache::Impl::RegisterCodeRange(const void* start,
     // Drives the auditor and the form-capture visitor in one pass.
     decoder_.Decode(insn);
 
-    if (!auditor_.InstructionIsAvailable()) {
-      std::ostringstream oss;
-      oss << auditor_.GetInstructionFeatures();
-      SetError(RegistrationStatus::UnsupportedFeature,
-               insn_addr,
-               "instruction requires a CPU feature the cache auditor rejects",
-               oss.str());
-      // `entries` is freed here; the range map is untouched — nothing
-      // registered (all-or-nothing).
-      return RegistrationStatus::UnsupportedFeature;
-    }
-    if (capture_visitor_.unallocated()) {
-      SetError(RegistrationStatus::InvalidArgument,
-               insn_addr,
-               "range contains an unallocated instruction encoding",
-               "");
-      return RegistrationStatus::InvalidArgument;
+    if (!auditor_.InstructionIsAvailable() || capture_visitor_.unallocated()) {
+      entries[i].form_hash = 0;
+      entries[i].flags = 0;
+      entries[i].leaf = DataInStreamSentinelLeaf();
+      continue;
     }
 
     const uint32_t form_hash = capture_visitor_.form_hash();

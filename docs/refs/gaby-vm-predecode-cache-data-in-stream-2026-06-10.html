@@ -1,0 +1,584 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PredecodeCache：支持 data-in-stream</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+SC:wght@400;500;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css" id="hljs-light">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css" id="hljs-dark" disabled>
+<style>
+  :root{
+    --bg:#fbfbfa; --surface:#ffffff; --ink:#1f2328; --ink-soft:#57606a;
+    --line:#e6e8eb; --accent:#2f6feb; --accent-soft:#ddeaff;
+    --add:#1f883d; --add-bg:#eaf6ee; --guess:#9a6700; --guess-bg:#fdf6e3;
+    --tnote:#8250df; --tnote-bg:#f3eefd; --info:#2f6feb; --info-bg:#eaf2ff;
+    --warn:#9a6700; --warn-bg:#fff8e6; --danger:#cf222e; --danger-bg:#ffebe9;
+    --code-bg:#f6f8fa; --radius:10px; --maxw:860px; --sidew:280px;
+    --mono:"JetBrains Mono",ui-monospace,Menlo,Consolas,monospace;
+    --sans:"Inter","Noto Sans SC",system-ui,-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;
+  }
+  html[data-theme="dark"]{
+    --bg:#0d1117; --surface:#161b22; --ink:#e6edf3; --ink-soft:#9198a1;
+    --line:#30363d; --accent:#4f8cf7; --accent-soft:#16304f;
+    --add:#3fb950; --add-bg:#11271a; --guess:#d29922; --guess-bg:#2a210a;
+    --tnote:#a371f7; --tnote-bg:#21163a; --info:#4f8cf7; --info-bg:#0f2238;
+    --warn:#d29922; --warn-bg:#2a210a; --danger:#f85149; --danger-bg:#2c1416;
+    --code-bg:#161b22;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);
+    line-height:1.7;font-size:16px;-webkit-font-smoothing:antialiased}
+  a{color:var(--accent);text-decoration:none}
+  a:hover{text-decoration:underline}
+  code{font-family:var(--mono);font-size:.88em;background:var(--code-bg);
+    padding:.12em .4em;border-radius:5px}
+  pre{background:var(--code-bg);border:1px solid var(--line);border-radius:var(--radius);
+    padding:14px 16px;overflow:auto}
+  pre code{background:none;padding:0;font-size:.85em;line-height:1.6}
+  .topbar{position:sticky;top:0;z-index:20;display:flex;align-items:center;
+    justify-content:space-between;gap:12px;padding:10px 20px;
+    background:color-mix(in srgb,var(--surface) 88%,transparent);
+    backdrop-filter:saturate(1.4) blur(8px);border-bottom:1px solid var(--line)}
+  .brand{font-weight:700;letter-spacing:.02em;font-size:14px}
+  .brand .dot{color:var(--accent)}
+  .theme-btn{cursor:pointer;border:1px solid var(--line);background:var(--surface);
+    color:var(--ink-soft);border-radius:8px;padding:6px 10px;font-size:13px;font-family:var(--sans)}
+  .theme-btn:hover{color:var(--ink);border-color:var(--accent)}
+  .wrap{display:grid;grid-template-columns:var(--sidew) minmax(0,1fr);gap:0;
+    max-width:1240px;margin:0 auto}
+  .sidebar{position:sticky;top:53px;align-self:start;height:calc(100vh - 53px);
+    overflow:auto;padding:24px 16px 40px;border-right:1px solid var(--line)}
+  .sidebar h3{font-size:11px;text-transform:uppercase;letter-spacing:.08em;
+    color:var(--ink-soft);margin:0 0 10px 8px}
+  .toc{list-style:none;margin:0;padding:0}
+  .toc li{margin:1px 0}
+  .toc a{display:block;padding:6px 10px;border-radius:7px;color:var(--ink-soft);
+    font-size:14px;border-left:2px solid transparent}
+  .toc a:hover{background:var(--surface);color:var(--ink);text-decoration:none}
+  .toc a.active{color:var(--ink);background:var(--accent-soft);
+    border-left-color:var(--accent);font-weight:600}
+  .main{padding:36px clamp(20px,4vw,56px) 120px;min-width:0}
+  .content{max-width:var(--maxw);margin:0 auto}
+  header.doc{margin-bottom:28px}
+  .doc h1{font-size:30px;line-height:1.25;margin:.1em 0 .3em}
+  .oneliner{font-size:17px;color:var(--ink-soft);margin:0 0 14px}
+  .meta{display:flex;flex-wrap:wrap;gap:8px}
+  .chip{font-size:12px;color:var(--ink-soft);background:var(--surface);
+    border:1px solid var(--line);border-radius:999px;padding:3px 10px;font-family:var(--mono)}
+  .keypoints{background:var(--surface);border:1px solid var(--line);
+    border-radius:var(--radius);padding:18px 22px;margin:0 0 34px;
+    border-left:4px solid var(--accent)}
+  .keypoints h2{font-size:14px;text-transform:uppercase;letter-spacing:.06em;
+    color:var(--accent);margin:0 0 12px}
+  .keypoints ol{margin:0;padding-left:1.2em}
+  .keypoints li{margin:7px 0;font-weight:500}
+  .sec{padding-top:14px;margin-bottom:30px;scroll-margin-top:64px}
+  .sec h2{font-size:22px;margin:.2em 0 .15em;padding-bottom:6px;border-bottom:1px solid var(--line)}
+  .sec h3{font-size:17px;margin:1.2em 0 .3em}
+  .sec-summary{color:var(--ink-soft);font-size:14px;margin:.2em 0 1em;font-style:italic}
+  .callout{border-radius:var(--radius);padding:12px 16px;margin:14px 0;
+    border:1px solid var(--line);font-size:15px}
+  .callout .tag{display:inline-block;font-size:11px;font-weight:700;font-family:var(--mono);
+    padding:1px 7px;border-radius:6px;margin-right:8px;vertical-align:1px}
+  .callout .src-ref{font-family:var(--mono);font-size:12px;color:var(--ink-soft);
+    display:inline-block;margin-left:6px;padding:1px 6px;background:var(--code-bg);border-radius:5px}
+  .callout.add{background:var(--add-bg);border-color:color-mix(in srgb,var(--add) 35%,var(--line))}
+  .callout.add .tag{background:var(--add);color:#fff}
+  .callout.guess{background:var(--guess-bg);border-color:color-mix(in srgb,var(--guess) 35%,var(--line))}
+  .callout.guess .tag{background:var(--guess);color:#fff}
+  .callout.tnote{background:var(--tnote-bg);border-color:color-mix(in srgb,var(--tnote) 35%,var(--line))}
+  .callout.tnote .tag{background:var(--tnote);color:#fff}
+  .callout.info{background:var(--info-bg)} .callout.info .tag{background:var(--info);color:#fff}
+  .callout.warn{background:var(--warn-bg)} .callout.warn .tag{background:var(--warn);color:#fff}
+  .callout.danger{background:var(--danger-bg)} .callout.danger .tag{background:var(--danger);color:#fff}
+  details.deep,details.src{border:1px solid var(--line);border-radius:var(--radius);
+    margin:14px 0;background:var(--surface)}
+  details summary{cursor:pointer;padding:10px 14px;font-size:14px;font-weight:600;
+    color:var(--ink-soft);list-style:none}
+  details summary::-webkit-details-marker{display:none}
+  details summary::before{content:"▸";display:inline-block;margin-right:8px;color:var(--accent)}
+  details[open] summary::before{transform:rotate(90deg)}
+  details summary:hover{color:var(--ink)}
+  details.deep > *:not(summary),details.src > *:not(summary){padding:0 16px 14px}
+  details.src{background:transparent;border-style:dashed}
+  details.src summary{color:var(--ink-soft);font-weight:500;font-family:var(--mono);font-size:13px}
+  details.src pre{margin:0 16px 14px;white-space:pre-wrap}
+  .mermaid{margin:18px 0;text-align:center}
+  table{border-collapse:collapse;width:100%;margin:14px 0;font-size:14px}
+  th,td{border:1px solid var(--line);padding:8px 12px;text-align:left}
+  th{background:var(--surface)}
+  blockquote{margin:14px 0;padding:6px 16px;border-left:3px solid var(--line);color:var(--ink-soft)}
+  @media (max-width:880px){
+    .wrap{grid-template-columns:1fr}
+    .sidebar{display:none}
+  }
+</style>
+</head>
+<body>
+  <div class="topbar">
+    <span class="brand">BBA<span class="dot">·</span>doc-visualizer</span>
+    <button class="theme-btn" id="themeBtn">◐ 主题</button>
+  </div>
+
+  <div class="wrap">
+    <nav class="sidebar">
+      <h3>目录</h3>
+      <ul class="toc" id="toc">
+        <li><a href="#sec-status" title="提案阶段，需单独 OpenSpec 变更">状态</a></li>
+        <li><a href="#sec-defect" title="只读数据与指令混排时整段 range 被拒">缺陷</a></li>
+        <li><a href="#sec-empirical" title="5 个 vixl_port skip 全走 unallocated 路径">实测</a></li>
+        <li><a href="#sec-root-cause" title="predecode 循环里的 unallocated 检查">根因</a></li>
+        <li><a href="#sec-fix" title="sentinel + continue，与 unimplemented 对齐">方案</a></li>
+        <li><a href="#sec-reverses" title="R12 有意区分 unallocated 与 unimplemented">需推翻的设计</a></li>
+        <li><a href="#sec-spec" title="spec 未强制 unallocated→InvalidArgument">Spec 影响</a></li>
+        <li><a href="#sec-open" title="UnsupportedFeature、sentinel 选型等">待决问题</a></li>
+        <li><a href="#sec-test" title="单元测试 + vixl_port 复活 + rebaseline">测试计划</a></li>
+        <li><a href="#sec-effort" title="代码少，文档/spec/测试是主体">工作量</a></li>
+      </ul>
+    </nav>
+
+    <div class="main">
+      <div class="content">
+        <header class="doc">
+          <h1>PredecodeCache：支持 data-in-stream</h1>
+          <p class="oneliner">让 <code>PredecodeCache</code> 接受指令与只读数据混排的代码段，不再因 data word 解码为 unallocated 而拒绝整段 range。</p>
+          <div class="meta">
+            <span class="chip">gaby-vm-predecode-cache-data-in-stream-2026-06-10.md</span>
+            <span class="chip">reference / design</span>
+            <span class="chip">EN → 中文</span>
+            <span class="chip">proposed</span>
+          </div>
+        </header>
+
+        <div class="keypoints">
+          <h2>本文要点</h2>
+          <ol>
+            <li>真实 AArch64 代码常在同一可执行 range 里混排只读数据（literal pool、跳转表、内联常量）；PC 不会执行 data word，只会 load。</li>
+            <li>当前 <code>RegisterCodeRange</code> 把 range 内每个 4 字节都当指令 predecode；data word 常解码为 unallocated，导致<strong>整段 range 注册失败</strong>，周围真实指令也无法走 cache track。</li>
+            <li><code>vixl_port</code> 里 5 个 skip case 全部命中 unallocated 检查（4 个 LDR literal + 1 个 fp），没有 <code>UnsupportedFeature</code>。</li>
+            <li>修复思路：对 unallocated word 像 unimplemented form 一样写入 sentinel、继续 predecode，而不是 fail range——机制已存在于 <code>UnimplementedSentinelLeaf()</code>。</li>
+            <li>这会推翻 design.md <strong>R12</strong> 的有意区分（unallocated→拒绝 vs unimplemented→sentinel），必须单独开 OpenSpec 变更并更新 rationale。</li>
+            <li>normative spec 并未要求 unallocated→<code>InvalidArgument</code>；主要工作是补 requirement/scenario、调和 R12、决定 <code>UnsupportedFeature</code> 是否一并放宽。</li>
+            <li>建议只放宽 unallocated、保留 <code>UnsupportedFeature</code>；新增独立 <code>DataInStreamSentinelLeaf</code>；代码约 10–20 行，主体是 spec/测试/rebaseline。</li>
+          </ol>
+        </div>
+
+        <section id="sec-status" class="sec">
+          <h2>状态</h2>
+          <p class="sec-summary">提案阶段，尚未实现；不宜作为 drive-by 改动合入。</p>
+          <div class="callout info"><span class="tag">状态</span>
+            <strong>proposed / not yet implemented</strong>。由 <code>vixl_port</code> review（issue I8）发现。代码改动很小，但会逆转 shipping code 里<strong>有文档记录的设计决策</strong>（优化核心数据结构），需要单独 OpenSpec 变更并调和 rationale，不能顺手改。
+          </div>
+          <details class="src"><summary>查看原文</summary><pre># PredecodeCache: support data-in-stream (don't reject a range for embedded read-only data)
+
+Status: **proposed / not yet implemented.** Ref doc for a future session. Found
+by the `vixl_port` review (issue I8). The code change is small; the reason it is
+deferred is that it reverses a *deliberate, documented* design decision in
+shipping code (the optimization's core data structure), so it needs its own
+OpenSpec change with the rationale reconciled — not a drive-by edit.</pre></details>
+        </section>
+
+        <section id="sec-defect" class="sec">
+          <h2>缺陷（真实问题，非表面瑕疵）</h2>
+          <p class="sec-summary">只读数据与指令混排是常态；一个 data word 导致整段 range 无法 cache。</p>
+          <p>真实 AArch64 代码经常在同一可执行 range 里混排<strong>只读数据与指令</strong>：literal pool（<code>LDR x, =imm</code> / <code>LDR x, label</code>）、跳转表、内联常量。这些字节是数据；代码会 branch 跳过它们，只通过 load 访问——PC 永远不会执行 data word。</p>
+          <p><code>PredecodeCache::RegisterCodeRange</code> 却把 range 内<strong>每个</strong> 4 字节 word 都当作指令 predecode。当 data word 解码为 unallocated encoding（64 位常量拆成两个 word 时非常常见），predecode 会<strong>拒绝整段 range</strong>——周围真正的指令也无法走 cache track。</p>
+
+          <div class="mermaid">flowchart TB
+  subgraph range["可执行 range"]
+    I1["真实指令"]
+    D["data word\n(unallocated encoding)"]
+    I2["更多真实指令"]
+    RET["ret"]
+  end
+  I1 --> D
+  D --> I2
+  I2 --> RET
+  PC["PC 执行路径"] --> I1
+  PC -.->|"branch 跳过"| D
+  PC --> I2
+  LDR["LDR literal"] -.->|"load 读数据"| D
+  REG["RegisterCodeRange"] -->|"predecode 每个 word"| FAIL["整段拒绝\nInvalidArgument"]
+  D --> FAIL</div>
+
+          <ul>
+            <li><code>vixl_port</code> guard rail：5 个 case 被 skip</li>
+            <li>生产环境：带 literal pool 的正常函数完全无法使用 cache track</li>
+          </ul>
+          <div class="callout warn"><span class="tag">注意</span>
+            这正是 predecode/dispatch 优化必须处理的输入形态，限制落在项目主目标的<strong>关键路径</strong>上。
+          </div>
+          <details class="src"><summary>查看原文</summary><pre>## The defect (real, not cosmetic)
+
+Real AArch64 code routinely interleaves **read-only data with instructions** in
+the same executable range: literal pools (`LDR x, =imm` / `LDR x, label`), jump
+tables, and inline constants. The bytes are data; the code branches *over* them
+and only ever *loads* from them — the PC never executes a data word.
+
+`PredecodeCache::RegisterCodeRange` predecodes **every** 4-byte word in the
+range as if it were an instruction. When a data word decodes to an unallocated
+encoding (very common for arbitrary 64-bit constants split into two words), the
+predecode pass **rejects the whole range** — so none of the surrounding *real*
+code becomes cache-executable either. In the `vixl_port` guard rail this shows
+up as 5 skipped cases; in production it means a perfectly normal function with a
+literal pool cannot use the cache track at all.
+
+This is exactly the input shape the predecode/dispatch optimization must handle,
+so the limitation is on the critical path of the project's main goal.</pre></details>
+        </section>
+
+        <section id="sec-empirical" class="sec">
+          <h2>实测依据（2026-06-10）</h2>
+          <p class="sec-summary">所有被拒 case 走同一条 unallocated 路径；没有 UnsupportedFeature。</p>
+          <p>在 harness 里临时加了 probe（<code>GetLastRegistrationError</code> on rejection），结果显示<strong>全部</strong>被拒的 <code>vixl_port</code> case 命中同一路径：</p>
+          <pre><code class="language-text">status=1 (InvalidArgument)  reason="range contains an unallocated instruction encoding"
+  AARCH64_ASM_ldr_literal
+  AARCH64_ASM_ldr_literal_custom
+  AARCH64_ASM_ldr_literal_custom_shared
+  AARCH64_ASM_ldr_literal_range
+  AARCH64_ASM_fjcvtzs           (fp family)</code></pre>
+          <p>没有 case 命中 <code>UnsupportedFeature</code>。auditor 用 <code>CPUFeatures::All()</code> 构造（<code>predecode_cache.cc</code> <code>Impl()</code>），feature 拒绝很少见；真正的 blocker 是 <strong>unallocated 检查</strong>。</p>
+          <div class="callout add"><span class="tag">补充</span>
+            当前 shipping 代码里，unallocated 检查在 <code>UnsupportedFeature</code> 检查之后、leaf 解析之前触发并立即返回。
+            <span class="src-ref">Sources/gaby_vm/src/gaby_vm/predecode_cache.cc:270</span>
+          </div>
+          <details class="src"><summary>查看原文</summary><pre>## Empirical ground truth (measured 2026-06-10)
+
+A temporary probe in the harness (`GetLastRegistrationError` on rejection)
+showed **all** rejected `vixl_port` cases hit one path:
+
+```
+status=1 (InvalidArgument)  reason="range contains an unallocated instruction encoding"
+  AARCH64_ASM_ldr_literal
+  AARCH64_ASM_ldr_literal_custom
+  AARCH64_ASM_ldr_literal_custom_shared
+  AARCH64_ASM_ldr_literal_range
+  AARCH64_ASM_fjcvtzs           (fp family)
+```
+
+None hit `UnsupportedFeature`. The auditor is constructed with
+`CPUFeatures::All()` (`predecode_cache.cc` `Impl()`), so feature rejection is
+rare; the real blocker is the **unallocated** check.</pre></details>
+        </section>
+
+        <section id="sec-root-cause" class="sec">
+          <h2>根因（一处代码）</h2>
+          <p class="sec-summary"><code>predecode_cache.cc</code> predecode 循环里的 unallocated 分支直接 fail range。</p>
+          <p>位置：<code>Sources/gaby_vm/src/gaby_vm/predecode_cache.cc</code>，predecode 循环：</p>
+          <pre><code class="language-cpp">if (!auditor_.InstructionIsAvailable()) {           // ~line 259
+  ...
+  return RegistrationStatus::UnsupportedFeature;     // (a) not observed, but same class
+}
+if (capture_visitor_.unallocated()) {                // ~line 270  &lt;-- the blocker
+  SetError(RegistrationStatus::InvalidArgument, insn_addr,
+           "range contains an unallocated instruction encoding", "");
+  return RegistrationStatus::InvalidArgument;
+}
+const uint32_t form_hash = capture_visitor_.form_hash();
+const void* leaf = vixl::aarch64::Simulator::ResolvePredecodeLeaf(form_hash);
+if (leaf == nullptr) {
+  leaf = UnimplementedSentinelLeaf();                // &lt;-- the mechanism we want to reuse
+}</code></pre>
+          <p>可复用的机制已经存在：<strong>有名但未实现的 form</strong>不会被拒绝——映射到 <code>UnimplementedSentinelLeaf()</code>（<code>VisitUnimplemented</code>，若被执行则 abort），range 仍可注册为 <code>Ok</code>。</p>
+          <div class="callout add"><span class="tag">补充</span>
+            unimplemented form 的处理在 leaf 解析为 <code>nullptr</code> 时走 sentinel，而非在 unallocated 处提前返回。
+            <span class="src-ref">Sources/gaby_vm/src/gaby_vm/predecode_cache.cc:281</span>
+          </div>
+          <details class="src"><summary>查看原文</summary><pre>## Root cause (one place)
+
+`Sources/gaby_vm/src/gaby_vm/predecode_cache.cc`, the predecode loop:
+
+```cpp
+if (!auditor_.InstructionIsAvailable()) {           // ~line 259
+  ...
+  return RegistrationStatus::UnsupportedFeature;     // (a) not observed, but same class
+}
+if (capture_visitor_.unallocated()) {                // ~line 270  <-- the blocker
+  SetError(RegistrationStatus::InvalidArgument, insn_addr,
+           "range contains an unallocated instruction encoding", "");
+  return RegistrationStatus::InvalidArgument;
+}
+const uint32_t form_hash = capture_visitor_.form_hash();
+const void* leaf = vixl::aarch64::Simulator::ResolvePredecodeLeaf(form_hash);
+if (leaf == nullptr) {
+  leaf = UnimplementedSentinelLeaf();                // <-- the mechanism we want to reuse
+}
+```
+
+The mechanism to reuse already exists: a **named-but-unimplemented** form is not
+rejected — it gets `UnimplementedSentinelLeaf()` (`VisitUnimplemented`, which
+aborts if ever executed) and the range registers `Ok`.</pre></details>
+        </section>
+
+        <section id="sec-fix" class="sec">
+          <h2>方案（review 讨论结论）</h2>
+          <p class="sec-summary">unallocated / unsupported-feature word 走 sentinel + continue，与 unimplemented 统一。</p>
+          <p>把 <strong>unallocated</strong> word（按同样逻辑，<strong>unsupported-feature</strong> word 也可考虑）当作 unimplemented form 处理：写入 sentinel entry、继续 predecode，而不是 fail range。</p>
+          <pre><code class="language-cpp">if (capture_visitor_.unallocated()) {
+  entries[i] = { /*form_hash=*/0, /*flags=*/0, DataInStreamSentinelLeaf() };
+  continue;   // not executable, but registerable
+}</code></pre>
+
+          <h3>为什么正确且安全</h3>
+          <ul>
+            <li><strong>Cache 不改底层字节。</strong><code>LDR</code> literal 通过 simulator 内存路径从真实 host 地址读取，不读 <code>PredecodedEntry</code>。load 仍看到原始字节——review 要求保留的属性。</li>
+            <li><strong>Data word 的 entry 不会被 dispatch。</strong>正常代码 branch 跳过 literal pool；PC 不会落在 data word 上。sentinel entry 只是占位，保持 <code>(pc-start)/4</code> 的 flat <code>entries[]</code> 索引。</li>
+            <li><strong>若 PC 真的落在 data word 上，那是真实 bug</strong>（wild jump）。sentinel 会 trap——比今天更好：今天 range 根本没 cache，bug 在 cache track 上可能表现不同或根本测不到。</li>
+          </ul>
+
+          <div class="mermaid">flowchart LR
+  subgraph today["当前行为"]
+    U1["unallocated word"] --> R1["整段拒绝"]
+    IMP1["unimplemented form"] --> S1["UnimplementedSentinelLeaf\nrange Ok"]
+  end
+  subgraph proposed["提案行为"]
+    U2["unallocated word"] --> S2["DataInStreamSentinelLeaf\ncontinue"]
+    IMP2["unimplemented form"] --> S3["UnimplementedSentinelLeaf\n不变"]
+    S2 --> OK["range Ok"]
+    S3 --> OK
+  end</div>
+
+          <p>与现有设计一致：unimplemented form 已是「不能真正执行 → trap on execute」模型；本方案统一「无法作为指令执行的 word」的处理。</p>
+          <details class="src"><summary>查看原文</summary><pre>## Proposed fix (the approach from the review discussion)
+
+Treat an **unallocated** word (and, by the same logic, an
+**unsupported-feature** word) the way an unimplemented form is already treated:
+give it a sentinel entry and keep predecoding, instead of failing the range.
+
+```cpp
+if (capture_visitor_.unallocated()) {
+  entries[i] = { /*form_hash=*/0, /*flags=*/0, DataInStreamSentinelLeaf() };
+  continue;   // not executable, but registerable
+}
+```
+
+Why this is correct and safe:
+
+- **The cache never alters the underlying bytes.** A `LDR`-literal reads from the
+  real host address through the simulator's memory path, not from the
+  `PredecodedEntry`. So loads of the data continue to see the original bytes —
+  exactly the property the review asked to preserve.
+- **The data word's entry is never dispatched.** Well-formed code branches over
+  its literal pool; the PC never lands on a data word. The sentinel entry just
+  occupies its slot in the flat `entries[]` array (preserving the
+  `(pc-start)/4` indexing).
+- **If the PC *does* land on a data word, that is a real bug** (a wild jump), and
+  the sentinel traps it — strictly better than today, where the range was never
+  cached so the bug would surface differently (or not on the cache track at all).
+
+This is the same trap-on-execute model the design already uses for
+unimplemented forms; it unifies "can't really execute this word" handling.</pre></details>
+        </section>
+
+        <section id="sec-reverses" class="sec">
+          <h2>需推翻的有意设计（必须调和）</h2>
+          <p class="sec-summary">R12 有意区分 unallocated（拒绝）与 unimplemented（sentinel）；本提案合并二者。</p>
+
+          <blockquote>
+            <strong>design.md R12</strong>（<code>docs/refs/gaby-vm-predecode-cache-design.md:670</code>）：<br>
+            Unallocated → ErrorDetail 标 PC 后注册失败。unimplemented → unimplemented_thunk，运行到该 PC 时 abort。
+          </blockquote>
+
+          <p>设计者<strong>有意分开</strong> unallocated（reject）与 unimplemented（sentinel）。本提案合并二者。新 session 必须用 data-in-stream rationale 更新 R12。</p>
+
+          <div class="callout add"><span class="tag">补充</span>
+            R12 原文在 design 决策表第 12 行，与 R2–R11 并列，是 populate 阶段对非法/未实现编码的分流策略。
+            <span class="src-ref">docs/refs/gaby-vm-predecode-cache-design.md:670</span>
+          </div>
+
+          <p><strong>all-or-nothing 的原始 rationale</strong>（<code>...design.md:299</code>）针对的是 iOS dylib 场景下的 <strong>UnsupportedFeature</strong>——让 embedder 知道哪条 PC 需要什么 feature，以便「补 feature 重试」或「放弃 dylib」。这与 <em>unallocated data words</em> 是不同 concern。</p>
+          <p>放宽 unallocated 不一定意味着放宽 UnsupportedFeature；新 session 应<strong>分别决定</strong>（见待决问题）。</p>
+
+          <div class="callout add"><span class="tag">补充</span>
+            all-or-nothing 设计动机：iOS 补丁场景下 embedder 可能事先不清楚 dylib 用了哪些 CPU features；报错应指出 offending PC 和 missing features，便于重试或放弃。部分成功（已注册 entry 标 unsupported_thunk）会让 cache 维护半成品状态，复杂度收益不划算。
+            <span class="src-ref">docs/refs/gaby-vm-predecode-cache-design.md:299</span>
+          </div>
+
+          <details class="src"><summary>查看原文</summary><pre>## The deliberate decision this reverses (must be reconciled)
+
+- **design.md R12** (`docs/refs/gaby-vm-predecode-cache-design.md:670`):
+  > Unallocated → ErrorDetail 标 PC 后注册失败. unimplemented → unimplemented_thunk, 运行到该 PC 时 abort.
+
+  i.e. the designer *intentionally split* unallocated (reject) from unimplemented
+  (sentinel). This proposal merges them. The new session must update R12 with the
+  data-in-stream rationale.
+
+- **all-or-nothing rationale** (`...design.md:299`): the all-or-nothing story is
+  about **UnsupportedFeature** in the iOS-dylib case — "let the embedder learn
+  which PC needs which feature so it can re-try or drop the dylib." That rationale
+  is about *feature probing*, a different concern from *unallocated data words*.
+  Relaxing unallocated does not necessarily mean relaxing UnsupportedFeature; the
+  new session should decide each independently (see open questions).</pre></details>
+        </section>
+
+        <section id="sec-spec" class="sec">
+          <h2>Spec 影响（比看起来小）</h2>
+          <p class="sec-summary">normative spec 未强制 unallocated→InvalidArgument；主要是补 scenario + 更新 R12。</p>
+          <p><code>openspec/specs/predecode-cache/spec.md</code>（「RegisterCodeRange validates inputs and reports failures all-or-nothing」）列出的 normative 非 <code>Ok</code> 结果：</p>
+          <ul>
+            <li><code>OverlappingRange</code></li>
+            <li><code>UnsupportedFeature</code></li>
+            <li><code>InvalidArgument</code> —— <strong>仅用于 size</strong>（size 为 0 或不是 4 的倍数）</li>
+            <li><code>OutOfMemory</code></li>
+          </ul>
+          <p>Spec <strong>没有</strong>要求拒绝 unallocated encoding。<code>unallocated → InvalidArgument</code> 是 spec 之外的实现细节（ arguably 已是 spec/impl 不一致）。</p>
+
+          <div class="callout add"><span class="tag">补充</span>
+            当前 spec 对 <code>InvalidArgument</code> 只定义了 malformed size 场景；unallocated 拒绝不在 normative 要求内。
+            <span class="src-ref">openspec/specs/predecode-cache/spec.md:74</span>
+          </div>
+
+          <p>OpenSpec 变更主要需要：</p>
+          <ol>
+            <li>新增 requirement/scenario：含 embedded 非指令 data 的 range 注册 <code>Ok</code>；data word 为不可执行 sentinel；load 数据仍读原始字节；PC 到达 data word 则 trap。</li>
+            <li>调和 design.md R12。</li>
+            <li>决定 <code>UnsupportedFeature</code> 去留（保留现有 scenario，或一并放宽）。</li>
+          </ol>
+          <details class="src"><summary>查看原文</summary><pre>## Spec impact (smaller than it looks)
+
+`openspec/specs/predecode-cache/spec.md` ("RegisterCodeRange validates inputs and
+reports failures all-or-nothing") enumerates the normative non-`Ok` results:
+`OverlappingRange`, `UnsupportedFeature`, `InvalidArgument` **for size only**
+("size is zero or not a multiple of 4"), `OutOfMemory`. It does **not** mandate
+rejecting an unallocated encoding — the `unallocated → InvalidArgument` behaviour
+is implementation detail beyond the spec (and arguably a spec/impl mismatch
+already). So the OpenSpec change mainly needs to:
+
+1. Add a requirement/scenario: *a range with embedded non-instruction data
+   registers `Ok`; its data words are non-executable sentinels; loads of the data
+   read the original bytes; a PC that reaches a data word traps.*
+2. Reconcile design.md R12.
+3. Decide UnsupportedFeature's fate (keep its scenario, or relax it too).</pre></details>
+        </section>
+
+        <section id="sec-open" class="sec">
+          <h2>待决问题（留给新 session）</h2>
+          <p class="sec-summary">范围、sentinel 选型、strict mode、现有单测更新。</p>
+          <table>
+            <thead><tr><th>#</th><th>问题</th><th>建议</th></tr></thead>
+            <tbody>
+              <tr>
+                <td>1</td>
+                <td><strong>范围：只放宽 unallocated，还是也包括 UnsupportedFeature？</strong><br>5 个观测 case 全是 unallocated。UnsupportedFeature 有 live spec scenario 和 iOS dylib feature probing rationale。</td>
+                <td>放宽 <strong>unallocated</strong>（明确是 data）；<code>UnsupportedFeature</code> <strong>暂保持</strong>（或加 opt-in），因其 rejection 对 embedder 有诊断价值。</td>
+              </tr>
+              <tr>
+                <td>2</td>
+                <td><strong>独立 sentinel 还是复用 <code>UnimplementedSentinelLeaf</code>？</strong></td>
+                <td>独立 <code>DataInStreamSentinelLeaf</code>，abort 信息更清晰（「PC 进入 data region」）。成本低。</td>
+              </tr>
+              <tr>
+                <td>3</td>
+                <td><strong>Opt-in strict mode？</strong><br>部分 embedder 可能希望 upfront 拒绝不可解码 range。</td>
+                <td>考虑 per-cache 或 per-call flag；YAGNI 直到有人需要。</td>
+              </tr>
+              <tr>
+                <td>4</td>
+                <td><strong>现有 cache 单测</strong>几乎肯定断言 <code>unallocated → InvalidArgument</code>。</td>
+                <td>必须按新 contract 更新。</td>
+              </tr>
+            </tbody>
+          </table>
+          <details class="src"><summary>查看原文</summary><pre>## Open questions for the new session
+
+1. **Scope: unallocated only, or also UnsupportedFeature?** The 5 observed cases
+   are all unallocated. UnsupportedFeature has a live spec scenario and a real
+   iOS-dylib rationale (feature probing). Recommend: relax **unallocated**
+   (clearly data); leave UnsupportedFeature **as-is** for now (or add an opt-in),
+   since its rejection carries embedder-facing diagnostic value.
+2. **Distinct sentinel or reuse `UnimplementedSentinelLeaf`?** A distinct
+   `DataInStreamSentinelLeaf` could emit a clearer "PC entered a data region"
+   abort message than `VisitUnimplemented`. Low cost; recommend distinct.
+3. **Opt-in strict mode?** Some embedders may *want* up-front rejection of
+   undecodable ranges. Consider a per-cache or per-call flag if anyone needs it
+   (YAGNI until then).
+4. **Existing cache unit tests** almost certainly assert `unallocated →
+   InvalidArgument`. They must be updated to the new contract.</pre></details>
+        </section>
+
+        <section id="sec-test" class="sec">
+          <h2>测试计划</h2>
+          <p class="sec-summary">新单测 + 5 个 vixl_port case 复活 + rebaseline + guard rail。</p>
+          <ul>
+            <li><strong>PredecodeCache 单元测试</strong>（cache 自有测试，新建）：注册 range = <code>[真实指令][64-bit data constant][更多真实指令][ret]</code>，data word 为已知 unallocated encoding。断言：<code>RegisterCodeRange == Ok</code>；cache track 执行正确、<code>LDR</code> literal 读到 data 字节；故意 branch 进 data word 经 sentinel trap。</li>
+            <li><strong>Differential/absolute</strong>：5 个 <code>vixl_port</code> case 自动复活（注册 <code>Ok</code> 并跑 cache track）。确认每个通过双 oracle（cache == decoder == reference）；验证不是 merely 不再 skip，而是真正 pass。</li>
+            <li><strong>Rebaseline</strong> <code>kFamilyBaselines</code>（预期 integer +4、fp +1；<strong>实测</strong>，不要假设——用 <code>VIXL_PORT_REBASELINE=1</code>）。更新 debug 和 release 两对，以及 tasks/spec 计数。</li>
+            <li><strong>Guard rail</strong>：改动前后 <code>ctest --test-dir build/debug -R vixl_port</code> 及 release preset 全绿。</li>
+          </ul>
+          <details class="src"><summary>查看原文</summary><pre>## Test plan
+
+- **PredecodeCache unit test** (new, in the cache's own test): register a range =
+  `[real insns][64-bit data constant][more real insns][ret]` where the data word
+  is a known unallocated encoding. Assert: `RegisterCodeRange == Ok`; running the
+  cache track over the code executes correctly and the `LDR`-literal reads the
+  data bytes; a deliberate branch *into* the data word traps via the sentinel.
+- **Differential/absolute**: the 5 `vixl_port` cases auto-revive (they will now
+  register `Ok` and run on the cache track). Confirm each passes both oracles
+  (cache == decoder == reference). Verify they don't merely stop-skipping but
+  actually pass.
+- **Rebaseline** `kFamilyBaselines` (expect integer +4, fp +1; **measure**, do not
+  assume — run with `VIXL_PORT_REBASELINE=1`). Update both debug and release
+  pairs and the tasks/spec counts.
+- **Guard rail**: `ctest --test-dir build/debug -R vixl_port` and the release
+  preset green before/after.</pre></details>
+        </section>
+
+        <section id="sec-effort" class="sec">
+          <h2>工作量估计</h2>
+          <p class="sec-summary">代码很少；OpenSpec、design、spec、测试、rebaseline 是主体。</p>
+          <ul>
+            <li><strong>代码</strong>：<code>predecode_cache.cc</code> 约 10–20 行 + 新 sentinel + 单元测试</li>
+            <li><strong>周边</strong>：OpenSpec change、design.md R12 调和、spec requirement、cache 测试更新、harness rebaseline——占大头</li>
+            <li><strong>节奏</strong>：一个 focused session；<strong>作为独立 OpenSpec change</strong>，不要 fold 进 vixl_port review-fix 分支</li>
+          </ul>
+          <details class="src"><summary>查看原文</summary><pre>## Estimated effort
+
+Code: ~10–20 lines in `predecode_cache.cc` + a new sentinel + a unit test.
+Surrounding work (OpenSpec change, design.md R12 reconciliation, spec
+requirement, cache-test updates, harness rebaseline) is the bulk. One focused
+session. **Do it as its own OpenSpec change**, not folded into the vixl_port
+review-fix branch.</pre></details>
+        </section>
+
+      </div>
+    </div>
+  </div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/cpp.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<script>
+  const root=document.documentElement;
+  const prefersDark=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches;
+  function setTheme(t){
+    root.dataset.theme=t;
+    document.getElementById('hljs-dark').disabled=(t!=='dark');
+    document.getElementById('hljs-light').disabled=(t==='dark');
+    try{mermaid.initialize({startOnLoad:false,theme:t==='dark'?'dark':'default'});
+        renderMermaid();}catch(e){}
+  }
+  setTheme(prefersDark?'dark':'light');
+  document.getElementById('themeBtn').onclick=()=>setTheme(root.dataset.theme==='dark'?'light':'dark');
+  document.querySelectorAll('pre code').forEach(b=>{try{hljs.highlightElement(b)}catch(e){}});
+  let mermaidSrc=[...document.querySelectorAll('.mermaid')].map(el=>el.textContent);
+  function renderMermaid(){
+    document.querySelectorAll('.mermaid').forEach((el,i)=>{
+      el.removeAttribute('data-processed');el.innerHTML=mermaidSrc[i];
+    });
+    try{mermaid.run({querySelector:'.mermaid'})}catch(e){}
+  }
+  renderMermaid();
+  const links=[...document.querySelectorAll('.toc a')];
+  const map=new Map(links.map(a=>[a.getAttribute('href').slice(1),a]));
+  const obs=new IntersectionObserver(es=>{
+    es.forEach(e=>{if(e.isIntersecting){
+      links.forEach(l=>l.classList.remove('active'));
+      const a=map.get(e.target.id); if(a)a.classList.add('active');
+    }})
+  },{rootMargin:'-10% 0px -80% 0px'});
+  document.querySelectorAll('section.sec').forEach(s=>obs.observe(s));
+</script>
+</body>
+</html>

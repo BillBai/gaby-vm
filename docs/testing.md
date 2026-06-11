@@ -49,84 +49,219 @@ the public API don't need that privilege.
 
 ## Ported VIXL tests (`vixl_port`)
 
-`test/vixl_port/` holds a large correctness guard rail ported from VIXL's own
-execution test suite, built specifically to catch regressions in the shared
-execution hot path before the dispatch / operand-predecode performance work.
-Design and plan:
-[`refs/gaby-vm-vixl-sim-test-port-design-2026-06-08.md`](refs/gaby-vm-vixl-sim-test-port-design-2026-06-08.md)
-and the sibling `-plan-`.
+`vixl_port` is a large correctness guard rail ported from VIXL's own execution
+test suite, built specifically to catch regressions in the shared execution hot
+path before the dispatch / operand-predecode performance work. Aligned design:
+[`refs/gaby-vm-vixl-port-live-assemble-rewrite-2026-06-09.md`](refs/gaby-vm-vixl-port-live-assemble-rewrite-2026-06-09.md)
+(it supersedes the earlier frozen-fixture design, `-vixl-sim-test-port-*`).
 
-It is split into two halves:
+It **live-assembles** each upstream `TEST()` body at test time and runs it on
+both gaby tracks. There are no committed fixtures and no extraction tool — the
+suite assembles fresh on every run.
 
-- **Authorship-time extraction tool** — `tools/vixl_test_extract/`. Links the
-  reference VIXL (`../vixl`) MacroAssembler + Simulator and, via macro
-  redefinition, captures each upstream `TEST()` body into a fixture: the body
-  instruction words, the entry register state, and the `ASSERT_EQUAL_*`
-  targets. Built **only** behind `-DGABY_VM_BUILD_VIXL_EXTRACT=ON`
-  `-DVIXL_SRC_DIR=…`; it is never part of the shipping build (no Tier-0 in
-  CI/iOS). Each captured body is self-verified against the *real* VIXL
-  simulator before export, so a wrong expectation can never be committed.
-- **Shipping replay harness** — `test/vixl_port/vixl_port_runner.*` plus the
-  three CTest mains. Consumes only the committed `generated/*.inc` fixtures and
-  the gaby_vm public API. Each fixture is replayed on **both** tracks (cache via
-  `RunFrom`, decoder via `DebugRunFrom`) under two oracles: a **differential**
-  oracle (the two tracks' full `RegisterFile` must match — this is what catches
-  a cache-track regression) and an **absolute** oracle (every harvested
-  `ASSERT_EQUAL_*` target must hold). The committed fixtures make `ctest`
-  completely self-contained: no `../vixl`, no assembler, no extraction tool.
+### How it works
 
-### Refreshing the fixtures
+- **Test-only assembler island** — `test/test_support/vixl_asm/`. A copy of the
+  Tier-0 VIXL AArch64 assembler + macro-assembler + code-buffer and the VIXL
+  test infrastructure, taken verbatim from `../vixl` at the import SHA pinned in
+  [`refs/vixl-extraction-map.md`](refs/vixl-extraction-map.md). It is compiled
+  into a `gaby_vm_vixl_asm_testonly` static library that PRIVATE-links
+  `gaby_vm::gaby_vm` (so the shared leaf/simulator symbols come from `gaby_vm.a`,
+  defined once — no ODR clash), and it is **never** linked into the shipping
+  library: no `::` alias, a `_testonly` suffix, and gated behind
+  `GABY_VM_BUILD_TESTS`. The island builds `VIXL_CODE_BUFFER_MALLOC` only — the
+  assembled bytes are ordinary `malloc` data fed to the gaby decoder, never
+  executed on the host CPU (no-JIT / no-RWX / iOS holds). See the VIXL import
+  boundary in [`architecture.md`](architecture.md#vixl-import-boundary).
+- **Two-track harness** — `test/test_support/vixl_asm/harness/`. The
+  `gaby_two_track_macros.h` header redefines VIXL's `SETUP/START/END/RUN/
+  ASSERT_EQUAL_*` so an upstream test `.cc` compiles verbatim (its no-guard
+  self-include is stripped at copy time). `RUN()` assembles the body into a
+  `malloc` buffer, then runs the SAME bytes at the SAME address on three engines:
+  a VIXL reference `Simulator` (the absolute-oracle anchor) and gaby's two tracks
+  (cache via `RunFrom`, decoder via `DebugRunFrom`). The three CTest mains
+  (`vixl_port_integer` / `_fp` / `_neon`) each include one upstream `.cc` plus the
+  per-family `main` (the Test-list walk + a `sigsetjmp`/`alarm` crash-hang guard).
 
-The `generated/*.inc` files and their `manifest_<family>.md` reports are
-committed. Regenerate them (e.g. after a VIXL upgrade, or to widen coverage)
-with, per family:
+Two oracles gate every included body, each over **registers and memory**:
 
-```sh
-cmake --preset dev-debug -DGABY_VM_BUILD_VIXL_EXTRACT=ON \
-  -DVIXL_SRC_DIR=$PWD/../vixl \
-  -DVIXL_EXTRACT_TEST_CC=$PWD/../vixl/test/aarch64/test-assembler-aarch64.cc
-cmake --build build/debug --target vixl_test_extract
-./build/debug/tools/vixl_test_extract/vixl_test_extract \
-  test/vixl_port/generated/integer_fixtures.inc Integer
-```
+- **Differential** — the two gaby tracks must match: the full `RegisterFile`, and
+  the body's exit memory image (the store window — see below). This is the primary
+  catch for a cache-track dispatch regression.
+- **Absolute** — gaby must match the reference simulator's body-exit values (read
+  directly; no `core.Dump`). For registers, every `ASSERT_EQUAL_*` register/flag is
+  pinned to the reference — and where an assert relates **two** registers
+  (`ASSERT_EQUAL_64(x4, x5)`, `ASSERT_NOT_EQUAL_64(x1, x3)`) **both** are pinned, not
+  just the result, so a track that mis-computes the *other* operand (breaking the
+  asserted equality / inequality while the result stays correct) is caught. Each
+  register operand is read from its **own bank**: `ASSERT_EQUAL_64(<bits>, d17)` is a
+  V-register compare (the low 64-bit lane of `v17`), not the same-numbered `x17` — the
+  classifier keys on `IsVRegister()` rather than just "has a register code", so an X
+  and a V register sharing a code are never confused. `ASSERT_EQUAL_REGISTERS` pins the
+  **whole** register file (the reference ran the identical bytes from the identical
+  entry, so its exit state is the ground truth for "nothing was clobbered"). For
+  memory, the body's exit store image must match
+  the reference's. All three engines run the identical slice at the identical
+  address, so PC-relative results (ADR/literal) agree. (`ASSERT_LITERAL_POOL_SIZE`
+  is a deliberate no-op: it inspects the test-only island assembler's pool, not a
+  gaby leaf property, so it is out of the execution oracle's scope.)
 
-Repeat with `test-assembler-fp-aarch64.cc` → `fp_fixtures.inc Fp` and
-`test-assembler-neon-aarch64.cc` → `neon_fixtures.inc Neon`.
+Because the body is assembled live, `Mov(reg, reinterpret_cast<uintptr_t>(buf))`
+bakes a real in-process address, so **load/store/LDP/STP/ADR/literal AND
+read-modify-write (atomic / exclusive / CAS, NEON store-multiple) bodies run for
+real** against valid memory — coverage the previous frozen-fixture model
+structurally could not express. Crucially the *results* of those stores are
+checked, not just executed: the memory oracle compares the store window across all
+three engines, so a store the shared leaf gets wrong on both tracks (which the
+register snapshots cannot see) is caught against the reference.
 
-### What gets dropped, and why (the manifest)
+RMW bodies need one extra thing: the three engines run the SAME body against the
+SAME baked-address locals, sequentially, so an earlier engine's store would
+otherwise leak into a later engine's load. The harness resets that memory between
+runs. The body's locals live in the body function's stack frame, so `RUN()`
+captures the body's frame pointer (`__builtin_frame_address(0)`, which the macro
+inlines into the body) and `TwoTrackRun` snapshots the window `[its own frame,
+the body frame)` once, then restores it before each engine run. That window is
+exactly the body's frame — the baked-address locals — and sits entirely above the
+harness's own active frame, so the restore resets the body's memory without
+touching harness state. (The per-case `LiveRig` is a stack local in that frame,
+but the register-file snapshots the oracle fills *during* the runs are held in
+process-lifetime storage, outside the window.) The guest stack (`gaby_stack`, a
+separate buffer) is zeroed alongside.
 
-Many upstream tests are not portable to a relocated, different-process replay
-and are excluded — but never silently: `manifest_<family>.md` lists every
-skipped test with a reason. The filters are structural (robust to opcode detail
-and VIXL upgrades):
+That same window is what the **memory oracle** reads: after each engine finishes
+(and before the next reset) the harness captures the window bytes, then compares
+the three captures. Only the guest's stores to the body's locals differ between
+captures (the rest of the frame — `rig_`, padding — is byte-identical across runs),
+so a mismatch is a genuine store-result divergence. When the frame is too large to
+window safely (>256KB) or its frame pointers read back implausibly, the window is
+**inactive** and the memory oracle and the reset are both skipped for that body;
+the harness prints a one-time `[warn]` line naming the first such body so this
+degradation is visible rather than silent. The smoke family includes a dedicated
+read-modify-write body (`harness_smoke_memory`) whose correctness *depends* on the
+reset+capture working, so the window mechanism is exercised on every run rather
+than only by the large upstream RMW bodies.
 
-- **load/store, ADR/ADRP, register-indirect branch, SYS/SYSL** — bake host
-  memory/addresses or branch to a host-derived target, which would fault or
-  diverge on gaby's load address (`LDR`-literal is exempted: the literal pool is
-  forced inline so it travels PC-relative with the body).
-- **feature-deny** — MTE / PAuth / GCS / HBC / BF16 / TME / WFXT (gaby cannot
-  execute them, or their results are key/modifier/host-address dependent).
-- **name-quarantine** — simulator-runtime / system bodies (printf, runtime
-  calls, branch interception, MOPS, …).
-- **multi-RUN** — tests that drive several SETUP/RUN cycles via a helper called
-  in a loop do not fit the single-case fixture model.
-- **oversized / non-terminating bodies** — far-branch padding and large guest
-  loops are capped (a poor guard-rail fixture and slow to replay).
+Caveat: the window is a raw `memcpy` of a live C++ stack frame, so it is
+**incompatible with AddressSanitizer** — ASan's stack red-zones would be copied
+and trip a false report. Do not build the `vixl_port` families under ASan; the
+two-track + reference differential is the memory-safety check here, not a
+sanitizer. (See the I8/MemoryWriteSink note in the review docs for a record/undo
+alternative that would remove this constraint.)
 
-A consequence worth stating plainly: because every body containing a load/store
-is dropped, the ported suite covers **no memory-access semantics** — all
-LDR/STR/LDP/STP/atomic/exclusive/CAS tests are skipped (the replay model has no
-relocatable guest memory). The basic load/store coverage in
-`simulator_correctness` still stands, but if the dispatch optimization touches
-the memory-op execution paths, that gap should be closed separately (e.g. a
-relocatable-memory fixture model). The ALU / FP / NEON / branch / flag coverage
-is what makes this suite far wider than `simulator_correctness`.
+### What gets skipped, and why
+
+Inclusion is no longer gated by a structural load/store / PC-relative filter (the
+former `IsNonPortableInstr` is gone). The remaining skip surface is capability-
+or determinism-based, and the per-family run prints a count (set `VIXL_PORT_TRACE=1`
+for per-case reasons):
+
+- **feature deny-list** — a body whose *seen* features include MTE / PAuth / GCS /
+  HBC / BF16 / TME / WFXT (gaby cannot execute them, or the result is key /
+  modifier / host-address dependent).
+- **by-name quarantine** — (a) simulator-runtime / system bodies (printf, runtime
+  calls, branch interception, MOPS, `dc_zva`, `system`, `large_sim_stack`,
+  `generic_operand`); (b) `configure_cpu_features*`
+  (tests the feature-config mechanism on the reused reference sim), `branch_to_reg`
+  (register-indirect branch into BTI-guarded code), and `gcs_feature_off` (disables
+  the Guarded-Control-Stack check on the *reference* sim only — the gaby public API
+  exposes no GCS-disable, so the two tracks would abort on its deliberately-mismatched
+  return; GCS is out of V1 scope). The read-modify-write families (atomics /
+  exclusives / CAS, NEON store-multiple) are **not** quarantined — the per-run memory
+  reset above lets them run on both tracks.
+- **crash/hang during assembly or the reference run** — a body that faults, hits a
+  fatal (debug-only) check, or runs past the per-case instruction cap (a loop on an
+  uninitialised count register, or far-branch padding) while *assembling* or under the
+  *reference* sim is reported as skipped: it is an unportable body or a leaf the
+  reference itself rejects, not a gaby divergence. A crash/hang inside a **gaby track**
+  is the opposite — see the crash guard below.
+- **cache cannot register the slice** — a body whose inline literal pool contains
+  a data word that decodes to an *unallocated* encoding when the cache predecodes
+  the whole range (data-in-stream); `RegisterCodeRange` rejects the range, so the
+  body is reported as a skip. This is a real product limitation, not a gaby
+  divergence — tracked for a fix in
+  [`refs/gaby-vm-predecode-cache-data-in-stream-2026-06-10.md`](refs/gaby-vm-predecode-cache-data-in-stream-2026-06-10.md)
+  (predecode the data word into a non-executable sentinel entry instead of
+  rejecting). Today it affects `ldr_literal*` and `fjcvtzs`.
+- **legitimate disagreements** — e.g. an ADRP body whose baked expected literal
+  is address-dependent, or a body asserting an absolute `sp` value; the reference
+  computes correctly but the upstream literal does not match under the harness's
+  address/sp, so the case is skipped rather than failed.
+
+SVE is not run (no gaby SVE leaf); the SVE assembler `.cc` is copied only to
+satisfy out-of-line link symbols the non-SVE headers declare.
+
+### Determinism caveats (where three-engine agreement rests on shared state)
+
+Two bodies pass only because a *random-looking* value comes out identical on all
+three engines, and that identity is not separately enforced — worth knowing
+before trusting these cases:
+
+- **`system_rng`** (RNDR / RNDRRS): the three engines agree because they share a
+  deterministic, identically-seeded PRNG sequence, so `x1`/`x3`/`x5`/`x7` match.
+  The agreement is real but incidental to seeding, not to instruction semantics.
+- **Exclusive-monitor PRNG**: the imported simulator's exclusive-monitor backoff
+  uses a PRNG seed that `ResetState()` does **not** reset, so the reference and
+  gaby tracks could in principle drift after the first exclusive sequence. In
+  practice the upstream `ldxr`/`stxr` bodies use the canonical retry-loop shape,
+  which converges regardless of the monitor's internal coin-flips, so the
+  families stay green — "lucky soundness" that holds today but is not guaranteed
+  by a reset. If an exclusives body is ever added that depends on a specific
+  monitor outcome, seed parity across the engines would need to be made explicit.
+
+### Gaby-track crash guard (a crash here FAILs, it does not skip)
+
+The per-family main runs each body under a `sigsetjmp`/`alarm` guard and tracks
+*which engine* is executing (`g_run_phase`). A fatal signal (SIGSEGV / SIGBUS /
+SIGILL / SIGABRT / SIGALRM) that fires while a **gaby track** (cache `RunFrom` or
+decoder `DebugRunFrom`) is running is the exact dispatch / predecode regression
+class this guard rail exists to catch — a wild PC, an out-of-range cache entry, a
+runaway loop — so it is recorded as a **FAILURE**, and the family stops there. It
+stops rather than continuing because the signal unwound past gaby's
+`ExecutionScope` destructor, leaving the shared imported `Simulator`'s `busy`
+re-entrancy flag latched true; every later run on that engine would be silently
+misinterpreted as nested. The FAIL already makes the suite red — fix and re-run.
+(A signal during assembly or the reference run stays a skip, as above.)
+
+Because no body in the live suite currently crashes a gaby track, this path has
+no natural trigger — so `vixl_asm_harness_selftest` injects a fatal signal at a
+chosen phase (a `GABY_VM_VIXL_PORT_SELFTEST`-gated seam, a no-op in the family
+binaries) and asserts the harness FAILs + halts for a cache- or decoder-phase
+fault, and *skips* (does not halt) for a reference-phase fault. It runs on every
+`ctest`, so the logic is exercised continuously rather than first on the day it
+matters.
+
+### Coverage baseline (green must mean "still covering what it covered")
+
+The suite would otherwise return green on any `failed == 0` run, so a regression
+that silently moves cases from "ran" to "skipped" (a leaked sim knob like the
+guarded-pages bug below, a widened feature deny, a new gaby-track abort) would
+shrink coverage invisibly. The per-family main therefore pins the expected
+ran/skipped split (`kFamilyBaselines`) and FAILs on any drift. Debug and release
+differ by exactly one integer case (`branch_tagged_and_adr_adrp`, gated by a
+debug-only assertion), so the baseline carries a pair per config and selects by
+`NDEBUG`. To re-baseline after an intended change, run with
+`VIXL_PORT_REBASELINE=1` (prints the observed split instead of failing) and update
+the table in the same commit. The drift decision is a pure function
+(`IsBaselineViolation`) with its own check in `vixl_asm_harness_selftest`, so both
+directions — match passes, drift fails, rebaseline suppresses — are regression-
+tested, not just the "counts matched" half a green run demonstrates.
+
+### Refreshing after a VIXL upgrade
+
+There are no fixtures to regenerate. To re-sync the island to a new upstream:
+`git -C ../vixl checkout <new-sha>`, re-copy the island files at that SHA,
+update the pinned SHA in [`refs/vixl-extraction-map.md`](refs/vixl-extraction-map.md)
+(the imported simulator headers and the island assembler must come from the same
+SHA — a skew risks a no-diagnostic inline-body ODR), and re-run `ctest -R vixl_port`.
 
 ## Encoding policy
 
-Tests don't assemble at runtime, and the tree doesn't currently ship an
-assembler or instruction-emit helper (Tier 0 of the VIXL import is excluded).
-Instruction sequences in `simulator_correctness` are raw `uint32_t` arrays.
+The shipping tree (`Sources/gaby_vm/src/`) ships no assembler or instruction-emit
+helper — Tier 0 of the VIXL import is excluded from `gaby_vm` (the one Tier-0
+copy is the test-only `vixl_port` assembler island above, never linked into
+`gaby_vm`). So `simulator_correctness` does not assemble at runtime; its
+instruction sequences are raw `uint32_t` arrays.
 When a new encoding is needed at authorship time, an external tool such as
 `llvm-mc` is a reasonable way to produce the hex, which then gets hand-copied
 into the test source. This keeps the build and runtime free of the assembler

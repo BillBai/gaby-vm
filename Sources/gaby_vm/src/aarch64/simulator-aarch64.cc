@@ -3919,7 +3919,10 @@ void Simulator::VisitUnallocated(const Instruction* instr) {
   printf("Unallocated instruction at %p: 0x%08" PRIx32 "\n",
          reinterpret_cast<const void*>(instr),
          instr->GetInstructionBits());
-  VIXL_UNIMPLEMENTED();
+  // gaby-vm:
+  // predecode-cache-data-in-stream: VIXL_UNIMPLEMENTED is a release-build
+  // no-op, but a cache data sentinel must trap on execute in every config.
+  VIXL_ABORT_WITH_MSG("UNALLOCATED\n");
 }
 
 

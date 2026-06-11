@@ -57,6 +57,18 @@ gaby_vm_apply_compile_flags(simulator_correctness)
 
 add_test(NAME simulator_correctness COMMAND simulator_correctness)
 
+# Predecode cache data-in-stream: verifies literal-pool data that decodes as
+# unallocated can live inside a registered range, while cache-track execution
+# still aborts if control reaches that data word. Public-API only.
+add_executable(predecode_cache_data_in_stream_test
+  predecode_cache_data_in_stream_test.cc)
+target_link_libraries(predecode_cache_data_in_stream_test
+  PRIVATE gaby_vm::gaby_vm)
+gaby_vm_apply_compile_flags(predecode_cache_data_in_stream_test)
+
+add_test(NAME predecode_cache_data_in_stream
+  COMMAND predecode_cache_data_in_stream_test)
+
 # Re-entrancy + dual-track termination: drives the gaby_vm::Simulator public API
 # only (no imported VIXL headers), so it needs no privileged build pattern —
 # just the public include directory that linking gaby_vm::gaby_vm provides.
@@ -136,7 +148,10 @@ gaby_vm_apply_compile_flags(branch_hook_reentrancy_test)
 
 add_test(NAME branch_hook_reentrancy COMMAND branch_hook_reentrancy_test)
 
-# Ported VIXL simulator tests: the replay side of the authorship-time test
-# port (docs/refs/gaby-vm-vixl-sim-test-port-*). Self-contained — no ../vixl,
-# no privileged build — it replays committed fixtures under vixl_port/generated.
-add_subdirectory(vixl_port)
+# Ported VIXL simulator tests (the vixl_port suite): a TEST-ONLY copy of the
+# Tier-0 VIXL assembler + test infra (at the pinned import SHA) live-assembles
+# each upstream TEST() body and runs it on both gaby tracks under absolute +
+# differential oracles. PRIVATE-linked, no :: alias, never part of gaby_vm. This
+# replaces the former frozen-fixture replay. See
+# docs/refs/gaby-vm-vixl-port-live-assemble-rewrite-2026-06-09.md.
+add_subdirectory(test_support/vixl_asm)
