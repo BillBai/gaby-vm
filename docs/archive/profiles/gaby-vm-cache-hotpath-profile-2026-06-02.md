@@ -346,6 +346,15 @@ dispatch 的大头。治本要 **threaded dispatch**：每个 form 各自一个 
 是更大、单独的一步，收益也更大。**所以 thunk 表是便宜干净的清理，不是冲 50×
 的主力**；要数就先跑 spike 实测 thunk 这一项，别拍脑袋。
 
+> **后补（2026-06-02，同日继续）**：再往下聊发现 thunk + Phase 2 这套增量框法
+> 其实是在给一个半成品打补丁——cache 今天只缓存了第一级派发（form→leaf），第二级
+> 派发（leaf 里再 decode 选操作）和操作数抽取每次执行都在重做。真正想要的是换执行
+> 模型：flat decoded entry（预抽 reg/imm + 简单 C 函数指针 leaf），最终去掉
+> `form_hash_` 和 Simulator 虚继承，天然通向 threaded interpreter。这个方向的粗记
+> 单独落在 [`gaby-vm-dispatch-redesign-notes-2026-06-02.md`](./gaby-vm-dispatch-redesign-notes-2026-06-02.md)。
+> **当前不实施**：roadmap 的 Phase 1/2 搁置，近期先做更简单的事（大概率是 §8.2 的
+> Step 0 基准）。
+
 ### 8.2 目标再校准：真正的标尺是 Lua / JS，不是 native
 
 `50× native` 是个 proxy。对 iOS 热修这个真实用例，该对标的是**在 app 内真能
@@ -383,6 +392,13 @@ LLInt）在**真机**上量端到端 wall time。有了它，「不慢于 Lua/JS
 盯着优化的硬指标，也可能一量就发现自定义逻辑已经赢了、优化重点应转向 native
 bridge 覆盖重原语（ROI 比硬抠 dispatch 高得多）。这一步不写优化代码，只建测量
 基准，跟「先量再压」一致。
+
+> **后补（2026-06-08，已落地一半）**：Step 0 的 native 那条标尺已建成——
+> `bench_business`，四个诊断性微核（parse/hash/struct/fsm），见
+> [`gaby-vm-business-bench-2026-06-08.md`](./gaby-vm-business-bench-2026-06-08.md)。
+> 首份数据的关键发现：**cache 是平的 ~6.5 ns/insn，slowdown 倍数（~19×–211×）由
+> native 那侧的 IPC 决定，不是 gaby**。parse/fsm/hash 的 50× 够得着，struct（native
+> ~6.8 IPC）是硬骨头。Lua/JS head-to-head 那一半仍未做。
 
 ## 9. 数据/方法的局限
 
