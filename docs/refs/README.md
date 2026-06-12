@@ -50,6 +50,9 @@
   核）。被 `bench/README.md` 引。
 - `gaby-vm-cache-hotpath-profile-2026-05-27.md` — **锚点**。cache 热路径采样 profile。被
   shipping 代码注释 + `aarch64-simulator` spec 引。
+- `gaby-vm-dispatch-flatten-profile-2026-06-11.md` — 业务核（`parse`/`fsm`）cache 路径的
+  dispatch profile + 设计分析：二次派发/虚调用占比、movprfx 实测 ~6%、operand 存储取舍、
+  flatten 后抛弃 `form_hash` 腾出 32 bit。
 
 ## 归档
 

@@ -1,5 +1,8 @@
 # Gaby-VM
 
+> **gaby-vm** — *Gaby's AArch64 BinarY interpreter*: an embeddable, JIT-free
+> Arm CPU interpreter based on VIXL simulator semantics.
+
 Gaby-VM is an embeddable Arm CPU instruction interpreter built on VIXL's
 AArch64 simulator semantics. It ships as a standalone project rather
 than an in-place fork of VIXL, and starts with AArch64 user-mode
