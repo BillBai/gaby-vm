@@ -28,7 +28,7 @@ jobs:
       # is per-step and only captures one step's worth).
       CI_REPORT_FILE: ${{ github.workspace }}/ci-report.md
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Toolchain versions
         run: cmake --version && ninja --version
@@ -70,7 +70,7 @@ jobs:
 
       # Publish this run's sizes.json so future PRs (and main) can diff against it.
       - name: Upload size baseline
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: sizes
           path: sizes.json

@@ -122,5 +122,11 @@ are added only after the scripts they call are green locally. See
       0, each emitting its report. DONE: 6/6 steps exit 0; reports emitted.
 - [x] 9.2 `openspec validate add-github-ci --strict` passes. DONE: "Change
       'add-github-ci' is valid".
-- [ ] 9.3 Push the branch and confirm both workflows run green on GitHub
+- [x] 9.3 Push the branch and confirm both workflows run green on GitHub
       Actions (the only step that needs the real runner); paste the run links.
+      DONE via PR #1 (BillBai/gaby-vm). `ci.yml` green on the PR
+      (run 27688475656, after the sticky-comment fix) and on push→main
+      (run 27688478373); `bench.yml` green on its first push→main run
+      (run 27688477840: native baseline built + ran, `bench.json` uploaded).
+      The sticky PR comment renders the full report (22/22 tests, parity OK,
+      size table).
