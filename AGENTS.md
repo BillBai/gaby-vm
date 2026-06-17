@@ -47,13 +47,32 @@ Out of scope unless explicitly required later:
 
 Traps, unsupported instructions, syscall-like instructions, or simulated faults may be represented later through callbacks, status codes, or fallback behavior. Do not build a full exception-level simulator in V1.
 
-## 中文表达风格
+## Chinese Communication Style
 
-用中文回复时，请用自然、清醒、像真人聊天的中文。避免 AI 味、报告腔、公众号腔、咨询腔和过度结构化。不要滥用「本质、底层逻辑、维度、框架、闭环、赋能、抓手、范式」这类抽象词。可以有结构，但不要机械分点。优先说人话、说重点、给判断、给能直接用的建议。不要过度安慰，不要灌鸡汤，不要为了显得全面而啰嗦。
+When replying in Chinese, write natural, direct prose that sounds like a real
+technical conversation. Avoid AI-flavored phrasing, stiff report language,
+marketing language, consulting language, and mechanical over-structuring. Do
+not overuse abstract business terms. Use structure when it helps, but do not
+turn every answer into a rigid list. Prefer plain wording, clear judgment, and
+advice the reader can use.
 
-同时也不要为了简洁而把句子砍得过短。要把背景介绍清楚，详细一点，假设读者不一定具备相关知识。整体目标是「说人话」——既不是 AI 报告体，也不是电报式短句。
+Do not make Chinese prose terse just to look concise. Give enough background
+for a reader who may not already know the topic. The goal is human technical
+writing: neither an AI report nor a series of clipped notes.
 
-这条规则对生成的文档内容同样适用（包括中文注释、中文 commit message、中文说明性文本等等）。
+This rule also applies to generated Chinese content, including comments, commit
+messages, and explanatory text.
+
+## Documentation Language Policy
+
+- Write public documentation in English by default.
+- If a Chinese version exists, keep it next to the English file with the
+  `.zh-cn.md` extension and keep the two versions in sync when editing either
+  one.
+- When creating new documentation, write only the English file unless the user
+  explicitly asks for a Chinese version.
+- OpenSpec artifacts are English-only. Do not create bilingual OpenSpec
+  documents or `.zh-cn.md` variants under `openspec/`.
 
 ## Agent Rules
 
@@ -80,6 +99,7 @@ Durable conventions and design facts live in `docs/`. Read these before proposin
 - Coding conventions (formatting, namespaces, license headers, marker convention) → [`docs/conventions.md`](docs/conventions.md)
 - Testing strategy (CTest layout, the ported VIXL correctness guard rail, encoding policy) → [`docs/testing.md`](docs/testing.md)
 - Performance measurement (benchmark harness, slowdown-vs-native methodology, the business-logic microkernels) → [`bench/README.md`](bench/README.md)
+- Continuous integration (GitHub Actions workflows, the portable `ci/` scripts, size/bench reports) → [`docs/refs/ci.md`](docs/refs/ci.md)
 - VIXL import tier list → [`docs/refs/vixl-extraction-map.md`](docs/refs/vixl-extraction-map.md)
 - Capability requirements (normative) → [`openspec/specs/`](openspec/specs/)
 - User-facing build and embedding instructions → [`README.md`](README.md)

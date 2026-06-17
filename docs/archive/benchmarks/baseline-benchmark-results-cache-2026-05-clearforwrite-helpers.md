@@ -10,8 +10,8 @@ Companion docs:
 
 - Predecessor snapshot (post-A): [`baseline-benchmark-results-cache-2026-05-neon-inline.md`](baseline-benchmark-results-cache-2026-05-neon-inline.md)
 - Original post-cache baseline: [`baseline-benchmark-results-cache-2026-05.md`](baseline-benchmark-results-cache-2026-05.md)
-- Sampling profile that motivated B + C: [`gaby-vm-cache-hotpath-profile-2026-05-27.md`](gaby-vm-cache-hotpath-profile-2026-05-27.md)
-- Benchmark methodology and suite index: [`baseline-benchmark-suite.md`](baseline-benchmark-suite.md)
+- Sampling profile that motivated B + C: [`gaby-vm-cache-hotpath-profile-2026-05-27.md`](../../refs/gaby-vm-cache-hotpath-profile-2026-05-27.md)
+- Benchmark methodology and suite index: [`baseline-benchmark-suite.md`](../../refs/baseline-benchmark-suite.md)
 
 ## 1. TL;DR
 
@@ -123,7 +123,7 @@ the pre-cache baseline (62 ns/insn).
 The proposal predicted ≥10% from B + C combined (8% gate). Actual: 7.0%.
 
 The gate was calibrated against a profile snapshot taken **before** Lever
-A landed. That profile (`gaby-vm-cache-hotpath-profile-2026-05-27.md`)
+A landed. That profile (`../../refs/gaby-vm-cache-hotpath-profile-2026-05-27.md`)
 attributed 12.1% of mixed cache runtime to `ClearForWrite` standalone.
 But ClearForWrite's byte loop calls `SetUint(kFormat16B, i, 0)`, and
 the `SetUint` body's `LaneSizeInBitsFromFormat` switch was inlined to
@@ -179,7 +179,7 @@ contract we're delivering on.
 ## 6. What this snapshot is NOT
 
 - This is not a profile. For the post-A profile that motivated this
-  change, see `gaby-vm-cache-hotpath-profile-2026-05-27.md`. No fresh
+  change, see `../../refs/gaby-vm-cache-hotpath-profile-2026-05-27.md`. No fresh
   profile was taken for this change because the bench delta (7%) sits
   inside the amortization-corrected prediction band; no surprise to
   investigate. The next profile is owed when Lever N's actual target

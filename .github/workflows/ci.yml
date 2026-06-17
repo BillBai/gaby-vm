@@ -1,0 +1,93 @@
+name: CI
+
+# Deterministic gate. On every pull request and every push to main: build, run
+# the full CTest suite, run the bit-exact cache/decoder parity check, and report
+# binary size with deltas. A PR can fail only on a build error, a test failure,
+# or a parity mismatch — never on a timing value (perf lives in bench.yml).
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  build-test-size:
+    # macOS arm64: the ISA of the primary iOS target. Linux build/test is a
+    # later follow-up (it cannot produce the native-baseline denominator).
+    runs-on: macos-14
+    env:
+      # Job-level accumulator: ci_summary appends every step's report here so
+      # the sticky-comment step can read the full report ($GITHUB_STEP_SUMMARY
+      # is per-step and only captures one step's worth).
+      CI_REPORT_FILE: ${{ github.workspace }}/ci-report.md
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Toolchain versions
+        run: cmake --version && ninja --version
+
+      # Debug build runs the full suite with VIXL asserts live — they catch
+      # cache bugs the guard rail exists for.
+      - name: Build (debug) + full CTest suite
+        run: |
+          ci/build.sh dev-debug
+          ci/ctest.sh dev-debug
+
+      # Release build feeds the deterministic parity gate and the size report.
+      - name: Build (release) + cache/decoder parity
+        run: |
+          ci/build.sh dev-release -DGABY_VM_BUILD_BENCHMARKS=ON
+          ci/bench-verify.sh dev-release
+
+      # Pull the latest successful main run's size baseline so the PR can show
+      # deltas. Best-effort: a missing baseline just yields an absolute report.
+      - name: Fetch base size baseline (PR only)
+        if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p .ci-base
+          run_id="$(gh run list --workflow ci.yml --branch main --status success \
+                    --limit 1 --json databaseId --jq '.[0].databaseId' 2>/dev/null || true)"
+          if [ -n "${run_id:-}" ]; then
+            gh run download "$run_id" --name sizes --dir .ci-base 2>/dev/null || true
+          fi
+
+      - name: Binary size report
+        run: |
+          if [ -f .ci-base/sizes.json ]; then
+            ci/size-report.sh --out sizes.json --base .ci-base/sizes.json
+          else
+            ci/size-report.sh --out sizes.json
+          fi
+
+      # Publish this run's sizes.json so future PRs (and main) can diff against it.
+      - name: Upload size baseline
+        uses: actions/upload-artifact@v4
+        with:
+          name: sizes
+          path: sizes.json
+          if-no-files-found: error
+
+      # Mirror the accumulated job summary into a single sticky PR comment.
+      - name: Sticky PR comment
+        if: github.event_name == 'pull_request' && always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          {
+            echo "<!-- gaby-ci-report -->"
+            echo "## gaby-vm CI"
+            echo
+            cat "$CI_REPORT_FILE" 2>/dev/null || echo "_(no report produced)_"
+          } > pr-comment.md
+          source ci/util.sh
+          ci_sticky_comment "$PR_NUMBER" pr-comment.md

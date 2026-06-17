@@ -1,0 +1,43 @@
+name: bench
+
+# Performance, tracked on main as a moving baseline — never a PR gate. Runs on
+# push to main and on manual dispatch only. Report-only: it publishes numbers,
+# it does not fail on a timing threshold.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: bench-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  bench:
+    # arm64 macOS: the only GitHub runner where the native baseline (and thus
+    # the slowdown-vs-native figure) is meaningful.
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Toolchain versions
+        run: cmake --version && ninja --version
+
+      - name: Build (release + native baseline)
+        run: |
+          ci/build.sh dev-release \
+            -DGABY_VM_BUILD_BENCHMARKS=ON \
+            -DGABY_VM_BUILD_NATIVE_BASELINE=ON
+
+      - name: Benchmark report (full harness)
+        run: ci/bench-report.sh --out bench.json
+
+      - name: Upload bench baseline
+        uses: actions/upload-artifact@v4
+        with:
+          name: bench
+          path: bench.json
+          if-no-files-found: error

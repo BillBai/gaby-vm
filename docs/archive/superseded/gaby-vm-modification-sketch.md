@@ -9,19 +9,22 @@
 >
 > Citations are paths inside `../vixl/`. The companion architecture and
 > dispatch docs cover the upstream surfaces this doc builds on:
-> [`vixl-aarch64-simulator-architecture.md`](./vixl-aarch64-simulator-architecture.md),
-> [`vixl-decode-dispatch-pattern.md`](./vixl-decode-dispatch-pattern.md).
+> [`vixl-aarch64-simulator-architecture.md`](../../refs/vixl-aarch64-simulator-architecture.md),
+> [`vixl-decode-dispatch-pattern.md`](../../refs/vixl-decode-dispatch-pattern.md).
 
-> **预解码缓存部分已被取代**：本 sketch 里关于 predecode cache 的具体形状
-> （per-instance vs shared cache、`predecode_cache_active_` bool gate、
-> operand pre-extraction 的时机、Out-of-range PC fallback 等）已被
-> [`gaby-vm-predecode-cache-design.md`](./gaby-vm-predecode-cache-design.md)
-> 取代。其中两条决议被显式翻转——per-instance → shared、bool gate → API 双轨制
-> （`RunFrom` / `DebugRunFrom`），新文档 §2.3 有详细记录。
+> **The predecode-cache section has been superseded.** The cache-specific shape
+> in this sketch, including per-instance vs shared cache,
+> `predecode_cache_active_` bool gating, operand pre-extraction timing, and
+> out-of-range PC fallback, was replaced by
+> [`gaby-vm-predecode-cache-design.md`](../../refs/gaby-vm-predecode-cache-design.md).
+> Two decisions were explicitly reversed there: per-instance became shared, and
+> the bool gate became the public dual-track API (`RunFrom` / `DebugRunFrom`).
 >
-> 本 sketch 剩余三块——**多实例并发、embedder stack ownership、real atomic
-> semantics**——仍是 authoritative，新文档没有触及。读者读到 cache 段落时请跳
-> 到 design doc；读多实例 / 原子 / 栈这三块时本文档仍然有效。
+> The remaining parts of this sketch, namely **multi-instance concurrency**,
+> **embedder stack ownership**, and **real atomic semantics**, are still
+> authoritative because the newer cache design did not cover them. For cache
+> details, read the design doc instead. For concurrency, atomics, and stacks,
+> this document still applies.
 
 ## Restating the goal
 
@@ -102,7 +105,7 @@ not free it, and does not resize it. Upstream VIXL uses
 `SimStack::Allocated` (`simulator-aarch64.h:95-158`) which
 self-allocates; Gaby-VM either extends that to accept an external
 buffer or wraps the Simulator with a span-based `Memory`. The choice
-is flagged in the [extraction map](./vixl-extraction-map.md).
+is flagged in the [extraction map](../../refs/vixl-extraction-map.md).
 
 ### Real atomic semantics
 
@@ -358,7 +361,7 @@ One array load + one indirect call.
 
 Several `Simulate_*` leaves are shared across multiple forms and
 switch on `form_hash_` to choose behavior — see
-[`vixl-decode-dispatch-pattern.md`](./vixl-decode-dispatch-pattern.md)
+[`vixl-decode-dispatch-pattern.md`](../../refs/vixl-decode-dispatch-pattern.md)
 section 10 (`Simulate_PdT_PgZ_ZnT_ZmT` at
 `simulator-aarch64.cc:2325-2344`). The cached path **must** restore
 `form_hash_` before each leaf call, even when it looks redundant.
@@ -410,7 +413,7 @@ correctness change. Risks:
   a global hashed spinlock. Configure-time check required.
 - **Per-leaf testing.** Multi-threaded stress benchmark must be a
   correctness gate, not just a perf measurement. See
-  [`baseline-benchmark-suite.md`](./baseline-benchmark-suite.md) for
+  [`baseline-benchmark-suite.md`](../../refs/baseline-benchmark-suite.md) for
   the test design.
 
 ### Multi-instance state isolation
@@ -492,13 +495,13 @@ do not surprise ourselves later by reinventing them.
 
 ## Where to read next
 
-- [`vixl-aarch64-simulator-architecture.md`](./vixl-aarch64-simulator-architecture.md)
+- [`vixl-aarch64-simulator-architecture.md`](../../refs/vixl-aarch64-simulator-architecture.md)
   — the upstream surface this design extends.
-- [`vixl-decode-dispatch-pattern.md`](./vixl-decode-dispatch-pattern.md)
+- [`vixl-decode-dispatch-pattern.md`](../../refs/vixl-decode-dispatch-pattern.md)
   — what the cache replaces and what it must preserve.
-- [`vixl-extraction-map.md`](./vixl-extraction-map.md) — file list,
+- [`vixl-extraction-map.md`](../../refs/vixl-extraction-map.md) — file list,
   including which simulator files are expected to be modified after
   import.
-- [`baseline-benchmark-suite.md`](./baseline-benchmark-suite.md) —
+- [`baseline-benchmark-suite.md`](../../refs/baseline-benchmark-suite.md) —
   how we measure the resulting speedup and validate atomics
   correctness.

@@ -100,7 +100,8 @@ unimplemented forms; it unifies "can't really execute this word" handling.
 ## The deliberate decision this reverses (must be reconciled)
 
 - **design.md R12** (`docs/refs/gaby-vm-predecode-cache-design.md:670`):
-  > Unallocated → ErrorDetail 标 PC 后注册失败. unimplemented → unimplemented_thunk, 运行到该 PC 时 abort.
+  > Unallocated -> registration fails with `ErrorDetail` pointing at the PC.
+  > Unimplemented -> `unimplemented_thunk`; aborts when PC reaches that word.
 
   i.e. the designer *intentionally split* unallocated (reject) from unimplemented
   (sentinel). This proposal merges them. The new session must update R12 with the
