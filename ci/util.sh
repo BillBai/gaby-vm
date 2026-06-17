@@ -43,15 +43,24 @@ ci_find() {
   find "$1" -name "$2" -type f 2>/dev/null | head -1
 }
 
-# ci_summary <markdown...> -> append to the GitHub job summary when running
-# under Actions; otherwise echo to stdout so local runs still show the report.
+# ci_summary <markdown...> -> emit a markdown report line.
+#   * $GITHUB_STEP_SUMMARY is per-STEP (Actions aggregates each step's file into
+#     the run-page job summary), so it captures only the current step.
+#   * $CI_REPORT_FILE, when set, is a job-level accumulator the workflow points
+#     at so a later step (the sticky PR comment) can read the WHOLE report.
+# We write to both when set; when neither is set (a local run) we echo to stdout.
 # Multi-line arguments are preserved.
 ci_summary() {
+  local wrote=0
   if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
     printf '%s\n' "$*" >>"$GITHUB_STEP_SUMMARY"
-  else
-    printf '%s\n' "$*"
+    wrote=1
   fi
+  if [ -n "${CI_REPORT_FILE:-}" ]; then
+    printf '%s\n' "$*" >>"$CI_REPORT_FILE"
+    wrote=1
+  fi
+  [ "$wrote" -eq 1 ] || printf '%s\n' "$*"
 }
 
 # ci_sticky_comment <pr-number> <body-file> -> create or update THE CI comment

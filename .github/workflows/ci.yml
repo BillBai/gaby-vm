@@ -22,6 +22,11 @@ jobs:
     # macOS arm64: the ISA of the primary iOS target. Linux build/test is a
     # later follow-up (it cannot produce the native-baseline denominator).
     runs-on: macos-14
+    env:
+      # Job-level accumulator: ci_summary appends every step's report here so
+      # the sticky-comment step can read the full report ($GITHUB_STEP_SUMMARY
+      # is per-step and only captures one step's worth).
+      CI_REPORT_FILE: ${{ github.workspace }}/ci-report.md
     steps:
       - uses: actions/checkout@v4
 
@@ -82,7 +87,7 @@ jobs:
             echo "<!-- gaby-ci-report -->"
             echo "## gaby-vm CI"
             echo
-            cat "$GITHUB_STEP_SUMMARY"
+            cat "$CI_REPORT_FILE" 2>/dev/null || echo "_(no report produced)_"
           } > pr-comment.md
           source ci/util.sh
           ci_sticky_comment "$PR_NUMBER" pr-comment.md

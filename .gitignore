@@ -143,6 +143,7 @@ desktop.ini
 /sizes.json
 /bench.json
 /pr-comment.md
+/ci-report.md
 /.ci-base/
 
 # ----------------------------------------------------------------------------
