@@ -54,6 +54,13 @@
   dispatch profile + 设计分析：二次派发/虚调用占比、movprfx 实测 ~6%、operand 存储取舍、
   flatten 后抛弃 `form_hash` 腾出 32 bit。
 
+## 工具与 CI
+
+- `ci.md` — 持续集成的操作说明：GitHub Actions 的两个 workflow、可移植的 `ci/`
+  脚本、怎么在本地复现每一步、以及怎么读 size/bench 报告。规范性的契约写在
+  OpenSpec 的 `continuous-integration` capability 里，这份文档只讲怎么用。
+  （仅有英文版 `ci.md`，不单独出中文版。）
+
 ## 归档
 
 历史/过时的文档会定期移到 [`../archive/`](../archive/)：

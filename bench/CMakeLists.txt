@@ -74,6 +74,21 @@ target_compile_definitions(bench_business PRIVATE
   $<$<CONFIG:Debug>:VIXL_DEBUG>)
 gaby_vm_apply_compile_flags(bench_business)
 
+# size_probe — minimal public-API link unit for the CI binary-size report
+# (ci/size-report.sh). NOT a benchmark: it exists only so the size report can
+# strip it and measure the footprint an embedder actually pays. Unlike the
+# bench_* targets it links ONLY the public gaby_vm::gaby_vm surface — no PRIVATE
+# src include, no VIXL defines — and dead-strips unused code so the measured
+# size reflects just what the public API pulls in. Not registered with CTest.
+add_executable(size_probe size_probe.cc)
+target_link_libraries(size_probe PRIVATE gaby_vm::gaby_vm)
+gaby_vm_apply_compile_flags(size_probe)
+if(APPLE)
+  target_link_options(size_probe PRIVATE -Wl,-dead_strip)
+elseif(NOT MSVC)
+  target_link_options(size_probe PRIVATE -Wl,--gc-sections)
+endif()
+
 # native_smoke / native_baseline — dev-only "relative to native" reference.
 # They copy the SAME committed workload bytes (smoke / mixed) into executable
 # memory and run them directly on the host CPU, so decoder- and cache-mode

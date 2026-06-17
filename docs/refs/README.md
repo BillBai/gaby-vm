@@ -69,6 +69,13 @@ them.
   cost, measured MOVPRFX rate, operand-storage trade-offs, and recovering
   32 bits after dropping `form_hash` from the flattened path.
 
+## Tooling and CI
+
+- `ci.md`: continuous-integration operational map — the GitHub Actions
+  workflows, the portable `ci/` scripts, how to reproduce each step locally, and
+  how to read the size/bench reports. Normative contract lives in the OpenSpec
+  `continuous-integration` capability.
+
 ## Archive
 
 Historical and superseded documents move to [`../archive/`](../archive/):

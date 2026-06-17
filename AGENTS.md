@@ -99,6 +99,7 @@ Durable conventions and design facts live in `docs/`. Read these before proposin
 - Coding conventions (formatting, namespaces, license headers, marker convention) → [`docs/conventions.md`](docs/conventions.md)
 - Testing strategy (CTest layout, the ported VIXL correctness guard rail, encoding policy) → [`docs/testing.md`](docs/testing.md)
 - Performance measurement (benchmark harness, slowdown-vs-native methodology, the business-logic microkernels) → [`bench/README.md`](bench/README.md)
+- Continuous integration (GitHub Actions workflows, the portable `ci/` scripts, size/bench reports) → [`docs/refs/ci.md`](docs/refs/ci.md)
 - VIXL import tier list → [`docs/refs/vixl-extraction-map.md`](docs/refs/vixl-extraction-map.md)
 - Capability requirements (normative) → [`openspec/specs/`](openspec/specs/)
 - User-facing build and embedding instructions → [`README.md`](README.md)
