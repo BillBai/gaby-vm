@@ -155,16 +155,15 @@ so prose and tooling resolve to the same identifiers.
 
 ### Identifiers stay in English
 
-The labels do **not** get translated when the surrounding prose is
-Chinese. Write "decoder 模式" and "cache 模式", not "解码器模式" or
-"缓存模式". The reason is mechanical: a reader (or a `git grep`)
-searching for `decoder` or `cache` should land on every relevant
-location regardless of which document layer or human language the
-location belongs to. Translating the identifier defeats that.
+The labels do **not** get translated when the surrounding prose uses another
+human language. In Chinese prose, write the English identifier plus the local
+noun for "mode"; do not translate `decoder` or `cache`. The reason is
+mechanical: a reader or `git grep` search for `decoder` or `cache` should land
+on every relevant location regardless of the surrounding language. Translating
+the identifier defeats that.
 
-The noun **mode** translates normally — it's a description, not an
-identifier — so "执行模式" / "两个模式" is fine in flowing Chinese
-prose.
+The noun **mode** translates normally because it is a description, not an
+identifier.
 
 ### Forbidden flutter phrasings
 

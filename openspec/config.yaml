@@ -34,6 +34,8 @@ context: |
   - When authoring a change, **link to docs rather than restating them**. The
     docs above are the source of truth for conventions; duplicating into a
     change proposal tends to create drift.
+  - OpenSpec artifacts are English-only. Do not create bilingual OpenSpec
+    documents or `.zh-cn.md` variants under `openspec/`.
   - Two constraints to keep in mind, both drawn from the docs:
     - Imports stay within the tiers listed in the extraction map. If a change
       needs something outside the current tiers, update
@@ -53,6 +55,8 @@ rules:
   # so the three cross-cutting rules below are repeated under each artifact.
   # Keep the repeated copies in sync when editing.
   proposal:
+    - Write OpenSpec artifacts in English only. Do not add bilingual content or
+      `.zh-cn.md` variants under `openspec/`.
     - Be concise. Prefer short, direct sentences over long explanations.
       If a section doesn't add information beyond what linked docs already say,
       leave it out. Every sentence should earn its place.
@@ -67,6 +71,8 @@ rules:
       detail or full test plans — those belong in design and tasks.
     - Always include a brief "Non-goals" or "Out of scope" section.
   design:
+    - Write OpenSpec artifacts in English only. Do not add bilingual content or
+      `.zh-cn.md` variants under `openspec/`.
     - Be concise. Prefer short, direct sentences over long explanations.
       If a section doesn't add information beyond what linked docs already say,
       leave it out. Every sentence should earn its place.
@@ -83,6 +89,8 @@ rules:
     - Show code snippets for non-obvious parts only. Don't paste large blocks
       of existing code or trivial getter/setter-level changes.
   specs:
+    - Write OpenSpec artifacts in English only. Do not add bilingual content or
+      `.zh-cn.md` variants under `openspec/`.
     - Be concise. Prefer short, direct sentences over long explanations.
       If a section doesn't add information beyond what linked docs already say,
       leave it out. Every sentence should earn its place.
@@ -93,6 +101,8 @@ rules:
       code), verification-before-completion (evidence before claims). Use them
       when relevant — don't skip just because OpenSpec has its own workflow.
   tasks:
+    - Write OpenSpec artifacts in English only. Do not add bilingual content or
+      `.zh-cn.md` variants under `openspec/`.
     - Be concise. Prefer short, direct sentences over long explanations.
       If a section doesn't add information beyond what linked docs already say,
       leave it out. Every sentence should earn its place.

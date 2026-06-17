@@ -1,40 +1,50 @@
-# docs/archive — 归档文档
+# docs/archive
 
-这里放**不再描述当前状态、也不再被活代码/文档引用**的历史文档。它们有历史价值（记录当时
-的数据、设计的演变），但日常不需要翻。整理原则见 [`../refs/README.md`](../refs/README.md)。
+[Chinese version](README.zh-cn.md)
 
-> 注：`openspec/changes/archive/` 等历史文件里指向这些文档的旧路径（`docs/refs/…`）**没有
-> 回改**。按文件名全局搜索即可定位——文件名稳定，路径不再维护。
+This directory holds historical documents that no longer describe the current
+state and are no longer referenced by live code or active docs. They are useful
+for understanding old measurements and how designs changed, but day-to-day
+work should start in [`../refs/`](../refs/). See
+[`../refs/README.md`](../refs/README.md) for the sorting rules.
 
-## benchmarks/ — 早期基准结果快照
+> Historical files such as `openspec/changes/archive/*` may still point at old
+> `docs/refs/...` paths. Those links are not rewritten during archival. Search
+> by filename; filenames stay stable even when paths move.
 
-某个提交点测得的吞吐数据，已被更新的快照取代。
+## benchmarks
 
-- `baseline-benchmark-results-2026-05.md` — 最早的 baseline 结果。
-- `baseline-benchmark-results-cache-2026-05.md` — cache 轨首份 baseline。
-- `baseline-benchmark-results-cache-2026-05-neon-inline.md` — NEON inline 之后的快照。
-- `baseline-benchmark-results-cache-2026-05-clearforwrite-helpers.md` — clearforwrite /
-  helpers 之后的快照。
+Throughput snapshots taken at specific commits and superseded by newer data.
 
-## profiles/ — 早期 cache 热路径 profile
+- `baseline-benchmark-results-2026-05.md`: earliest baseline result.
+- `baseline-benchmark-results-cache-2026-05.md`: first cache-mode baseline.
+- `baseline-benchmark-results-cache-2026-05-neon-inline.md`: snapshot after
+  NEON inline work.
+- `baseline-benchmark-results-cache-2026-05-clearforwrite-helpers.md`:
+  snapshot after clear-for-write and helper work.
 
-`refs/gaby-vm-cache-hotpath-profile-2026-05-27.md`（仍在用的那份）之外的早期/后续采样。
+## profiles
 
-- `gaby-vm-cache-hotpath-profile-2026-05.md` — 最早的热路径 profile。
-- `gaby-vm-cache-hotpath-profile-2026-06-02.md` — 后续 profile + 优化 roadmap。（带 `.html`，
-  未纳入 git 跟踪）
+Early or superseded cache hot-path profiles outside the still-live
+`refs/gaby-vm-cache-hotpath-profile-2026-05-27.md` anchor.
 
-## superseded/ — 被取代 / 草稿 / 过程记录
+- `gaby-vm-cache-hotpath-profile-2026-05.md`: first hot-path profile.
+- `gaby-vm-cache-hotpath-profile-2026-06-02.md`: follow-up profile plus
+  optimization roadmap.
 
-- `gaby-vm-vixl-sim-test-port-design-2026-06-08.md` — `vixl_port` 早期「冻结 fixture」设计，
-  被 live-assemble 重写取代。
-- `gaby-vm-vixl-sim-test-port-plan-2026-06-08.md` — 上者的实现计划，同被取代。
-- `gaby-vm-vixl-port-live-assemble-review-2026-06-10.md` — live-assemble 重写的 code review
-  过程记录。
-- `gaby-vm-dispatch-redesign-notes-2026-06-02.md` — dispatch 重设计的粗记。
-- `gaby-vm-modification-sketch.md` — 早期改造草图（总方向）。
+## superseded
 
-## 根目录
+- `gaby-vm-vixl-sim-test-port-design-2026-06-08.md`: early frozen-fixture
+  `vixl_port` design, replaced by live assembly.
+- `gaby-vm-vixl-sim-test-port-plan-2026-06-08.md`: implementation plan for the
+  frozen-fixture design, also superseded.
+- `gaby-vm-vixl-port-live-assemble-review-2026-06-10.md`: code-review notes
+  for the live-assemble rewrite.
+- `gaby-vm-dispatch-redesign-notes-2026-06-02.md`: rough dispatch redesign
+  notes.
+- `gaby-vm-modification-sketch.md`: early overall modification sketch.
 
-- `HANDOFF-predecode-cache-brainstorm.md` — 预解码缓存的早期 brainstorm 交接记录（先于本次
-  归档就在此处）。
+## Root
+
+- `HANDOFF-predecode-cache-brainstorm.md`: early predecode-cache brainstorm
+  handoff that already lived in this directory before this archive structure.

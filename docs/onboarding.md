@@ -1,174 +1,207 @@
-# 代码上手指南
+# Onboarding Guide
 
-这份文档是给第一次（或久违地）翻这个仓库的人准备的一条主线：先建立全局认知，
-再知道怎么编、怎么测、怎么 bench，以及每一块该去哪深挖。它不重复
-`architecture.md` / `build.md` / `testing.md` / `bench/README.md` 里的细节，而是把
-它们串起来——读完这篇，你应该知道**该读哪一篇、该看哪个文件**。
+[Chinese version](onboarding.zh-cn.md)
 
-> 这是导读，不是权威。具体到某个规则有冲突时，以代码和那几篇专题文档为准。
-> 几处专题文档目前和代码对不上（比如 C++ 标准），文末「已知文档漂移」一节列了出来。
+This guide gives a first path through the repository. It starts with the project
+shape, then points you to the build, test, benchmark, and design documents that
+matter next. It does not repeat every detail from `architecture.md`, `build.md`,
+`testing.md`, or `bench/README.md`; it tells you which document and which code
+area to read when you need the details.
 
----
-
-## 0. 这个项目在做什么
-
-gaby-vm 是一个**可嵌入的 AArch64 指令解释器**，语义直接复用 VIXL 的 AArch64
-simulator。一句话概括它的优化思路：
-
-```
-预解码一次 -> 缓存解码后的分发目标 -> 重复执行缓存好的路径
-```
-
-注意几个它**不是**的东西，这决定了整套设计的边界：
-
-- 不是 JIT。运行期不生成代码、不申请可执行内存。预解码出来的东西是**普通数据**。
-  这正是它能干净嵌入 iOS 这类禁止运行期生成代码的环境的原因。
-- 不是一个新 IR。缓存的是「这条指令该调哪个叶子函数」，不是把指令翻译成中间语言。
-- 不是一个完整的系统模拟器。没有 MMU、没有设备模型、没有完整异常等级模型。V1
-  只做 EL0/用户态 A64 执行。
-
-目标平台首选 iOS（无 JIT），同时支持 macOS 和 POSIX 类环境（Linux / Android /
-HarmonyOS）。Windows 暂不在范围内。
-
-原则：**先正确，再快**。
+> This is an orientation guide, not the authority. If it conflicts with code or
+> the focused design documents, follow the code and those documents. A few known
+> documentation drifts are listed at the end.
 
 ---
 
-## 1. 架构设计
+## 0. What This Project Does
 
-### 1.1 双轨同源：理解这一点，其余都顺了
+gaby-vm is an embeddable AArch64 instruction interpreter. Its instruction
+semantics come from the VIXL AArch64 simulator. The main optimization strategy
+is:
 
-gaby-vm 有两条执行路径，跑的是**完全相同的指令语义**，区别只在「怎么取到下一条
-该执行的叶子函数」：
+```text
+predecode once -> cache decoded dispatch target -> execute cached path repeatedly
+```
 
-| 轨道 | 公共入口 | 内部做法 | 用途 |
-|------|----------|----------|------|
-| **cache 轨** | `Simulator::RunFrom` / `StepOnce` | 预解码时缓存好每条指令的分发目标，稳态循环直接取缓存项调叶子 | 生产路径，性能优化的对象 |
-| **decoder 轨** | `Simulator::DebugRunFrom` / `DebugStepOnce` | 沿用 VIXL 原始的 `Decoder → VisitNamedInstruction → leaf` 流程，每条指令现场解码 | 历史路径、诊断、差分测试的「对照组」 |
+The project boundaries matter:
 
-关键在于**两条轨最终调的是同一套叶子函数**（指令的真实语义实现）。机制是：两条轨
-都通过同一个 `form_hash`（指令形态的哈希）查同一张 `FormToVisitorFnMap`，拿到同一个
-指向 `Simulator` 成员函数的指针，再 `(this->*pmf)(pc)` 调下去。
+- It is not a JIT. Runtime code generation, executable memory allocation, and
+  RWX memory are out of scope. Predecoded entries are ordinary data, which keeps
+  the project suitable for iOS embedding.
+- It is not a new IR. The cache stores which VIXL leaf function should execute
+  a given instruction. It does not translate instructions into a separate
+  intermediate representation.
+- It is not a full system emulator. V1 targets EL0/user-mode A64 execution. It
+  has no MMU, device model, or complete exception-level model.
 
-- cache 轨的取项在 `Sources/gaby_vm/src/aarch64/simulator-aarch64.h` 的
-  `ExecuteInstructionCached`（在 `// gaby-vm` marker 区域里）。
-- decoder 轨在同文件的 `ExecuteInstruction`，叶子查表在
-  `simulator-aarch64.cc` 里 `Hash(form) → map.find → (this->*fn)(instr)`。
+iOS is the primary no-JIT target. macOS and POSIX-like environments such as
+Linux, Android, and HarmonyOS should also work. Windows is not a target for now.
 
-这条「双轨同源」是整个项目能成立的支点：
+The project rule is simple: correctness first, speed second.
 
-- **优化只动重复执行的那条路**，不碰语义。修一个叶子的 bug，两条轨一起修好。
-- **测试可以做差分**：同样的字节，cache 轨和 decoder 轨结果必须逐位相同（见第 3 节
-  的 `vixl_port` 和 `ShadowRunner`）。这就是为什么这两条轨都得保留。
+---
 
-> 注意：两条循环**中途不互相切换**。一次 `RunFrom` 从头到尾走 cache 轨，一次
-> `DebugRunFrom` 从头到尾走 decoder 轨。这样像 `form_hash_`、`last_instr_`、MOVPRFX
-> 链这类执行中状态不会在切换瞬间错位。
+## 1. Architecture
 
-### 1.2 PredecodeCache：缓存里到底存了什么
+### 1.1 Two Modes, One Set of Semantics
 
-预解码缓存是 cache 轨的核心数据结构。
+gaby-vm has two execution modes. Both execute the same instruction semantics;
+they differ only in how they find the next VIXL leaf function.
 
-- 公共接口：`Sources/gaby_vm/include/gaby_vm/predecode_cache.h`
-- 实现：`Sources/gaby_vm/src/gaby_vm/predecode_cache.cc`
+| Mode | Public entry points | Internal path | Use |
+|------|---------------------|---------------|-----|
+| **cache mode** | `Simulator::RunFrom` / `StepOnce` | Predecode caches each instruction's dispatch target. The steady-state loop fetches the cache entry and calls the leaf. | Production path and performance target. |
+| **decoder mode** | `Simulator::DebugRunFrom` / `DebugStepOnce` | Keeps VIXL's original `Decoder -> VisitNamedInstruction -> leaf` flow and decodes each instruction at execution time. | Historical path, diagnostics, and differential test baseline. |
 
-用法上只有一个主入口：
+The important invariant is that both modes call the same leaf functions. Both
+look up a shared `FormToVisitorFnMap` through the same `form_hash`, obtain the
+same `Simulator` member-function pointer, then call `(this->*pmf)(pc)`.
+
+- cache mode fetches entries in `ExecuteInstructionCached` in
+  `Sources/gaby_vm/src/aarch64/simulator-aarch64.h`, inside the `// gaby-vm`
+  marker region.
+- decoder mode runs through `ExecuteInstruction` in the same header. The leaf
+  lookup lives in `simulator-aarch64.cc` as `Hash(form) -> map.find ->
+  (this->*fn)(instr)`.
+
+This shared-leaf design is what makes the project maintainable:
+
+- Speed work changes the repeated execution path, not the semantics.
+- Tests can compare the two modes bit-for-bit. Given the same bytes, cache mode
+  and decoder mode must produce the same registers and memory writes. See
+  `vixl_port` and `ShadowRunner` in the testing section.
+
+> The two loops do not switch modes mid-run. A `RunFrom` call stays in cache
+> mode. A `DebugRunFrom` call stays in decoder mode. This avoids corrupting
+> execution state such as `form_hash_`, `last_instr_`, and MOVPRFX chaining.
+
+### 1.2 What PredecodeCache Stores
+
+`PredecodeCache` is the core data structure for cache mode.
+
+- Public interface: `Sources/gaby_vm/include/gaby_vm/predecode_cache.h`
+- Implementation: `Sources/gaby_vm/src/gaby_vm/predecode_cache.cc`
+
+The main API is:
 
 ```cpp
 gaby_vm::PredecodeCache cache;
-auto status = cache.RegisterCodeRange(code_ptr, size_bytes);  // 预解码一整段
-// status == RegistrationStatus::Ok 才能跑
+auto status = cache.RegisterCodeRange(code_ptr, size_bytes);
+// Run cache mode only when status == RegistrationStatus::Ok.
 ```
 
-`RegisterCodeRange` 在注册时**一次性**把整段代码逐条解码，每条指令产出一个
-`PredecodedEntry`（固定 16 字节，便于按 `(pc - start) / 4` 平坦索引）：
+`RegisterCodeRange` decodes the whole code range once at registration time. Each
+instruction produces one fixed-size `PredecodedEntry`, currently 16 bytes, so
+runtime lookup can use flat indexing by `(pc - start) / 4`.
 
-- `form_hash` —— 指令形态哈希，叶子查表用；
-- `flags` —— 位标志（如 bit0 标记是否与 BTI 检查相关，让热路径多数指令跳过该检查）；
-- `leaf` —— 不透明指针，指向那条指令对应的 `Simulator` 成员函数。
+Each entry stores:
 
-这一遍预解码的开销发生在注册时，**不在执行循环里**——所以稳态循环报的是缓存「执行」
-速度，不含「构造」速度。运行时按 PC 找到所属 range（先查 Simulator 里缓存的当前
-range，未命中再到 `cache.FindRange` 做二分查找），再按偏移索引到 entry，取 `leaf`
-直接调。
+- `form_hash`: the instruction form hash used for the shared leaf lookup.
+- `flags`: bit flags, for example a BTI-related flag that lets most
+  instructions skip the runtime BTI check.
+- `leaf`: an opaque pointer to the `Simulator` member function that implements
+  the instruction.
 
-### 1.3 代码地图：哪些是自己写的，哪些是 VIXL 导入的
+Predecode cost belongs to registration, not to the steady-state execution loop.
+At runtime, the simulator finds the containing code range, first through the
+cached current range and then through `cache.FindRange` if needed. It indexes
+the entry by PC offset and calls the cached leaf.
 
-这是个 **standalone 项目，不是 VIXL 的 in-place fork**。参考用的 VIXL 源码树在
-`../vixl`（仓库外，只用来对照研究）。仓库里只导入了一个受控子集。
+### 1.3 Code Map
 
-**gaby-vm 自己写的代码**——一共就三个 `.cc`（持「the gaby-vm authors」版权），加
-六个公共头：
+This is a standalone project, not an in-place VIXL fork. The reference VIXL tree
+lives outside the repo at `../vixl` and is used for study and comparison. This
+repository imports only a controlled subset.
 
-```
-Sources/gaby_vm/include/gaby_vm/   <- 公共 API（gaby_vm:: 命名空间，不暴露任何 vixl:: 类型）
-  gaby_vm.h            门面（主要转包 version）
-  simulator.h          Simulator：双轨入口 + 强类型寄存器读写 + 钩子
-  predecode_cache.h    PredecodeCache + PredecodedEntry / CodeRange / RegistrationStatus
-  registers.h          强类型寄存器标识 + RegisterFile 快照
-  shadow_runner.h      ShadowRunner 差分 oracle（测试用）
-  version.h            版本号（header-only）
+gaby-vm-owned code carries "the gaby-vm authors" copyright. The owned
+implementation is small:
 
-Sources/gaby_vm/src/gaby_vm/       <- 自己写的实现
-  simulator.cc         Pimpl 包一层 vixl 的 Simulator，落地双轨 API、寄存器转接、钩子
-  predecode_cache.cc   RegisterCodeRange 全流程、FindRange、预解码用的 visitor
-  shadow_runner.cc     锁步跑两条轨、逐步比对寄存器与内存写、报第一个分歧
-```
+```text
+Sources/gaby_vm/include/gaby_vm/   public API, namespace gaby_vm
+  gaby_vm.h            facade, mostly forwards version information
+  simulator.h          Simulator: two execution modes, typed register I/O, hooks
+  predecode_cache.h    PredecodeCache plus PredecodedEntry, CodeRange, RegistrationStatus
+  registers.h          typed register identifiers plus RegisterFile snapshots
+  shadow_runner.h      ShadowRunner differential oracle for tests
+  version.h            header-only version data
 
-**从 VIXL 逐字节导入的代码**——其余都是，持 VIXL 的 BSD-3-Clause，布局镜像上游：
-
-```
-Sources/gaby_vm/src/               <- 共享根（utils-vixl、cpu-features、compiler-intrinsics…）
-Sources/gaby_vm/src/aarch64/       <- AArch64 专属：simulator / decoder / instructions /
-                                       logic / operands / registers / disasm / debugger …
+Sources/gaby_vm/src/gaby_vm/       owned implementation
+  simulator.cc         Pimpl wrapper around VIXL Simulator, public API plumbing
+  predecode_cache.cc   RegisterCodeRange, FindRange, predecode visitor
+  shadow_runner.cc     lockstep two-mode runner, register and memory diffing
 ```
 
-导入范围按 `docs/refs/vixl-extraction-map.md` 的 **Tier 分级**，shipping 库只含
-Tier 1–3。**Tier 0**（assembler / macro-assembler / code-buffer）**不进 shipping
-库**——因为 gaby-vm 是指令字节的「消费者」，不生成代码。唯一的例外是测试用的那份
-Tier-0 拷贝，见下。
+Everything else under the imported tree comes from VIXL, keeps VIXL's BSD-3
+Clause license, and mirrors upstream layout:
 
-**对导入文件的任何改动都要打 marker**，方便审计漂移：
+```text
+Sources/gaby_vm/src/               shared VIXL root: utils, cpu-features, intrinsics
+Sources/gaby_vm/src/aarch64/       AArch64 simulator, decoder, instructions,
+                                   logic, operands, registers, disasm, debugger
+```
 
-- 单行：改动行上方加 `// gaby-vm:`，原因写在紧接的 `//` 注释里；
-- 多行：`// gaby-vm BEGIN:` … `// gaby-vm END` 包起来。
+The import boundary follows the tiers in `docs/refs/vixl-extraction-map.md`.
+The shipping library includes only Tiers 1 through 3. Tier 0 files such as the
+assembler, macro-assembler, and code-buffer do not ship in the library because
+gaby-vm consumes instruction bytes and does not generate code. The test-only
+assembler island is the one exception, covered below.
 
-一条命令枚举所有改动点：
+Any edit to an imported file must use marker comments so drift from upstream can
+be audited:
+
+- Single-line edits: add `// gaby-vm:` above the changed line, then explain the
+  reason in the next `//` comment.
+- Multi-line edits: wrap the block with `// gaby-vm BEGIN:` and
+  `// gaby-vm END`.
+
+List all marker sites with:
 
 ```sh
 git grep -nE 'gaby-vm( BEGIN| END|:)' Sources/gaby_vm/src/
 ```
 
-cache 轨那一堆改动（`ExecuteInstructionCached`、`StepOnce`、分支钩子、可重入游标
-存取等）就集中在 `simulator-aarch64.h` 的 marker 区里。想看「gaby-vm 在 VIXL 之上
-加了什么」，从这条 grep 入手最快。
+Most cache-mode changes, including `ExecuteInstructionCached`, `StepOnce`,
+branch hooks, and re-entrant cursor handling, live in marker regions in
+`simulator-aarch64.h`.
 
-### 1.4 内存模型与线程模型（嵌入前必须知道）
+### 1.4 Memory and Threading Model
 
-**内存模型——直接打宿主地址空间**：guest 指针就是 host 指针，guest 的 load/store
-就是对宿主堆/栈/全局的普通内存访问。没有 MMU、没有地址翻译、**没有边界检查**、没有
-guest/host 之间的隔离层。越界访问要么直接把宿主进程 `SIGSEGV`，要么悄悄写坏宿主
-状态。所以：
+The memory model uses the host address space directly. A guest pointer is a host
+pointer. Guest loads and stores are ordinary host memory accesses into the
+embedder's heap, stack, or globals. There is no MMU, address translation,
+bounds check, or guest/host isolation layer. If guest code writes out of bounds,
+the host process may crash with `SIGSEGV` or corrupt host state.
 
-- 嵌入者负责把 guest 代码和数据放到 guest 期望的 host 地址上；
-- guest 碰到的任何内存，其生命周期/对齐/别名都是嵌入者的责任；
-- 一个行为不端的 guest，按构造就是一个宿主进程的 bug。
+That means:
 
-好处是解释器循环里没有边界检查（对 cache 模式的速度重要），而且天然契合 iOS 这种
-「嵌入者本来就共享地址空间」的环境。
+- The embedder must place guest code and data at the host addresses the guest
+  expects.
+- The embedder owns the lifetime, alignment, and aliasing rules for all memory
+  the guest may touch.
+- An untrusted or malformed guest is a host process bug by construction.
 
-**线程模型——一个物理线程一个 `Simulator` 实例**，首次使用时惰性初始化。Simulator
-内部不是为跨线程共享设计的，每实例状态（寄存器、系统寄存器、内部 scratch）归构造它
-的那个线程所有。gaby-vm 不替你做线程本地的安置，嵌入者自己用 `thread_local` / TLS /
-自己的线程上下文结构来放这个 per-thread 实例。
+The benefit is that the interpreter loop avoids bounds checks, which matters for
+cache-mode speed and fits the iOS embedding model where the embedder already
+shares one address space.
 
-权威细节在 `docs/architecture.md`。
+The threading model is one `Simulator` instance per physical host thread,
+usually initialized lazily. A simulator instance is not designed for sharing
+across threads. Its registers, system registers, and internal scratch state
+belong to the thread that owns the instance. gaby-vm does not install this for
+you; embedders should store the per-thread instance in `thread_local`, TLS, or
+their own thread context object.
 
-### 1.5 最小嵌入骨架
+Read `docs/architecture.md` for the authoritative version.
 
-`demos/cli/main.cc` 是**官方的端到端嵌入范例**，强烈建议直接读它——它演示了完整
-模式：手搓一段 guest 函数 → 注册到 cache → `RunFrom` 跑 → 用分支钩子拦截 guest 对
-host 函数的调用并按 C ABI 转发。浓缩成骨架就是：
+### 1.5 Minimal Embedding Skeleton
+
+`demos/cli/main.cc` is the official end-to-end embedding example. It builds a
+small guest function by hand, registers it in the cache, runs it through
+`RunFrom`, and uses a branch hook to forward a guest call to a host function
+using the C ABI.
+
+The shape is:
 
 ```cpp
 #include "gaby_vm/predecode_cache.h"
@@ -177,304 +210,331 @@ host 函数的调用并按 C ABI 转发。浓缩成骨架就是：
 
 gaby_vm::PredecodeCache cache;
 if (cache.RegisterCodeRange(code, size_bytes) !=
-    gaby_vm::PredecodeCache::RegistrationStatus::Ok) { /* 处理失败 */ }
+    gaby_vm::PredecodeCache::RegistrationStatus::Ok) {
+  // Handle registration failure.
+}
 
 std::vector<uint8_t> stack(gaby_vm::Simulator::kMinStackSize);
 gaby_vm::Simulator sim(&cache, stack.data(), stack.size());
 
-// 可选：拦截分支去调 host 函数 / 实现 FFI
+// Optional: intercept branches to call host functions or implement FFI.
 sim.SetBranchHook(my_hook, &my_ctx);
 
-// 可选：按 AArch64 C-ABI 喂参数
+// Optional: pass arguments according to the AArch64 C ABI.
 sim.Write(gaby_vm::GpRegister::X0, arg0);
 
-sim.RunFrom(reinterpret_cast<uintptr_t>(code));   // cache 轨执行
+sim.RunFrom(reinterpret_cast<uintptr_t>(code));
 uint64_t result = sim.Read(gaby_vm::GpRegister::X0);
 ```
 
-把 `RunFrom` 换成 `DebugRunFrom` 就是 decoder 轨（不需要 cache 非空，可用 trace /
-debugger），调试或对照时用。
+Use `DebugRunFrom` instead of `RunFrom` to execute through decoder mode. Decoder
+mode does not require a non-empty cache and is useful for tracing, debugging,
+and comparisons.
 
-跑一下这个 demo：
+Run the demo with:
 
 ```sh
-./build/debug/demos/cli/gaby-vm            # 跑嵌入 demo，打印 version + host_add 结果
+./build/debug/demos/cli/gaby-vm
 ./build/debug/demos/cli/gaby-vm --version
 ```
 
 ---
 
-## 2. 如何编译
+## 2. Build
 
-### 2.1 工具链要求
+### 2.1 Toolchain Requirements
 
-- **C++20**（不是 C++17——见文末漂移说明）。公共头用了 `std::span`、`std::variant`。
-- CMake ≥ 3.21（presets 文件用 3.25 schema）。
-- Ninja。
-- 编译器：GCC / Clang / AppleClang。**没有 MSVC**，Windows 不在范围。
+- C++20. Public headers use `std::span` and `std::variant`.
+- CMake 3.21 or newer. The presets file uses the 3.25 schema.
+- Ninja.
+- GCC, Clang, or AppleClang. MSVC is not supported, and Windows is not in
+  scope.
 
-### 2.2 最快上手：用 presets
+### 2.2 Fast Path With Presets
 
-仓库带了 `dev-debug` 和 `dev-release` 两个 preset（都用 Ninja，都开
-`compile_commands.json` 和 tests + demos）：
+The repository provides `dev-debug` and `dev-release` presets. Both use Ninja
+and enable `compile_commands.json`, tests, and demos.
 
 ```sh
-cmake --preset dev-debug          # 配置
-cmake --build --preset dev-debug  # 编译
-ctest --preset dev-debug          # 跑测试（只有 dev-debug 配了 test preset）
+cmake --preset dev-debug
+cmake --build --preset dev-debug
+ctest --preset dev-debug
 ```
 
-产物落在 `build/debug/`；release 同理落在 `build/release/`。release 的测试目前用
-`ctest --test-dir build/release` 跑（还没配 release 的 test preset）。
+Debug artifacts go under `build/debug/`. Release artifacts go under
+`build/release/`. Release tests currently run with `ctest --test-dir
+build/release`; there is no release test preset yet.
 
-### 2.3 编译选项
+### 2.3 Build Options
 
-顶层 `CMakeLists.txt` 暴露这几个 option：
+Top-level `CMakeLists.txt` exposes these options:
 
-| 选项 | 默认 | 作用 |
-|------|------|------|
-| `GABY_VM_BUILD_TESTS` | 顶层构建时 ON | 编译 `test/` 下的测试 |
-| `GABY_VM_BUILD_DEMOS` | 顶层构建时 ON | 编译 `demos/cli` |
-| `GABY_VM_BUILD_BENCHMARKS` | 顶层构建时 ON | 编译 `bench/` 吞吐量 harness |
-| `GABY_VM_BUILD_NATIVE_BASELINE` | **OFF** | 编译「相对原生」的对照工具，需同时开 BENCHMARKS，且 host 必须是 arm64 |
+| Option | Default | Purpose |
+|--------|---------|---------|
+| `GABY_VM_BUILD_TESTS` | ON for top-level builds | Builds `test/`. |
+| `GABY_VM_BUILD_DEMOS` | ON for top-level builds | Builds `demos/cli`. |
+| `GABY_VM_BUILD_BENCHMARKS` | ON for top-level builds | Builds the `bench/` throughput harness. |
+| `GABY_VM_BUILD_NATIVE_BASELINE` | OFF | Builds native comparison tools. Requires benchmarks and an arm64 host. |
 
-前三个的默认值是 `${PROJECT_IS_TOP_LEVEL}`：你独立构建这个仓库时自动是 ON；被别的
-CMake 工程 `add_subdirectory` 进去时自动 OFF（消费者默认不会编你的测试和 demo）。
+The first three default to `${PROJECT_IS_TOP_LEVEL}`. They are ON when you build
+this repository directly and OFF when another CMake project consumes it through
+`add_subdirectory`.
 
-`GABY_VM_BUILD_NATIVE_BASELINE` 是开发专用、默认关：它会把 guest AArch64 字节放进
-可执行内存直接在宿主 CPU 上跑（所以 host 必须 arm64），用来当「离原生有多远」的分母。
-详见第 4 节。
+`GABY_VM_BUILD_NATIVE_BASELINE` is a developer-only option. It places guest
+AArch64 bytes into executable memory and runs them directly on the host CPU, so
+the host must be arm64. It provides the denominator for "how far from native"
+benchmark numbers.
 
-### 2.4 构建结构里值得知道的两件事
+### 2.4 Two CMake Details Worth Knowing
 
-不改 CMake 的话不用深究，但理解这两点能少踩坑（细节在 `docs/build.md`）：
+You usually do not need to touch CMake, but two details prevent confusion:
 
-- **警告策略是分裂的**。自己写的代码走严格策略（`-Wall -Wextra -Wpedantic`，
-  `gaby_vm_apply_compile_flags`）；逐字节导入的 VIXL 源走放松策略（按文件加一串
-  `-Wno-*`，`gaby_vm_apply_imported_compile_flags`），因为上游代码会触发 pedantic
-  警告。两类源可以共存在同一个 `gaby_vm` target 里，靠的是文件级的属性设置。
-- **VIXL 的编译宏是 `PRIVATE` 的**：`VIXL_INCLUDE_TARGET_A64`、
-  `VIXL_INCLUDE_SIMULATOR_AARCH64`、Debug 下的 `VIXL_DEBUG`。它们不会通过
-  `INTERFACE` 泄漏给消费者。需要直接碰 `vixl::aarch64::*` 头的测试/bench 要复刻这套
-  「特权构建模式」（`PRIVATE` 引 `src/` + 同一套宏），见 `docs/build.md` 的
-  *Privileged test build pattern*。
+- Warning policy is split. gaby-vm-owned code uses strict flags through
+  `gaby_vm_apply_compile_flags`. Imported VIXL sources use relaxed per-file
+  flags through `gaby_vm_apply_imported_compile_flags` because upstream code
+  triggers pedantic warnings. Both source classes live in the same `gaby_vm`
+  target.
+- VIXL compile definitions are `PRIVATE`: `VIXL_INCLUDE_TARGET_A64`,
+  `VIXL_INCLUDE_SIMULATOR_AARCH64`, and `VIXL_DEBUG` in Debug builds. Consumers
+  do not inherit them through `INTERFACE`. Tests and benchmarks that include
+  `vixl::aarch64::*` headers must use the privileged build pattern from
+  `docs/build.md`: private include access to `src/` plus the same VIXL macros.
 
-### 2.5 作为依赖被消费
+### 2.5 Consuming the Library
 
-CMake 消费者：
+CMake consumers can use:
 
 ```cmake
 add_subdirectory(third_party/gaby-vm)
 target_link_libraries(your_target PRIVATE gaby_vm::gaby_vm)
 ```
 
-也提供顶层 `Package.swift`（面向 C++ 的 SwiftPM 消费者，主力嵌入方用 SwiftPM 构建）。
-注意：消费方**必须自己**设到 C++20（`cxxLanguageStandard: .cxx20`），因为 C++ 标准
-不会跨包传递。CMake 仍是跑测试和 bench 的权威构建。两套构建编的是同一份源码。
+The repository also has a top-level `Package.swift` for C++ SwiftPM consumers.
+Consumers must set C++20 themselves, for example with
+`cxxLanguageStandard: .cxx20`, because the language standard does not propagate
+across Swift packages. CMake remains the authoritative build for tests and
+benchmarks. Both builds compile the same source tree.
 
 ---
 
-## 3. 如何测试
+## 3. Test
 
-### 3.1 测试体系长什么样
+### 3.1 Test Layout
 
-测试是 `test/` 下的一批独立可执行文件，每个一个翻译单元，链接
-`gaby_vm::gaby_vm`，用 `add_test` 注册到 CTest。**目前没有引入 GoogleTest / Catch2**
-这类框架——纯手写，够用为止（不是长期立场，将来要参数化 fixture 时引一个也行）。
+Tests live under `test/` as small standalone executables. Each test links
+`gaby_vm::gaby_vm` and is registered with CTest through `add_test`. The project
+currently uses handwritten tests rather than GoogleTest or Catch2. That is a
+practical choice, not a permanent rule.
 
-跑全部：
+Run tests with:
 
 ```sh
-ctest --preset dev-debug                 # = ctest --test-dir build/debug，失败时打印输出
-ctest --test-dir build/debug -R <regex>  # 只跑名字匹配的
-ctest --test-dir build/debug -N          # 只列出有哪些测试，不跑
+ctest --preset dev-debug
+ctest --test-dir build/debug -R <regex>
+ctest --test-dir build/debug -N
 ```
 
-### 3.2 实际注册了哪些测试
+### 3.2 Registered Test Groups
 
-以 `test/CMakeLists.txt` 的 `add_test` 为准（`docs/testing.md` 的清单偏旧，少列了
-一批）。按职责分大致是：
+Use `test/CMakeLists.txt` as the source of truth. At a high level:
 
-- **冒烟/构建契约**：`smoke`（公共 API）、`simulator_smoke`（单条 NOP 走 VIXL
-  decode→visit→leaf）、`instructions_aarch64_constexpr_smoke`（一组 `static_assert`，
-  编过即通过）。
-- **正确性**：`simulator_correctness`（手编码序列同时过 cache 轨 `RunFrom` 和 decoder
-  轨 `DebugRunFrom`，比对到预期状态）。
-- **公共 API 行为**：`typed_register_io` / `typed_register_io_abort`（强类型寄存器读
-  写，含越界 fail-fast）、`simulator_constructor_stack`（栈大小契约，过小必须 abort）、
-  `branch_hook_dispatch` / `branch_hook_reentrancy`（分支钩子分发与可重入）、
-  `reentrancy`（可重入 + 双轨终止）。
-- **差分 oracle**：`shadow_runner`（ShadowRunner 自检：匹配时零分歧 + 故意注入缺陷时
-  能抓到分歧）、`workload_shadow`（用 ShadowRunner 跑所有已提交的 bench workload，断言
-  两轨零分歧）。
-- **移植的 VIXL 大套件**：`vixl_port_integer` / `vixl_port_fp` / `vixl_port_neon`
-  是核心三个，单独讲（下一节）。同一个孤岛还附带几个基建自检：`vixl_asm_island_smoke`、
-  `vixl_asm_harness_smoke`、以及 `vixl_asm_harness_selftest_{cache,decoder,reference,baseline}`
-  四个场景（验证崩溃护栏在不同执行阶段的行为）。它们每次全量 `ctest` 都会跑，但守门
-  命令 `-R vixl_port` 只匹配那三个核心套件。
+- Smoke and build-contract tests: `smoke`, `simulator_smoke`, and
+  `instructions_aarch64_constexpr_smoke`.
+- Correctness tests: `simulator_correctness`, which runs hand-encoded sequences
+  through both cache mode and decoder mode and checks the expected final state.
+- Public API behavior tests: typed register I/O, constructor stack validation,
+  branch hooks, and re-entrancy.
+- Differential oracle tests: `shadow_runner` and `workload_shadow`.
+- Ported VIXL suites: `vixl_port_integer`, `vixl_port_fp`, and
+  `vixl_port_neon`. The same assembler island also has infrastructure tests
+  such as `vixl_asm_island_smoke`, `vixl_asm_harness_smoke`, and harness
+  self-tests for cache, decoder, reference, and baseline paths.
 
-### 3.3 `vixl_port`：动热路径前后都要跑的护栏
+The guard command `-R vixl_port` matches the three core ported suites.
 
-这是覆盖面最广的正确性护栏，专门为了**抓住预解码/分发优化引入的回归**而建。它从
-VIXL 自己的执行测试套件移植而来，**现场汇编（live-assemble）**每个上游 `TEST()` 函数
-体，然后在两条 gaby 轨上各跑一遍。
+### 3.3 vixl_port: The Hot-Path Guard Rail
 
-它怎么工作（细节在 `docs/testing.md` 的 *Ported VIXL tests*）：
+`vixl_port` is the broadest correctness guard. It exists to catch regressions
+introduced by predecode and dispatch optimizations. It live-assembles upstream
+VIXL `TEST()` bodies, then runs each body through both gaby-vm modes.
 
-- 有一份**测试专用的 Tier-0 汇编器孤岛**在 `test/test_support/vixl_asm/`——VIXL 的
-  assembler + macro-assembler + code-buffer + 测试基建的逐字节拷贝，钉在
-  `vixl-extraction-map.md` 记录的导入 SHA 上。它编成 `gaby_vm_vixl_asm_testonly`，
-  `PRIVATE`-link `gaby_vm::gaby_vm`，**永不**进 shipping 库（无 `::` 别名、带
-  `_testonly` 后缀、`GABY_VM_BUILD_TESTS` 门控、只编 `VIXL_CODE_BUFFER_MALLOC`）。
-  汇编出来的字节是普通 `malloc` 数据，喂给 gaby 解码器，**不在宿主 CPU 上执行**——
-  no-JIT / no-RWX / iOS 约束照样成立。
-- 因为是现场汇编，`Mov(reg, 真实地址)` 会烤进一个进程内真实地址，所以
-  **load/store/ADR/literal、乃至原子/独占/CAS 这类读改写指令都是对真实内存真跑的**。
-- 每个函数体过**两道 oracle**（都覆盖寄存器和内存）：
-  - **差分**：两条 gaby 轨必须一致——抓 cache 轨分发回归的主力；
-  - **绝对**：gaby 必须和一个 VIXL 参考 simulator 的结果一致——抓「两条轨一起错」。
+The suite works like this:
 
-**什么时候必须跑**：动了共享执行热路径（解码/分发、预解码缓存、或导入的 VIXL 叶子
-语义）**之前和之后**，都要跑且保持全绿：
+- `test/test_support/vixl_asm/` contains a test-only Tier 0 assembler island:
+  VIXL assembler, macro-assembler, code-buffer, and test infrastructure copied
+  at the import SHA recorded in `vixl-extraction-map.md`. It builds as
+  `gaby_vm_vixl_asm_testonly`, private-links `gaby_vm::gaby_vm`, has no `::`
+  alias, is gated by `GABY_VM_BUILD_TESTS`, and uses
+  `VIXL_CODE_BUFFER_MALLOC` only. The assembled bytes are ordinary `malloc`
+  data passed to the gaby decoder. They are never executed by the host CPU.
+- Because assembly happens at test runtime, tests that bake real process
+  addresses into instructions exercise real in-process memory. Load/store,
+  ADR, literal, atomic, exclusive, and CAS-style bodies run against actual
+  memory.
+- Each body uses two oracles:
+  - Differential oracle: cache mode and decoder mode must match.
+  - Absolute oracle: gaby-vm must match a VIXL reference simulator.
+
+Run this before and after changing shared execution hot paths: decode/dispatch,
+the predecode cache, or imported VIXL leaf semantics.
 
 ```sh
 ctest --test-dir build/debug -R vixl_port
 ```
 
-它自包含，**不需要** `../vixl`。别在红的或没跑过的套件上落性能改动。
+The suite is self-contained and does not need `../vixl`.
 
-几个会让你困惑的点先说在前面：
+Notes:
 
-- **它不能在 ASan 下编**。内存 oracle 是对一个活的 C++ 栈帧做 `memcpy`，会和 ASan 的
-  栈红区打架。这里的内存安全检查靠的是双轨 + 参考三方差分，不是 sanitizer。
-- **有 baseline 计数护栏**：套件会钉住每个 family「跑了多少 / 跳过多少」的预期split，
-  漂了就 FAIL——防止某个回归把用例从「跑」悄悄挪到「跳过」从而隐形缩水覆盖面。有意
-  改动后用 `VIXL_PORT_REBASELINE=1` 重新基线并在同一个 commit 更新表。
-- 有一批用例会被**有意跳过**（能力不支持、不确定性、data-in-stream 等），`VIXL_PORT_TRACE=1`
-  能打印每个用例被跳的原因。
-- **升级 VIXL 后**没有 fixture 要重生成：重新在新 SHA 拷一遍孤岛、更新
-  `vixl-extraction-map.md` 里的 SHA、重跑即可。
+- It cannot build under ASan. Its memory oracle copies bytes from a live C++
+  stack frame, which conflicts with ASan stack red zones. The safety check here
+  is the two-mode plus reference differential oracle, not sanitizer coverage.
+- It has baseline count guards. Each family pins how many tests run and how many
+  skip. If coverage moves, the suite fails so skipped coverage cannot shrink
+  silently. Intentional changes use `VIXL_PORT_REBASELINE=1` and update the
+  baseline in the same commit.
+- Some cases intentionally skip unsupported, nondeterministic, or
+  data-in-stream patterns. `VIXL_PORT_TRACE=1` prints skip reasons.
+- After a VIXL upgrade, there are no fixtures to regenerate. Re-copy the
+  assembler island at the new SHA, update `vixl-extraction-map.md`, and rerun.
 
-### 3.4 加一个新测试
+### 3.4 Adding a Test
 
-- 在 `test/CMakeLists.txt` 加一对 `add_executable` + `add_test`；
-- 用 `gaby_vm_apply_compile_flags`（项目策略；导入源那套放松 helper 不适合测试）；
-- 只碰公共 API 的测试别用特权构建（保持默认 API 表面诚实）；要碰 `vixl::aarch64::*`
-  才用特权构建模式（`PRIVATE` 引 `src/` + VIXL 宏）；
-- 失败时退非零，stdout 要点名失败子用例并打印 实际 vs 预期。
+- Add the executable and CTest registration in `test/CMakeLists.txt`.
+- Use `gaby_vm_apply_compile_flags`.
+- Tests that touch only the public API should not use the privileged VIXL build
+  pattern.
+- Tests that need `vixl::aarch64::*` headers should follow the privileged build
+  pattern from `docs/build.md`.
+- Return nonzero on failure. Print the failing subcase and actual versus
+  expected values.
 
-> 编码策略：shipping 树里没有汇编器，所以 `simulator_correctness` 这类测试的指令是
-> 裸 `uint32_t` 数组。需要新编码时，授权阶段用外部工具（如 `llvm-mc`）出 hex 再手抄
-> 进源码——构建和运行期都不依赖汇编器机器。
+Encoding policy: the shipping tree has no assembler. Tests such as
+`simulator_correctness` use raw `uint32_t` instruction words. When you need a
+new encoding, generate the hex with an external tool such as `llvm-mc` during
+authoring, then copy the word into source. Build and runtime must not depend on
+that assembler.
 
 ---
 
-## 4. 如何 bench
+## 4. Benchmark
 
-### 4.1 先分清：ctest 管正确性，bench 管性能
+### 4.1 CTest Checks Correctness, bench Measures Speed
 
-`bench/` 是**开发者手动调用**的吞吐量 harness，**不注册到 CTest**（ctest 只跑正确性）。
-直接从构建目录运行二进制。它测的是一段固定指令负载在某种执行模式下的吞吐。
+`bench/` contains developer-invoked throughput harnesses. Benchmarks are not
+registered with CTest. Run the binaries from the build directory. They measure
+how fast a fixed instruction workload executes under a selected mode.
 
-权威说明在 `bench/README.md`。
+Read `bench/README.md` for the authoritative harness description.
 
-### 4.2 有哪些二进制
+### 4.2 Benchmark Binaries
 
-| 二进制 | 负载 | 用途 |
-|--------|------|------|
-| `bench_baseline` | upstream-VIXL 生成的 mixed 负载（~64k 动态指令/次，68% NEON） | 合成压力测试，**不**代表业务逻辑 |
-| `bench_smoke` | 32 条直线 ALU（`llvm-mc` 汇编） | 毫秒级，验证 harness 管线本身 |
-| `bench_business` | 5 个编译出来的 C 微内核 | **代表性**的「iOS 业务逻辑慢多少」 |
-| `native_baseline` / `native_smoke` / `native_business` | 同样的字节，直接在宿主 arm64 CPU 上跑 | 「离原生有多远」的诚实分母（需 `GABY_VM_BUILD_NATIVE_BASELINE=ON`） |
+| Binary | Workload | Use |
+|--------|----------|-----|
+| `bench_baseline` | Upstream-VIXL generated mixed workload, about 64k dynamic instructions per iteration and 68 percent NEON. | Synthetic stress test, not representative business logic. |
+| `bench_smoke` | 32 straight-line ALU instructions assembled with `llvm-mc`. | Millisecond-scale harness smoke test. |
+| `bench_business` | Five compiled C microkernels. | Representative "how slow is iOS business logic" benchmark. |
+| `native_baseline`, `native_smoke`, `native_business` | Same bytes run directly on an arm64 host CPU. | Native denominator. Requires `GABY_VM_BUILD_NATIVE_BASELINE=ON`. |
 
-`bench_business` 的五个微内核：`parse`（变长记录解析）、`hash`（FNV-1a，整数依赖
-链、分支少，最好情况）、`struct`（结构体数组变换）、`fsm`（状态机扫描，逐字节不可
-预测分发，最坏情况）——前四个纯标量整数；`applogic` 是**唯一带 FP/NEON 的**（~9% 标量
-double，对应 CGFloat 几何），是最贴近真实 iOS 业务逻辑的那个。
+`bench_business` kernels:
 
-### 4.3 构建与运行
+- `parse`: variable-length record parsing.
+- `hash`: FNV-1a, integer dependency chain, few branches.
+- `struct`: structure-array transforms.
+- `fsm`: byte-wise state-machine scanner with unpredictable dispatch.
+- `applogic`: the only FP/NEON workload, with scalar double operations similar
+  to CGFloat geometry.
 
-bench 需要 release（性能数才有意义），顶层构建时 `GABY_VM_BUILD_BENCHMARKS` 已默认 ON：
+### 4.3 Build and Run
+
+Use Release builds for meaningful performance numbers:
 
 ```sh
 cmake --preset dev-release
 cmake --build --preset dev-release
 ```
 
-要原生分母，额外开（host 必须 arm64）：
+Enable the native denominator on arm64 hosts:
 
 ```sh
 cmake --preset dev-release -DGABY_VM_BUILD_BENCHMARKS=ON -DGABY_VM_BUILD_NATIVE_BASELINE=ON
 cmake --build --preset dev-release
 ```
 
-跑（核心 flag 是 `--mode {decoder|cache}`，两种模式数字直接可比）：
+Example runs:
 
 ```sh
-./build/release/bench/bench_business --mode cache   --seconds 2.0   # 全部内核，cache 轨
-./build/release/bench/bench_business --mode decoder --seconds 1.0   # decoder 轨
-./build/release/bench/bench_business --kernel hash  --mode cache    # 只跑一个内核
-./build/release/bench/native_business               --seconds 1.0   # 宿主 arm64 分母
-./build/release/bench/bench_business --verify                       # 正确性闸（见下）
-./build/release/bench/bench_baseline --help                         # flag 与默认值
+./build/release/bench/bench_business --mode cache   --seconds 2.0
+./build/release/bench/bench_business --mode decoder --seconds 1.0
+./build/release/bench/bench_business --kernel hash  --mode cache
+./build/release/bench/native_business               --seconds 1.0
+./build/release/bench/bench_business --verify
+./build/release/bench/bench_baseline --help
 ```
 
-每次跑打印一组 `key: value`，主指标是 `iterations_per_second`（每秒跑完整负载多少遍），
-这是跨 native / decoder / cache 都良定义、可直接比的量。
+The primary output key is `iterations_per_second`, which is comparable across
+native, decoder, and cache runs.
 
-### 4.4 该看哪个数、什么时候必须跑
+### 4.4 Which Numbers Matter
 
-- **代表性「慢多少」**：引用 `bench_business` 的 cache 轨 对 `native_business`，按内核
-  分形报告。已测基线大致是：四个标量内核 cache 轨 ~6.5 ns/insn（所以它们的 slowdown
-  从 ≈19×(hash) 到 ≈210×(struct)，主要由原生侧 IPC 决定，不是 gaby 的锅）；带 FP/NEON
-  的 `applogic` 打破这条平线到 ~10 ns/insn，是最差的 ≈330×——VIXL 的 FP/NEON 叶子比
-  整数叶子更贵。
-- **改了叶子或内核之后**：先跑 `bench_business --verify`——它单步两条轨、数动态指令、
-  交叉校验 cache==decoder 以及 x0 对已提交期望值。这是性能改动的正确性闸。
-- **改动以执行速度为目标时**：用这套 harness 给出 before/after，别靠眼估。
+- For the representative slowdown number, compare cache-mode `bench_business`
+  against `native_business` per kernel. The current baseline is roughly
+  6.5 ns/instruction for the scalar kernels, with slowdown ranging from about
+  19x for `hash` to about 210x for `struct`, depending mostly on native-side
+  IPC. `applogic`, the FP/NEON workload, is slower at about 10 ns/instruction
+  and about 330x versus native.
+- After changing a leaf or benchmark kernel, run `bench_business --verify`
+  first. It cross-checks cache mode against decoder mode and validates `x0`
+  against the committed expected value.
+- When a change targets execution speed, quote before/after numbers from this
+  harness. Do not estimate by inspection.
 
-### 4.5 方法论提醒
+### 4.5 Measurement Expectations
 
-V1 这套 harness 追求的是**数量级正确**（「cache 帮了 3× 吗」），不是发表级精度。典型
-非专用机器上跑到跑之间有几十个百分点的方差——多跑几遍、看数量级、别盯尾数。尽量在
-基本空闲、别用电池的机器上跑。
-
-> 记忆里有一条相关偏好：bench 精度到数量级就够，不必搞复杂的噪声控制协议。
-
----
-
-## 5. 接下来去哪深挖
-
-| 你想了解 | 读这个 |
-|----------|--------|
-| 架构、内存/线程模型、VIXL 导入边界、marker 约定 | `docs/architecture.md` |
-| 内部构建结构（target、警告策略、VIXL 宏作用域） | `docs/build.md` |
-| 编码规范（格式、命名空间、license 头、marker） | `docs/conventions.md` |
-| 测试策略、`vixl_port` 护栏、编码策略 | `docs/testing.md` |
-| 性能测量方法、业务微内核 | `bench/README.md` |
-| VIXL 导入 Tier 清单 | `docs/refs/vixl-extraction-map.md` |
-| 规范性能力需求 | `openspec/specs/` |
-| 用户向构建/嵌入说明 | `README.md` |
-| 项目目标与 Agent 工作守则 | `AGENTS.md`（= `CLAUDE.md`） |
-| 设计/调研记录（按日期） | `docs/refs/` |
-
-读代码的几条快捷路径：
-
-- 「gaby-vm 在 VIXL 之上改了/加了什么」→ `git grep -nE 'gaby-vm( BEGIN| END|:)' Sources/gaby_vm/src/`
-- 「cache 轨热路径」→ `Sources/gaby_vm/src/aarch64/simulator-aarch64.h` 的 `ExecuteInstructionCached`
-- 「公共 API 全貌」→ `Sources/gaby_vm/include/gaby_vm/`
-- 「一个完整嵌入例子」→ `demos/cli/main.cc`
+The V1 harness is meant to answer order-of-magnitude questions such as whether
+cache mode helped by 3x. It is not a publication-grade performance lab. On a
+normal development machine, run-to-run variance can be large. Run more than
+once, look at the scale of the result, and avoid over-reading the last digits.
+Use an idle machine on power when possible.
 
 ---
 
-## 6. 已知文档漂移（写作本文时）
+## 5. Where to Read Next
 
-几处专题文档落后于代码，按代码为准：
+| Topic | Read |
+|-------|------|
+| Architecture, memory/threading model, VIXL import boundary, marker convention | `docs/architecture.md` |
+| Internal build structure, targets, warning policy, VIXL macro scope | `docs/build.md` |
+| Coding conventions, namespaces, license headers, markers | `docs/conventions.md` |
+| Test strategy, `vixl_port`, encoding policy | `docs/testing.md` |
+| Performance method and business microkernels | `bench/README.md` |
+| VIXL import tier list | `docs/refs/vixl-extraction-map.md` |
+| Normative capability requirements | `openspec/specs/` |
+| User-facing build and embedding instructions | `README.md` |
+| Project goal and agent rules | `AGENTS.md`, also reached through `CLAUDE.md` |
+| Design and research notes by date | `docs/refs/` |
 
-- **C++ 标准**：顶层 `CMakeLists.txt` 是 `set(CMAKE_CXX_STANDARD 20)`，库 target 是
-  `cxx_std_20`；但 `docs/build.md` 仍写 C++17，`README.md` 顶部也写「C++17 compiler」
-  （而它自己的 SwiftPM 一节又要求 C++20）。**实际是 C++20。**
-- **bench 二进制清单**：`docs/build.md` 只提了 `bench_baseline` / `bench_smoke`，漏了
-  `bench_business`（以及 native_* 系列）。
-- **测试目标清单**：`docs/testing.md` 的 *Current targets* 只列了一部分，实际
-  `test/CMakeLists.txt` 注册的测试见本文 3.2。
+Fast paths for reading code:
+
+- gaby-vm changes on top of VIXL:
+  `git grep -nE 'gaby-vm( BEGIN| END|:)' Sources/gaby_vm/src/`
+- cache-mode hot path:
+  `Sources/gaby_vm/src/aarch64/simulator-aarch64.h`, `ExecuteInstructionCached`
+- public API:
+  `Sources/gaby_vm/include/gaby_vm/`
+- complete embedding example:
+  `demos/cli/main.cc`
+
+---
+
+## 6. Known Documentation Drift
+
+These documents currently lag the code. Treat the code as authoritative:
+
+- C++ standard: top-level `CMakeLists.txt` sets C++20 and the library target
+  requires `cxx_std_20`. Some older docs still mention C++17. The real
+  requirement is C++20.
+- Benchmark binary list: `docs/build.md` mentions `bench_baseline` and
+  `bench_smoke`, but not `bench_business` or the native binaries.
+- Test target list: `docs/testing.md` lists only part of what
+  `test/CMakeLists.txt` registers. See section 3.2 above for the current shape.
