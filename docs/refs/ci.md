@@ -36,7 +36,7 @@ Each script is independently runnable; arguments are explicit.
 | `ci/size-report.sh [--base sizes.json]` | raw `libgaby_vm.a` + stripped `size_probe`; deltas vs base | never |
 | `ci/bench-report.sh [--seconds s]` | whole harness: business three-way + mixed workload + smoke sanity | never |
 | `ci/ios-test.sh` | build the iOS runner + run its XCTest correctness suites on an arm64 Simulator (skips `BenchTests`); skips loudly on a non-arm64 host | test failure fails |
-| `ci/ios-bench.sh` | run `BenchTests` (business kernels, cache vs decoder) on an arm64 Simulator; report-only | never |
+| `ci/ios-bench.sh` | run `BenchTests` (business kernels, cache vs decoder) on an arm64 Simulator **in Release** (representative numbers); report-only | never |
 
 `presets` are the CMake presets: `dev-debug` → `build/debug`, `dev-release` →
 `build/release`.

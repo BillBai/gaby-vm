@@ -6,6 +6,11 @@
 # report its cache/decoder numbers. REPORT-ONLY: it never fails the run (timing
 # is too noisy to gate, and the iOS runner has no native-baseline track). On any
 # non-arm64 host it SKIPS loudly and exits 0.
+#
+# Built in Release: the numbers are only representative optimised, and Xcode's
+# default Debug runs roughly an order of magnitude slower per instruction. (The
+# correctness gate, ci/ios-test.sh, stays on the default Debug — timing is not
+# its concern.)
 set -euo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/util.sh"
 
@@ -45,6 +50,7 @@ set +e
 xcodebuild test \
   -project ios-runner/GabyRunner.xcodeproj \
   -scheme GabyRunner \
+  -configuration Release \
   -destination "platform=iOS Simulator,id=$udid" \
   -only-testing:GabyRunnerTests/BenchTests 2>&1 | tee "$log_file"
 status=${PIPESTATUS[0]}
