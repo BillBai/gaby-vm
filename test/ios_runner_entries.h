@@ -17,7 +17,6 @@ int gaby_vm_ios_run_smoke();
 int gaby_vm_ios_run_simulator_smoke();
 int gaby_vm_ios_run_instructions_constexpr_smoke();
 int gaby_vm_ios_run_simulator_correctness();
-int gaby_vm_ios_run_predecode_cache_data_in_stream();
 int gaby_vm_ios_run_reentrancy();
 int gaby_vm_ios_run_shadow_runner();
 int gaby_vm_ios_run_workload_shadow();

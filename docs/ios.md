@@ -55,10 +55,12 @@ What runs (all green; one combined XCTest run takes ~25s):
   source as its host CTest executable.
 - **`SmokeTests`** — link + public-API smokes.
 
-Two host suites are **not** ported: `typed_register_io_abort` and
-`simulator_constructor_stack`. Both `fork()` a child to observe a deliberate
-abort, which the iOS sandbox forbids and a single XCTest process cannot host.
-They stay host/CTest-only.
+Three host suites are **not** ported: `typed_register_io_abort`,
+`simulator_constructor_stack`, and `predecode_cache_data_in_stream`. Each
+`fork()`s a child to observe a deliberate abort, which the iOS sandbox forbids
+(it works on the Simulator, which runs on the macOS host, but not on device).
+They stay host/CTest-only; the data-in-stream literal-load behaviour is also
+exercised by the vixl_port suite on iOS.
 
 ## Running the benchmark
 

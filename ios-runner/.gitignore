@@ -5,3 +5,7 @@
 
 # Local, untracked signing config (DEVELOPMENT_TEAM for on-device runs).
 Signing.xcconfig
+
+# xcodebuild scratch from local on-device runs.
+DerivedData/
+.derived-data-log-*

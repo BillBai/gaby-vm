@@ -34,10 +34,6 @@
   XCTAssertEqual(gaby_vm_ios_run_simulator_correctness(), 0);
 }
 
-- (void)testPredecodeCacheDataInStream {
-  XCTAssertEqual(gaby_vm_ios_run_predecode_cache_data_in_stream(), 0);
-}
-
 - (void)testReentrancy {
   XCTAssertEqual(gaby_vm_ios_run_reentrancy(), 0);
 }

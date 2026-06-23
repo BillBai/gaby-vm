@@ -58,6 +58,9 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: dev.gabyvm.runnerTests
         CODE_SIGN_STYLE: Automatic
+        # Required to code-sign the test bundle on a device (the Simulator path
+        # doesn't sign, so it only surfaces here).
+        GENERATE_INFOPLIST_FILE: "YES"
         # Public gaby_vm headers (#include "gaby_vm/..."). The private VIXL
         # headers stay inside the library target, not here.
         HEADER_SEARCH_PATHS:
@@ -84,7 +87,6 @@ targets:
       - target: GabyVMLib/gaby_vm_ios_run_simulator_smoke_lib
       - target: GabyVMLib/gaby_vm_ios_run_instructions_constexpr_smoke_lib
       - target: GabyVMLib/gaby_vm_ios_run_simulator_correctness_lib
-      - target: GabyVMLib/gaby_vm_ios_run_predecode_cache_data_in_stream_lib
       - target: GabyVMLib/gaby_vm_ios_run_reentrancy_lib
       - target: GabyVMLib/gaby_vm_ios_run_shadow_runner_lib
       - target: GabyVMLib/gaby_vm_ios_run_workload_shadow_lib

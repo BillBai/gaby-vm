@@ -38,5 +38,5 @@
 
 - [x] 7.1 Full host CTest green (22/22) and `bench_business --verify` OK after the entry/CMake refactors — no host regression.
 - [x] 7.2 `ci/ios-test.sh` green on the arm64 Simulator: 14 tests, 0 failures (correctness suites; `BenchTests` skipped by the gate). `ci/ios-bench.sh` produces cache/decoder numbers for all five kernels.
-- [ ] 7.3 Local device: suites + bench run from Xcode on a connected iPhone (manual; record the numbers). Left for a developer with a device — the runner builds for `iphoneos` arm64; device signing comes from the local team (see `docs/ios.md`).
+- [x] 7.3 Ran on a physical iPhone 17 Pro Max (iOS 26.5.1): all 13 correctness tests green (vixl_port 520/69/0 + 10 baseline suites + 2 smokes), and the benchmark — cache ≈ 230–340 ns/insn, decoder ≈ 2.0–2.2 µs/insn (~6–9× cache speedup). The device run surfaced two fixes: `predecode_cache_data_in_stream` also `fork()`s (now excluded — it had passed on the Simulator, which can fork), and the test bundle needed `GENERATE_INFOPLIST_FILE` to code-sign on device.
 - [x] 7.4 `openspec validate add-ios-support --strict` passes; docs cross-links resolve.

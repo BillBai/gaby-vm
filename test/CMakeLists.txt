@@ -170,10 +170,12 @@ endif()  # GABY_VM_BUILD_TESTS
 # Baseline / unit suites as iOS-runner libraries. Each is the same test TU as
 # its CTest executable above, built as a static library with main() renamed to a
 # unique gaby_vm_ios_run_<name>() that the iOS XCTest calls (declared in
-# test/ios_runner_entries.h). The two fork()-based death tests
-# (typed_register_io_abort, simulator_constructor_stack) are excluded: they fork
-# a child to observe a deliberate abort, which the iOS sandbox forbids and a
-# single XCTest process cannot host.
+# test/ios_runner_entries.h). The three fork()-based tests
+# (typed_register_io_abort, simulator_constructor_stack,
+# predecode_cache_data_in_stream) are excluded: each forks a child to observe a
+# deliberate abort, which the iOS sandbox forbids. They stay host/CTest-only;
+# the data-in-stream literal-load coverage is also exercised by the vixl_port
+# suite on iOS.
 if(GABY_VM_BUILD_IOS_RUNNER)
   function(gaby_vm_add_ios_baseline_lib entry source)
     add_library(${entry}_lib STATIC ${source})
@@ -186,8 +188,6 @@ if(GABY_VM_BUILD_IOS_RUNNER)
   gaby_vm_add_ios_baseline_lib(gaby_vm_ios_run_smoke smoke.cc)
   gaby_vm_add_ios_baseline_lib(gaby_vm_ios_run_simulator_correctness
     simulator_correctness.cc)
-  gaby_vm_add_ios_baseline_lib(gaby_vm_ios_run_predecode_cache_data_in_stream
-    predecode_cache_data_in_stream_test.cc)
   gaby_vm_add_ios_baseline_lib(gaby_vm_ios_run_reentrancy reentrancy_test.cc)
   gaby_vm_add_ios_baseline_lib(gaby_vm_ios_run_shadow_runner
     shadow_runner_test.cc)
