@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>add-ios-support · 变更提案</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+SC:wght@400;500;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css" id="hljs-light">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css" id="hljs-dark" disabled>
+<style>
+  :root{--bg:#fbfbfa;--surface:#ffffff;--ink:#1f2328;--ink-soft:#57606a;--line:#e6e8eb;--accent:#2f6feb;--accent-soft:#ddeaff;--add:#1f883d;--add-bg:#eaf6ee;--guess:#9a6700;--guess-bg:#fdf6e3;--tnote:#8250df;--tnote-bg:#f3eefd;--info:#2f6feb;--info-bg:#eaf2ff;--warn:#9a6700;--warn-bg:#fff8e6;--danger:#cf222e;--danger-bg:#ffebe9;--code-bg:#f6f8fa;--radius:10px;--maxw:860px;--sidew:280px;--mono:"JetBrains Mono",ui-monospace,Menlo,Consolas,monospace;--sans:"Inter","Noto Sans SC",system-ui,-apple-system,"PingFang SC","Microsoft YaHei",sans-serif}
+  html[data-theme="dark"]{--bg:#0d1117;--surface:#161b22;--ink:#e6edf3;--ink-soft:#9198a1;--line:#30363d;--accent:#4f8cf7;--accent-soft:#16304f;--add:#3fb950;--add-bg:#11271a;--guess:#d29922;--guess-bg:#2a210a;--tnote:#a371f7;--tnote-bg:#21163a;--info:#4f8cf7;--info-bg:#0f2238;--warn:#d29922;--warn-bg:#2a210a;--danger:#f85149;--danger-bg:#2c1416;--code-bg:#161b22}
+  *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);line-height:1.7;font-size:16px;-webkit-font-smoothing:antialiased}
+  a{color:var(--accent);text-decoration:none}a:hover{text-decoration:underline}
+  code{font-family:var(--mono);font-size:.88em;background:var(--code-bg);padding:.12em .4em;border-radius:5px}
+  pre{background:var(--code-bg);border:1px solid var(--line);border-radius:var(--radius);padding:14px 16px;overflow:auto}pre code{background:none;padding:0;font-size:.85em;line-height:1.6}
+  .topbar{position:sticky;top:0;z-index:20;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 20px;background:color-mix(in srgb,var(--surface) 88%,transparent);backdrop-filter:saturate(1.4) blur(8px);border-bottom:1px solid var(--line)}
+  .brand{font-weight:700;letter-spacing:.02em;font-size:14px}.brand .dot{color:var(--accent)}
+  .theme-btn{cursor:pointer;border:1px solid var(--line);background:var(--surface);color:var(--ink-soft);border-radius:8px;padding:6px 10px;font-size:13px;font-family:var(--sans)}.theme-btn:hover{color:var(--ink);border-color:var(--accent)}
+  .wrap{display:grid;grid-template-columns:var(--sidew) minmax(0,1fr);gap:0;max-width:1240px;margin:0 auto}
+  .sidebar{position:sticky;top:53px;align-self:start;height:calc(100vh - 53px);overflow:auto;padding:24px 16px 40px;border-right:1px solid var(--line)}
+  .sidebar h3{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-soft);margin:0 0 10px 8px}
+  .toc{list-style:none;margin:0;padding:0}.toc li{margin:1px 0}
+  .toc a{display:block;padding:6px 10px;border-radius:7px;color:var(--ink-soft);font-size:14px;border-left:2px solid transparent}
+  .toc a:hover{background:var(--surface);color:var(--ink);text-decoration:none}
+  .toc a.active{color:var(--ink);background:var(--accent-soft);border-left-color:var(--accent);font-weight:600}
+  .main{padding:36px clamp(20px,4vw,56px) 120px;min-width:0}.content{max-width:var(--maxw);margin:0 auto}
+  header.doc{margin-bottom:28px}.doc h1{font-size:30px;line-height:1.25;margin:.1em 0 .3em}
+  .oneliner{font-size:17px;color:var(--ink-soft);margin:0 0 14px}
+  .meta{display:flex;flex-wrap:wrap;gap:8px}
+  .chip{font-size:12px;color:var(--ink-soft);background:var(--surface);border:1px solid var(--line);border-radius:999px;padding:3px 10px;font-family:var(--mono)}
+  .keypoints{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:18px 22px;margin:0 0 34px;border-left:4px solid var(--accent)}
+  .keypoints h2{font-size:14px;text-transform:uppercase;letter-spacing:.06em;color:var(--accent);margin:0 0 12px}
+  .keypoints ol{margin:0;padding-left:1.2em}.keypoints li{margin:7px 0;font-weight:500}
+  .sec{padding-top:14px;margin-bottom:30px;scroll-margin-top:64px}
+  .sec h2{font-size:22px;margin:.2em 0 .15em;padding-bottom:6px;border-bottom:1px solid var(--line)}
+  .sec h3{font-size:17px;margin:1.2em 0 .3em}
+  .sec-summary{color:var(--ink-soft);font-size:14px;margin:.2em 0 1em;font-style:italic}
+  .callout{border-radius:var(--radius);padding:12px 16px;margin:14px 0;border:1px solid var(--line);font-size:15px}
+  .callout .tag{display:inline-block;font-size:11px;font-weight:700;font-family:var(--mono);padding:1px 7px;border-radius:6px;margin-right:8px;vertical-align:1px}
+  .callout .src-ref{font-family:var(--mono);font-size:12px;color:var(--ink-soft);display:inline-block;margin-left:6px;padding:1px 6px;background:var(--code-bg);border-radius:5px}
+  .callout.add{background:var(--add-bg);border-color:color-mix(in srgb,var(--add) 35%,var(--line))}.callout.add .tag{background:var(--add);color:#fff}
+  .callout.info{background:var(--info-bg)}.callout.info .tag{background:var(--info);color:#fff}
+  details.deep,details.src{border:1px solid var(--line);border-radius:var(--radius);margin:14px 0;background:var(--surface)}
+  details summary{cursor:pointer;padding:10px 14px;font-size:14px;font-weight:600;color:var(--ink-soft);list-style:none}
+  details summary::-webkit-details-marker{display:none}
+  details summary::before{content:"▸";display:inline-block;margin-right:8px;color:var(--accent)}
+  details[open] summary::before{transform:rotate(90deg)}
+  details.deep > *:not(summary),details.src > *:not(summary){padding:0 16px 14px}
+  details.src{background:transparent;border-style:dashed}
+  details.src summary{color:var(--ink-soft);font-weight:500;font-family:var(--mono);font-size:13px}
+  details.src pre{margin:0 16px 14px;white-space:pre-wrap}
+  .mermaid{margin:18px 0;text-align:center}
+  ul{margin:.5em 0;padding-left:1.4em}li{margin:.35em 0}
+  @media (max-width:880px){.wrap{grid-template-columns:1fr}.sidebar{display:none}}
+</style>
+</head>
+<body>
+<div class="topbar">
+  <span class="brand">BBA<span class="dot">·</span>doc-visualizer · <a href="index.html">add-ios-support</a></span>
+  <button class="theme-btn" id="themeBtn">◐ 主题</button>
+</div>
+<div class="wrap">
+  <nav class="sidebar">
+    <h3>目录</h3>
+    <ul class="toc" id="toc">
+      <li><a href="#sec-1">Why</a></li>
+      <li><a href="#sec-2">What Changes</a></li>
+      <li><a href="#sec-3">Capabilities</a></li>
+      <li><a href="#sec-4">Impact</a></li>
+      <li><a href="#sec-5">Out of Scope</a></li>
+    </ul>
+  </nav>
+  <div class="main">
+    <div class="content">
+      <header class="doc">
+        <h1>add-ios-support · 变更提案</h1>
+        <p class="oneliner">让 iOS 成为 gaby-vm 持续测试的一等平台：新增 Xcode runner、共用测试逻辑、CI 门禁与 benchmark 报告。</p>
+        <div class="meta">
+          <span class="chip">proposal.md</span>
+          <span class="chip">OpenSpec change proposal</span>
+          <span class="chip">EN → 中文</span>
+        </div>
+      </header>
+      <div class="keypoints">
+        <h2>本文要点</h2>
+        <ol>
+          <li>gaby-vm 以 iOS 为首要目标，但 CI 目前只在 macOS arm64 上跑，无法在真机上验证解释器。</li>
+          <li>库已能交叉编译为 iOS arm64 static lib（<code>platform=iOS</code>，<code>minos 13.0</code>）；下一步是嵌入 tater hot-fix app 前的持续验证。</li>
+          <li>新增 <code>ios-runner/</code>：Xcode Host App + XCTest，在 Simulator（CI）和真机（本地）跑全套 correctness 与 benchmark。</li>
+          <li>测试/benchmark 抽成 callable entry，host CTest 与 iOS XCTest 共用一套实现，不重复逻辑。</li>
+          <li>CI 新增 <code>ios-sim-test</code> 门禁与 iOS bench 报告；非 arm64 runner 必须显式 SKIP，不能静默通过。</li>
+          <li>不改 shipped library API 或 VIXL import boundary；tater 的 git submodule 集成不受影响。</li>
+        </ol>
+      </div>
+
+      <section id="sec-1" class="sec">
+        <h2>Why</h2>
+        <p class="sec-summary">iOS 是首要目标，但项目里还没有在 iOS 上 build/test/benchmark 的路径。</p>
+        <p>gaby-vm 以 iOS 为首要目标，但当前 CI 只在 macOS arm64 上运行，也没有在真 iPhone 上验证解释器的手段。库本身已能干净地交叉编译为 iOS arm64 static lib（已验证：<code>platform=iOS</code>、<code>minos 13.0</code>）。下一步——在嵌入 tater hot-fix app 之前——是让 iOS 成为持续测试的一等平台。</p>
+        <div class="callout add"><span class="tag">补充</span>现有 CI 设计见 <code>docs/refs/ci.md</code>：PR 门禁只卡确定性结果（build 失败、CTest 失败、cache/decoder 位精确 parity），性能测量在 <code>bench.yml</code> 上 report-only。<span class="src-ref">docs/refs/ci.md:7-24</span></div>
+        <details class="src"><summary>查看原文</summary><pre>## Why
+
+gaby-vm targets iOS first, yet nothing in the project builds, tests, or
+benchmarks on iOS today: CI runs only on macOS arm64, and there is no way to
+validate the interpreter on a real iPhone. The library now cross-compiles
+clean for iOS arm64 (verified: `platform=iOS`, `minos 13.0`, static lib). The
+next step toward embedding into the tater hot-fix app is to make iOS a
+first-class, continuously-tested platform.</pre></details>
+      </section>
+
+      <section id="sec-2" class="sec">
+        <h2>What Changes</h2>
+        <p class="sec-summary">新增 ios-runner、重构 entry point、扩展 CI、补文档。</p>
+        <ul>
+          <li><strong><code>ios-runner/</code></strong>：提交的薄 Xcode 项目（Host App + XCTest），在 iOS Simulator（CI）和真机（本地）跑全套 correctness 与 benchmark。</li>
+          <li><strong>Callable entry</strong>：每个 correctness suite 和 bench kernel 暴露可调用入口；现有 host CTest/bench 可执行文件变成薄 <code>main()</code> 包装；iOS XCTest 和 bench runner 调用同一入口。<em>一套逻辑，两个 driver</em>（host = CTest，iOS = XCTest）。</li>
+          <li><strong>库集成</strong>：runner 通过 CMake 生成的 Xcode subproject 消费库（source list 仍以 CMake 为单一来源）。若 sim/device 分裂太麻烦，fallback 是在 runner 里直接编译 gaby_vm 源文件，并用 source-list drift check 防漂移。不用预编译 <code>.a</code>。</li>
+          <li><strong>CI</strong>：新增 <code>ci/ios-test.sh</code> 和 <code>ci/ios-bench.sh</code>。<code>ci.yml</code> 加 <code>ios-sim-test</code> job（确定性门禁）。<code>bench.yml</code> 加 iOS bench 步骤（report-only）。两者在非 arm64 runner 上<strong>显式 SKIP</strong>——在 job summary 和 sticky comment 里大声说明；skip 绝不能变成静默 pass。</li>
+          <li><strong>Native baseline</strong>：在有 executable memory 的 iOS 环境跑 native baseline（runner 始终是 development-signed 且 debugger-attached，iOS 允许 <code>MAP_JIT</code>；Simulator 是 host process）。若被拒绝，退化为只跑 cache/decoder 并明确报告 native 未运行。</li>
+          <li><strong>文档</strong>：更新 <code>docs/refs/ci.md</code>；新增英文 <code>docs/ios.md</code>（iOS build/test/bench、本地真机流程、签名说明）。</li>
+        </ul>
+        <div class="mermaid">flowchart TB
+  subgraph drivers["两个 driver，一套逻辑"]
+    CTest["Host CTest 可执行文件\n薄 main()"]
+    XCTest["iOS XCTest\nios-runner/"]
+  end
+  Entry["Callable entry\nrun_vixl_port_*() / run_business()"]
+  Lib["gaby_vm 库"]
+  CTest --> Entry
+  XCTest --> Entry
+  Entry --> Lib</div>
+        <details class="src"><summary>查看原文</summary><pre>## What Changes
+
+- Add `ios-runner/`: a committed, thin Xcode project (Host App target + XCTest
+  target) that runs the full correctness suites and the benchmark harness on
+  iOS — the iOS Simulator in CI, a physical device locally.
+- Refactor each correctness suite and benchmark kernel to expose a callable
+  entry function. The existing host CTest/bench executables become thin
+  `main()`s over those entries; the iOS XCTest cases and bench runner call the
+  same entries. One logic, two drivers (host = CTest, iOS = XCTest).
+- The runner consumes the library through a CMake-generated Xcode subproject
+  (source list stays single-sourced in CMake). Fallback if that proves too
+  awkward for the sim/device split: compile gaby_vm sources directly in the
+  runner, guarded by a source-list drift check against CMake. No prebuilt-`.a`
+  integration.
+- CI: new portable `ci/ios-test.sh` and `ci/ios-bench.sh`. `ci.yml` gains an
+  `ios-sim-test` job (deterministic gate — blocks merge on test failure).
+  `bench.yml` gains an iOS bench step (report-only). Both **explicitly SKIP** —
+  loudly, in the job summary and the sticky comment — when the runner is not
+  arm64 (e.g. an x86 runner with no arm64 simulator). A skip is never a silent
+  pass.
+- Benchmark native baseline runs on iOS where executable memory is available
+  (the runner is always development-signed and debugger-attached, so iOS
+  permits `MAP_JIT`; the simulator is a host process). Where it is denied, the
+  run degrades to cache/decoder only and reports that native was not run.
+- Docs: update [`docs/refs/ci.md`](../../../docs/refs/ci.md); add English
+  `docs/ios.md` (iOS build/test/bench + local device flow + signing notes).</pre></details>
+      </section>
+
+      <section id="sec-3" class="sec">
+        <h2>Capabilities</h2>
+        <p class="sec-summary">新增 ios-runner 能力；修改 CI 与 benchmark-harness 规格。</p>
+        <h3>新增</h3>
+        <ul>
+          <li><code>ios-runner</code>：提交的 iOS Host App + XCTest 项目，在 Simulator 和真机上执行 gaby-vm 的 correctness suites 与 benchmark harness，包括库的消费方式和 suite/bench 驱动方式。</li>
+        </ul>
+        <h3>修改</h3>
+        <ul>
+          <li><code>continuous-integration</code>：加 iOS Simulator test gate、iOS benchmark report、非 arm64 显式 skip 语义。</li>
+          <li><code>benchmark-harness</code>：harness 可从 iOS runner 驱动；iOS 上 native baseline 可选，缺失时显式报告。</li>
+        </ul>
+        <p>详细规格见 <a href="specs/ios-runner/spec.html">ios-runner</a>、<a href="specs/continuous-integration/spec.html">continuous-integration</a>、<a href="specs/benchmark-harness/spec.html">benchmark-harness</a>。</p>
+        <details class="src"><summary>查看原文</summary><pre>## Capabilities
+
+### New Capabilities
+
+- `ios-runner`: the committed iOS Host App + XCTest project that executes
+  gaby-vm's correctness suites and benchmark harness on the iOS Simulator and
+  on a physical device, including how it consumes the library and how the
+  suites and benches are driven.
+
+### Modified Capabilities
+
+- `continuous-integration`: adds the iOS Simulator test gate, the iOS
+  benchmark report, and the explicit-skip-on-non-arm64 semantics.
+- `benchmark-harness`: the harness becomes drivable from the iOS runner; on
+  iOS the native baseline is optional and its absence is reported explicitly.</pre></details>
+      </section>
+
+      <section id="sec-4" class="sec">
+        <h2>Impact</h2>
+        <p class="sec-summary">新增 ios-runner 与 CI 脚本；修改 test/bench 和 workflow；库 API 不变。</p>
+        <ul>
+          <li><strong>新增</strong>：<code>ios-runner/</code>、<code>ci/ios-test.sh</code>、<code>ci/ios-bench.sh</code>、<code>docs/ios.md</code></li>
+          <li><strong>修改</strong>：<code>test/</code> 和 <code>bench/</code>（抽 callable entry；现有 <code>main()</code> 变薄包装）、<code>.github/workflows/ci.yml</code> 和 <code>bench.yml</code>、<code>docs/refs/ci.md</code></li>
+          <li><strong>不变</strong>：shipped library API、VIXL import boundary；tater 的 git submodule 源集成不受影响——runner 和测试保持顶层/dev-only，gaby-vm 作为子目录时已 OFF</li>
+        </ul>
+        <details class="src"><summary>查看原文</summary><pre>## Impact
+
+- New: `ios-runner/` (Xcode project + app/test sources), `ci/ios-test.sh`,
+  `ci/ios-bench.sh`, `docs/ios.md`.
+- Modified: `test/` and `bench/` (extract callable entry points; existing
+  `main()`s become thin wrappers), `.github/workflows/ci.yml` and `bench.yml`,
+  `docs/refs/ci.md`.
+- No change to the shipped library API or the imported VIXL boundary. Source
+  integration into tater (git submodule) is unaffected — the runner and tests
+  stay top-level / dev-only and are already OFF when gaby-vm is a subdirectory.</pre></details>
+      </section>
+
+      <section id="sec-5" class="sec">
+        <h2>Out of Scope</h2>
+        <p class="sec-summary">CI 不跑真机；不改语义；不做 App Store 分发。</p>
+        <ul>
+          <li>CI 里自动化真机 test/bench（真机仅本地）</li>
+          <li>Linux / Android / HarmonyOS CI（后续单独做）</li>
+          <li>Distribution-signed（App Store）runner 执行；始终是 development build</li>
+          <li>解释器语义或指令覆盖的任何变更</li>
+        </ul>
+        <details class="src"><summary>查看原文</summary><pre>## Out of Scope
+
+- Automated real-device runs in CI (device test/bench is local-only for now).
+- Linux / Android / HarmonyOS CI (separate follow-up).
+- Distribution-signed (App Store) execution of the runner; it is always a
+  development build.
+- Any change to interpreter semantics or instruction coverage.</pre></details>
+      </section>
+    </div>
+  </div>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<script>
+const root=document.documentElement;const prefersDark=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches;
+function setTheme(t){root.dataset.theme=t;document.getElementById('hljs-dark').disabled=(t!=='dark');document.getElementById('hljs-light').disabled=(t==='dark');try{mermaid.initialize({startOnLoad:false,theme:t==='dark'?'dark':'default'});renderMermaid()}catch(e){}}
+setTheme(prefersDark?'dark':'light');document.getElementById('themeBtn').onclick=()=>setTheme(root.dataset.theme==='dark'?'light':'dark');
+document.querySelectorAll('pre code').forEach(b=>{try{hljs.highlightElement(b)}catch(e){}});
+let mermaidSrc=[...document.querySelectorAll('.mermaid')].map(el=>el.textContent);
+function renderMermaid(){document.querySelectorAll('.mermaid').forEach((el,i)=>{el.removeAttribute('data-processed');el.innerHTML=mermaidSrc[i]});try{mermaid.run({querySelector:'.mermaid'})}catch(e){}}
+renderMermaid();
+const links=[...document.querySelectorAll('.toc a')];const map=new Map(links.map(a=>[a.getAttribute('href').slice(1),a]));
+const obs=new IntersectionObserver(es=>{es.forEach(e=>{if(e.isIntersecting){links.forEach(l=>l.classList.remove('active'));const a=map.get(e.target.id);if(a)a.classList.add('active')}})},{rootMargin:'-10% 0px -80% 0px'});
+document.querySelectorAll('section.sec').forEach(s=>obs.observe(s));
+</script>
+</body>
+</html>

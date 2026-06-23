@@ -1,0 +1,71 @@
+# XcodeGen spec for the gaby-vm iOS runner (host app + XCTest bundle).
+# The gaby_vm library is built by the CMake-generated project referenced below
+# as `GabyVMLib`; this spec only owns the host shell that runs gaby-vm's
+# correctness suites and benchmark harness on iOS. The test target depends on
+# the library's `gaby_vm` target, so Xcode builds it for the active destination
+# (sim arm64 / device arm64) and links its product directly. Regenerate with
+# ios-runner/generate.sh (runs cmake -G Xcode, strips legacy PBXBuildStyle,
+# then xcodegen).
+name: GabyRunner
+options:
+  bundleIdPrefix: dev.gabyvm
+  deploymentTarget:
+    iOS: "13.0"
+  createIntermediateGroups: true
+
+# The CMake-generated gaby_vm library project. generate.sh produces and
+# sanitizes it under build/ios-xcode/ before invoking xcodegen.
+projectReferences:
+  GabyVMLib:
+    path: ../build/ios-xcode/gaby_vm.xcodeproj
+
+settings:
+  base:
+    CLANG_CXX_LANGUAGE_STANDARD: "c++20"
+    # Simulator + device dev builds; no team/identity committed (device signing
+    # comes from a local, untracked configuration).
+    CODE_SIGNING_ALLOWED: "NO"
+
+targets:
+  # Minimal host application — exists so the XCTest bundle has a process to load
+  # into on the simulator and on device.
+  GabyRunner:
+    type: application
+    platform: iOS
+    sources:
+      - App
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.gabyvm.runner
+        GENERATE_INFOPLIST_FILE: "YES"
+        INFOPLIST_KEY_UILaunchScreen_Generation: "YES"
+
+  GabyRunnerTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - Tests
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.gabyvm.runnerTests
+        # Public gaby_vm headers (#include "gaby_vm/..."). The private VIXL
+        # headers stay inside the library target, not here.
+        HEADER_SEARCH_PATHS:
+          - "$(SRCROOT)/../Sources/gaby_vm/include"
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/GabyRunner.app/GabyRunner"
+        BUNDLE_LOADER: "$(TEST_HOST)"
+    dependencies:
+      - target: GabyRunner
+      # Cross-project dependency on the CMake library target; Xcode builds it
+      # for the active destination and links libgaby_vm.a automatically.
+      - target: GabyVMLib/gaby_vm
+
+schemes:
+  GabyRunner:
+    build:
+      targets:
+        GabyRunner: all
+        GabyRunnerTests: [test]
+    test:
+      targets:
+        - GabyRunnerTests

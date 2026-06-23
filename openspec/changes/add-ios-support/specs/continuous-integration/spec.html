@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>continuous-integration · 规格</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+SC:wght@400;500;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css" id="hljs-light">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css" id="hljs-dark" disabled>
+<style>
+  :root{--bg:#fbfbfa;--surface:#ffffff;--ink:#1f2328;--ink-soft:#57606a;--line:#e6e8eb;--accent:#2f6feb;--accent-soft:#ddeaff;--add:#1f883d;--add-bg:#eaf6ee;--guess:#9a6700;--guess-bg:#fdf6e3;--tnote:#8250df;--tnote-bg:#f3eefd;--info:#2f6feb;--info-bg:#eaf2ff;--warn:#9a6700;--warn-bg:#fff8e6;--danger:#cf222e;--danger-bg:#ffebe9;--code-bg:#f6f8fa;--radius:10px;--maxw:860px;--sidew:280px;--mono:"JetBrains Mono",ui-monospace,Menlo,Consolas,monospace;--sans:"Inter","Noto Sans SC",system-ui,-apple-system,"PingFang SC","Microsoft YaHei",sans-serif}
+  html[data-theme="dark"]{--bg:#0d1117;--surface:#161b22;--ink:#e6edf3;--ink-soft:#9198a1;--line:#30363d;--accent:#4f8cf7;--accent-soft:#16304f;--add:#3fb950;--add-bg:#11271a;--guess:#d29922;--guess-bg:#2a210a;--tnote:#a371f7;--tnote-bg:#21163a;--info:#4f8cf7;--info-bg:#0f2238;--warn:#d29922;--warn-bg:#2a210a;--danger:#f85149;--danger-bg:#2c1416;--code-bg:#161b22}
+  *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);line-height:1.7;font-size:16px;-webkit-font-smoothing:antialiased}
+  a{color:var(--accent);text-decoration:none}a:hover{text-decoration:underline}
+  code{font-family:var(--mono);font-size:.88em;background:var(--code-bg);padding:.12em .4em;border-radius:5px}
+  pre{background:var(--code-bg);border:1px solid var(--line);border-radius:var(--radius);padding:14px 16px;overflow:auto}pre code{background:none;padding:0;font-size:.85em;line-height:1.6}
+  .topbar{position:sticky;top:0;z-index:20;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 20px;background:color-mix(in srgb,var(--surface) 88%,transparent);backdrop-filter:saturate(1.4) blur(8px);border-bottom:1px solid var(--line)}
+  .brand{font-weight:700;letter-spacing:.02em;font-size:14px}.brand .dot{color:var(--accent)}
+  .theme-btn{cursor:pointer;border:1px solid var(--line);background:var(--surface);color:var(--ink-soft);border-radius:8px;padding:6px 10px;font-size:13px;font-family:var(--sans)}.theme-btn:hover{color:var(--ink);border-color:var(--accent)}
+  .wrap{display:grid;grid-template-columns:var(--sidew) minmax(0,1fr);gap:0;max-width:1240px;margin:0 auto}
+  .sidebar{position:sticky;top:53px;align-self:start;height:calc(100vh - 53px);overflow:auto;padding:24px 16px 40px;border-right:1px solid var(--line)}
+  .sidebar h3{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-soft);margin:0 0 10px 8px}
+  .toc{list-style:none;margin:0;padding:0}.toc li{margin:1px 0}
+  .toc a{display:block;padding:6px 10px;border-radius:7px;color:var(--ink-soft);font-size:14px;border-left:2px solid transparent}
+  .toc a:hover{background:var(--surface);color:var(--ink);text-decoration:none}
+  .toc a.active{color:var(--ink);background:var(--accent-soft);border-left-color:var(--accent);font-weight:600}
+  .main{padding:36px clamp(20px,4vw,56px) 120px;min-width:0}.content{max-width:var(--maxw);margin:0 auto}
+  header.doc{margin-bottom:28px}.doc h1{font-size:30px;line-height:1.25;margin:.1em 0 .3em}
+  .oneliner{font-size:17px;color:var(--ink-soft);margin:0 0 14px}
+  .meta{display:flex;flex-wrap:wrap;gap:8px}
+  .chip{font-size:12px;color:var(--ink-soft);background:var(--surface);border:1px solid var(--line);border-radius:999px;padding:3px 10px;font-family:var(--mono)}
+  .keypoints{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:18px 22px;margin:0 0 34px;border-left:4px solid var(--accent)}
+  .keypoints h2{font-size:14px;text-transform:uppercase;letter-spacing:.06em;color:var(--accent);margin:0 0 12px}
+  .keypoints ol{margin:0;padding-left:1.2em}.keypoints li{margin:7px 0;font-weight:500}
+  .sec{padding-top:14px;margin-bottom:30px;scroll-margin-top:64px}
+  .sec h2{font-size:22px;margin:.2em 0 .15em;padding-bottom:6px;border-bottom:1px solid var(--line)}
+  .sec h3{font-size:17px;margin:1.2em 0 .3em}
+  .sec-summary{color:var(--ink-soft);font-size:14px;margin:.2em 0 1em;font-style:italic}
+  .callout{border-radius:var(--radius);padding:12px 16px;margin:14px 0;border:1px solid var(--line);font-size:15px}
+  .callout .tag{display:inline-block;font-size:11px;font-weight:700;font-family:var(--mono);padding:1px 7px;border-radius:6px;margin-right:8px;vertical-align:1px}
+  .callout .src-ref{font-family:var(--mono);font-size:12px;color:var(--ink-soft);display:inline-block;margin-left:6px;padding:1px 6px;background:var(--code-bg);border-radius:5px}
+  .callout.add{background:var(--add-bg);border-color:color-mix(in srgb,var(--add) 35%,var(--line))}.callout.add .tag{background:var(--add);color:#fff}
+  .callout.info{background:var(--info-bg)}.callout.info .tag{background:var(--info);color:#fff}
+  .callout.warn{background:var(--warn-bg);border-color:color-mix(in srgb,var(--warn) 35%,var(--line))}.callout.warn .tag{background:var(--warn);color:#fff}
+  details.deep,details.src{border:1px solid var(--line);border-radius:var(--radius);margin:14px 0;background:var(--surface)}
+  details summary{cursor:pointer;padding:10px 14px;font-size:14px;font-weight:600;color:var(--ink-soft);list-style:none}
+  details summary::-webkit-details-marker{display:none}
+  details summary::before{content:"▸";display:inline-block;margin-right:8px;color:var(--accent)}
+  details[open] summary::before{transform:rotate(90deg)}
+  details.deep > *:not(summary),details.src > *:not(summary){padding:0 16px 14px}
+  details.src{background:transparent;border-style:dashed}
+  details.src summary{color:var(--ink-soft);font-weight:500;font-family:var(--mono);font-size:13px}
+  details.src pre{margin:0 16px 14px;white-space:pre-wrap}
+  .mermaid{margin:18px 0;text-align:center}
+  ul{margin:.5em 0;padding-left:1.4em}li{margin:.35em 0}
+  .scenario{border:1px solid var(--line);border-radius:var(--radius);padding:12px 16px;margin:12px 0;background:var(--surface)}
+  .scenario-title{font-weight:600;font-size:15px;margin-bottom:8px;color:var(--ink)}
+  .when,.then,.and{font-size:15px;margin:6px 0}
+  .label{display:inline-block;font-size:11px;font-weight:700;font-family:var(--mono);padding:1px 7px;border-radius:6px;margin-right:8px;vertical-align:1px;min-width:3.2em;text-align:center}
+  .when .label{background:var(--info-bg);color:var(--info);border:1px solid color-mix(in srgb,var(--info) 35%,var(--line))}
+  .then .label{background:var(--add-bg);color:var(--add);border:1px solid color-mix(in srgb,var(--add) 35%,var(--line))}
+  .and .label{background:var(--warn-bg);color:var(--warn);border:1px solid color-mix(in srgb,var(--warn) 35%,var(--line))}
+  @media (max-width:880px){.wrap{grid-template-columns:1fr}.sidebar{display:none}}
+</style>
+</head>
+<body>
+<div class="topbar">
+  <span class="brand">BBA<span class="dot">·</span>doc-visualizer · <a href="../../index.html">add-ios-support</a></span>
+  <button class="theme-btn" id="themeBtn">◐ 主题</button>
+</div>
+<div class="wrap">
+  <nav class="sidebar">
+    <h3>目录</h3>
+    <ul class="toc" id="toc">
+      <li><a href="#sec-1">iOS Simulator 确定性门禁</a></li>
+      <li><a href="#sec-2">非 arm64 runner 显式 SKIP</a></li>
+      <li><a href="#sec-3">iOS 性能 report-only</a></li>
+    </ul>
+  </nav>
+  <div class="main">
+    <div class="content">
+      <header class="doc">
+        <h1>continuous-integration · 规格</h1>
+        <p class="oneliner">定义 iOS Simulator correctness 门禁、非 arm64 显式 skip 语义，以及 main 上 report-only 的 iOS benchmark 报告。</p>
+        <div class="meta">
+          <span class="chip">specs/continuous-integration/spec.md</span>
+          <span class="chip">OpenSpec delta spec</span>
+          <span class="chip">EN → 中文</span>
+        </div>
+      </header>
+      <div class="keypoints">
+        <h2>本文要点</h2>
+        <ol>
+          <li>CI SHALL 在 arm64 runner 上为每个 PR 和 <code>main</code> push 构建 iOS runner 并跑 Simulator correctness；失败 SHALL 使门禁失败。</li>
+          <li>门禁 SHALL 通过可移植的 <code>ci/</code> 脚本实现，开发者在本地 arm64 host 可复现相同 build/test。</li>
+          <li>非 arm64 runner（如无 arm64 Simulator 的 x86）SHALL 显式 SKIP iOS test/bench，在 job summary 与 sticky comment 中说明「skipped / not run」；skip 成功退出但 SHALL NOT 被报告为 iOS 测试通过。</li>
+          <li>iOS benchmark 仅在 <code>main</code> push 与 manual dispatch 上运行，结果写入 report artifact；PR 不跑 timing；性能回退 SHALL NOT 使 run 失败。</li>
+        </ol>
+      </div>
+
+      <section id="sec-1" class="sec">
+        <h2>iOS Simulator 确定性门禁</h2>
+        <p class="sec-summary">arm64 runner 上每次 PR/main 跑 Simulator correctness，失败即门禁失败。</p>
+        <p>CI SHALL 为 iOS Simulator（arm64）构建 iOS runner 并在 runner 为 arm64 时，对每个 pull request 和每次 push 到 <code>main</code> 运行其 correctness suites。iOS Simulator 测试失败 SHALL 使门禁失败。门禁 SHALL 在可移植的 <code>ci/</code> 脚本中实现，由 workflow 调用，以便开发者在 arm64 host 上本地复现。</p>
+
+        <div class="scenario">
+          <div class="scenario-title">Passing iOS simulator tests pass the gate</div>
+          <div class="when"><span class="label">WHEN</span> iOS runner 的 Simulator correctness suites 全部通过</div>
+          <div class="then"><span class="label">THEN</span> iOS 门禁通过</div>
+        </div>
+        <div class="scenario">
+          <div class="scenario-title">A failing iOS simulator test fails the gate</div>
+          <div class="when"><span class="label">WHEN</span> 任意 iOS Simulator correctness 测试失败</div>
+          <div class="then"><span class="label">THEN</span> 门禁以非零状态失败</div>
+        </div>
+        <div class="scenario">
+          <div class="scenario-title">The iOS gate reproduces locally</div>
+          <div class="when"><span class="label">WHEN</span> 开发者在本地 arm64 host 运行 iOS test <code>ci/</code> 脚本</div>
+          <div class="then"><span class="label">THEN</span> 它执行与 CI 相同的 Simulator build 与 test，无需 GitHub Actions 环境</div>
+        </div>
+
+        <div class="callout add"><span class="tag">补充</span>现有 CI 设计：PR 门禁只卡确定性结果（build 失败、CTest 失败、cache/decoder parity）；性能在 <code>bench.yml</code> 上 report-only。<span class="src-ref">docs/refs/ci.md:7-24</span></div>
+
+        <details class="src"><summary>查看原文</summary><pre>### Requirement: The iOS Simulator test gate is deterministic
+
+CI SHALL build the iOS runner for the iOS Simulator (arm64) and run its
+correctness suites on every pull request and every push to `main` when the
+runner is arm64. A failure of the iOS Simulator tests SHALL fail the gate. The
+gate SHALL be implemented in a portable `ci/` script that the workflow invokes,
+so a developer can reproduce it locally on an arm64 host.
+
+#### Scenario: Passing iOS simulator tests pass the gate
+
+- **WHEN** the iOS runner's simulator correctness suites all pass
+- **THEN** the iOS gate passes
+
+#### Scenario: A failing iOS simulator test fails the gate
+
+- **WHEN** any iOS Simulator correctness test fails
+- **THEN** the gate fails with a non-zero status
+
+#### Scenario: The iOS gate reproduces locally
+
+- **WHEN** a developer runs the iOS test `ci/` script on a local arm64 host
+- **THEN** it performs the same simulator build and test that CI performs, without the GitHub Actions environment</pre></details>
+      </section>
+
+      <section id="sec-2" class="sec">
+        <h2>非 arm64 runner 显式 SKIP</h2>
+        <p class="sec-summary">无法跑 arm64 Simulator 时成功退出但大声说明 skip，绝不伪装成 pass。</p>
+        <p>当 runner 无法运行 arm64 iOS Simulator（例如 x86 runner）时，CI SHALL 跳过 iOS build/test 与 iOS benchmark 步骤，并在 job summary 与 sticky pull-request comment 中以显式「skipped / not run」行报告 skip。Skip SHALL 以成功状态退出，且 SHALL NOT 被报告为 iOS 测试通过。</p>
+
+        <div class="scenario">
+          <div class="scenario-title">x86 runner skips without failing</div>
+          <div class="when"><span class="label">WHEN</span> runner 不是 arm64</div>
+          <div class="then"><span class="label">THEN</span> iOS test 步骤成功退出且不运行任何 iOS 测试</div>
+          <div class="and"><span class="label">AND</span> job summary 与 sticky comment 包含明确说明 iOS 测试被跳过且未运行的行</div>
+        </div>
+        <div class="scenario">
+          <div class="scenario-title">A skip is not a pass</div>
+          <div class="when"><span class="label">WHEN</span> 在非 arm64 runner 上 iOS 步骤被跳过</div>
+          <div class="then"><span class="label">THEN</span> 报告不得将 iOS 测试呈现为已通过</div>
+        </div>
+        <div class="scenario">
+          <div class="scenario-title">arm64 runner runs rather than skips</div>
+          <div class="when"><span class="label">WHEN</span> runner 为 arm64 且 iOS Simulator 可用</div>
+          <div class="then"><span class="label">THEN</span> iOS 步骤运行 Simulator 测试而非跳过</div>
+        </div>
+
+        <div class="callout warn"><span class="tag">注意</span>Skip 成功退出是为了不阻塞无 arm64 Simulator 的 runner；但 summary/comment 必须清楚区分「未运行」与「已通过」——静默 pass 是禁止的。</div>
+
+        <div class="mermaid">flowchart TD
+  Start["CI iOS 步骤"]
+  Arch{"runner\narm64?"}
+  Sim{"iOS Simulator\n可用?"}
+  Run["构建 + 跑\nSimulator tests"]
+  Skip["成功退出\n显式 skipped/not run"]
+  FailGate["门禁失败\n(测试失败时)"]
+  Start --> Arch
+  Arch -->|否| Skip
+  Arch -->|是| Sim
+  Sim -->|是| Run
+  Sim -->|否| Skip
+  Run -->|pass| Pass["门禁通过"]
+  Run -->|fail| FailGate</div>
+
+        <details class="src"><summary>查看原文</summary><pre>### Requirement: A non-arm64 runner skips iOS explicitly
+
+CI SHALL skip the iOS build/test and iOS benchmark steps when the runner cannot
+run an arm64 iOS Simulator (for example an x86 runner), and SHALL report the
+skip in the job summary and the sticky pull-request comment as an explicit
+"skipped / not run" line. A skip SHALL exit successfully and SHALL NOT be
+reported as a pass of the iOS tests.
+
+#### Scenario: x86 runner skips without failing
+
+- **WHEN** the runner is not arm64
+- **THEN** the iOS test step exits successfully without running any iOS test
+- **AND** the job summary and sticky comment contain an explicit line stating the iOS tests were skipped and not run
+
+#### Scenario: A skip is not a pass
+
+- **WHEN** the iOS step is skipped on a non-arm64 runner
+- **THEN** the report does not present the iOS tests as having passed
+
+#### Scenario: arm64 runner runs rather than skips
+
+- **WHEN** the runner is arm64 with an available iOS Simulator
+- **THEN** the iOS step runs the simulator tests instead of skipping</pre></details>
+      </section>
+
+      <section id="sec-3" class="sec">
+        <h2>iOS 性能 report-only</h2>
+        <p class="sec-summary">main/manual 上跑 iOS bench 写入 artifact；PR 不跑 timing；回退不 fail。</p>
+        <p>在 push 到 <code>main</code> 与 manual dispatch 时，当 runner 为 arm64，CI SHALL 在 iOS Simulator 上运行 iOS benchmark 并将数字纳入 report artifact。iOS 性能 run SHALL NOT 在 pull request 上执行，且 SHALL 为 report-only：iOS timing 变化 SHALL NOT 使 run 失败。</p>
+
+        <div class="scenario">
+          <div class="scenario-title">A push to main records iOS numbers</div>
+          <div class="when"><span class="label">WHEN</span> 提交进入 <code>main</code> 且 runner 为 arm64</div>
+          <div class="then"><span class="label">THEN</span> iOS benchmark 在 Simulator 上运行，其数字纳入 report artifact</div>
+        </div>
+        <div class="scenario">
+          <div class="scenario-title">Pull requests do not run the iOS timing job</div>
+          <div class="when"><span class="label">WHEN</span> pull request 被打开或更新</div>
+          <div class="then"><span class="label">THEN</span> 该 pull request 不执行 iOS 性能 timing run</div>
+        </div>
+        <div class="scenario">
+          <div class="scenario-title">An iOS timing regression does not fail the run</div>
+          <div class="when"><span class="label">WHEN</span> iOS benchmark 数字比先前 run 更差</div>
+          <div class="then"><span class="label">THEN</span> run 不得因此失败</div>
+        </div>
+
+        <div class="mermaid">flowchart LR
+  subgraph gate["ci.yml · 确定性门禁"]
+    PR1["PR / main push"]
+    SimTest["ios-sim-test\nSimulator correctness"]
+    PR1 --> SimTest
+  end
+  subgraph bench["bench.yml · report-only"]
+    Main["main push\nmanual dispatch"]
+    IOSBench["iOS benchmark\nSimulator numbers"]
+    Artifact["report artifact"]
+    Main --> IOSBench --> Artifact
+  end</div>
+
+        <details class="src"><summary>查看原文</summary><pre>### Requirement: iOS performance is reported on main and never gates
+
+On push to `main` and on manual dispatch, when the runner is arm64, CI SHALL
+run the iOS benchmark on the iOS Simulator and include the numbers in the
+report artifact. The iOS performance run SHALL NOT execute on pull requests and
+SHALL be report-only: an iOS timing change SHALL NOT fail the run.
+
+#### Scenario: A push to main records iOS numbers
+
+- **WHEN** a commit lands on `main` and the runner is arm64
+- **THEN** the iOS benchmark runs on the simulator and its numbers are included in the report artifact
+
+#### Scenario: Pull requests do not run the iOS timing job
+
+- **WHEN** a pull request is opened or updated
+- **THEN** no iOS performance-timing run executes for that pull request
+
+#### Scenario: An iOS timing regression does not fail the run
+
+- **WHEN** an iOS benchmark number is worse than a previous run
+- **THEN** the run does not fail on that basis</pre></details>
+      </section>
+    </div>
+  </div>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<script>
+const root=document.documentElement;const prefersDark=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches;
+function setTheme(t){root.dataset.theme=t;document.getElementById('hljs-dark').disabled=(t!=='dark');document.getElementById('hljs-light').disabled=(t==='dark');try{mermaid.initialize({startOnLoad:false,theme:t==='dark'?'dark':'default'});renderMermaid()}catch(e){}}
+setTheme(prefersDark?'dark':'light');document.getElementById('themeBtn').onclick=()=>setTheme(root.dataset.theme==='dark'?'light':'dark');
+document.querySelectorAll('pre code').forEach(b=>{try{hljs.highlightElement(b)}catch(e){}});
+let mermaidSrc=[...document.querySelectorAll('.mermaid')].map(el=>el.textContent);
+function renderMermaid(){document.querySelectorAll('.mermaid').forEach((el,i)=>{el.removeAttribute('data-processed');el.innerHTML=mermaidSrc[i]});try{mermaid.run({querySelector:'.mermaid'})}catch(e){}}
+renderMermaid();
+const links=[...document.querySelectorAll('.toc a')];const map=new Map(links.map(a=>[a.getAttribute('href').slice(1),a]));
+const obs=new IntersectionObserver(es=>{es.forEach(e=>{if(e.isIntersecting){links.forEach(l=>l.classList.remove('active'));const a=map.get(e.target.id);if(a)a.classList.add('active')}})},{rootMargin:'-10% 0px -80% 0px'});
+document.querySelectorAll('section.sec').forEach(s=>obs.observe(s));
+</script>
+</body>
+</html>

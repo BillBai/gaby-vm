@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>add-ios-support · OpenSpec 变更</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+SC:wght@400;500;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{--bg:#fbfbfa;--surface:#ffffff;--ink:#1f2328;--ink-soft:#57606a;--line:#e6e8eb;--accent:#2f6feb;--accent-soft:#ddeaff;--radius:10px;--mono:"JetBrains Mono",ui-monospace,Menlo,Consolas,monospace;--sans:"Inter","Noto Sans SC",system-ui,-apple-system,"PingFang SC","Microsoft YaHei",sans-serif}
+  html[data-theme="dark"]{--bg:#0d1117;--surface:#161b22;--ink:#e6edf3;--ink-soft:#9198a1;--line:#30363d;--accent:#4f8cf7;--accent-soft:#16304f}
+  *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);line-height:1.7;font-size:16px;padding:0 0 80px}
+  a{color:var(--accent);text-decoration:none}a:hover{text-decoration:underline}
+  code{font-family:var(--mono);font-size:.88em;background:color-mix(in srgb,var(--line) 40%,transparent);padding:.12em .4em;border-radius:5px}
+  .topbar{position:sticky;top:0;z-index:20;display:flex;align-items:center;justify-content:space-between;padding:10px 24px;background:color-mix(in srgb,var(--surface) 88%,transparent);backdrop-filter:saturate(1.4) blur(8px);border-bottom:1px solid var(--line)}
+  .brand{font-weight:700;font-size:14px}.brand .dot{color:var(--accent)}
+  .theme-btn{cursor:pointer;border:1px solid var(--line);background:var(--surface);color:var(--ink-soft);border-radius:8px;padding:6px 10px;font-size:13px;font-family:var(--sans)}
+  .hero{max-width:720px;margin:48px auto 36px;padding:0 24px}
+  .hero h1{font-size:32px;margin:0 0 12px;line-height:1.25}
+  .hero p{color:var(--ink-soft);font-size:18px;margin:0 0 20px}
+  .meta{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:28px}
+  .chip{font-size:12px;color:var(--ink-soft);background:var(--surface);border:1px solid var(--line);border-radius:999px;padding:3px 10px;font-family:var(--mono)}
+  .cards{max-width:720px;margin:0 auto;padding:0 24px;display:grid;gap:14px}
+  .card{display:block;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:18px 20px;transition:border-color .15s}
+  .card:hover{border-color:var(--accent);text-decoration:none}
+  .card h2{margin:0 0 6px;font-size:18px;color:var(--ink)}
+  .card p{margin:0;color:var(--ink-soft);font-size:15px}
+  .card .tag{font-family:var(--mono);font-size:11px;color:var(--accent);text-transform:uppercase;letter-spacing:.06em}
+  .keypoints{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:18px 22px;margin:0 auto 28px;max-width:720px;border-left:4px solid var(--accent)}
+  .keypoints h2{font-size:14px;text-transform:uppercase;letter-spacing:.06em;color:var(--accent);margin:0 0 12px}
+  .keypoints ol{margin:0;padding-left:1.2em}.keypoints li{margin:7px 0;font-weight:500}
+</style>
+</head>
+<body>
+<div class="topbar">
+  <span class="brand">BBA<span class="dot">·</span>doc-visualizer</span>
+  <button class="theme-btn" id="themeBtn">◐ 主题</button>
+</div>
+<div class="hero">
+  <h1>add-ios-support</h1>
+  <p>让 iOS 成为 gaby-vm 持续测试的一等平台：Xcode runner、共用测试逻辑、CI 门禁与 benchmark 报告。</p>
+  <div class="meta">
+    <span class="chip">schema: spec-driven</span>
+    <span class="chip">created: 2026-06-22</span>
+    <span class="chip">7 份源文档 → 6 页可视化</span>
+  </div>
+</div>
+<div class="keypoints" style="padding-left:24px;padding-right:24px">
+  <h2>变更要点（跨文档摘要）</h2>
+  <ol>
+    <li>新增 <code>ios-runner/</code>：Xcode Host App + XCTest，Simulator（CI）与真机（本地）跑 correctness 与 benchmark。</li>
+    <li>Callable entry 重构：host CTest 与 iOS XCTest 共用同一套 suite/bench 逻辑。</li>
+    <li>CI 加 <code>ios-sim-test</code> 确定性门禁；<code>bench.yml</code> 加 iOS report-only；非 arm64 必须显式 SKIP。</li>
+    <li>库通过 CMake 生成的 Xcode subproject 集成；fallback 为 direct-compile + drift guard；不用预编译 <code>.a</code>。</li>
+    <li>不改 shipped API、VIXL boundary 或解释器语义；真机 CI 与 App Store 分发不在范围内。</li>
+  </ol>
+</div>
+<div class="cards">
+  <a class="card" href="proposal.html">
+    <div class="tag">proposal.md</div>
+    <h2>变更提案</h2>
+    <p>Why、What Changes、Capabilities、Impact、Out of Scope。</p>
+  </a>
+  <a class="card" href="design.html">
+    <div class="tag">design.md</div>
+    <h2>设计文档</h2>
+    <p>五项关键决策、风险与取舍、迁移顺序、开放问题。</p>
+  </a>
+  <a class="card" href="tasks.html">
+    <div class="tag">tasks.md</div>
+    <h2>任务清单</h2>
+    <p>Spike → entry 重构 → runner → CI → 文档 → 验证，共 7 阶段。</p>
+  </a>
+  <a class="card" href="specs/ios-runner/spec.html">
+    <div class="tag">specs/ios-runner/spec.md</div>
+    <h2>ios-runner 规格</h2>
+    <p>Runner 结构、库集成、共用 entry、development 签名要求。</p>
+  </a>
+  <a class="card" href="specs/continuous-integration/spec.html">
+    <div class="tag">specs/continuous-integration/spec.md</div>
+    <h2>continuous-integration 规格</h2>
+    <p>iOS Simulator 门禁、非 arm64 显式 skip、report-only bench。</p>
+  </a>
+  <a class="card" href="specs/benchmark-harness/spec.html">
+    <div class="tag">specs/benchmark-harness/spec.md</div>
+    <h2>benchmark-harness 规格</h2>
+    <p>Callable kernel entry、native baseline 缺失时的显式报告。</p>
+  </a>
+</div>
+<script>
+const root=document.documentElement;const prefersDark=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches;
+function setTheme(t){root.dataset.theme=t}
+setTheme(prefersDark?'dark':'light');
+document.getElementById('themeBtn').onclick=()=>setTheme(root.dataset.theme==='dark'?'light':'dark');
+</script>
+</body>
+</html>

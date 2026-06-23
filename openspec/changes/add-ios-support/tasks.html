@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>add-ios-support · 任务清单</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+SC:wght@400;500;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css" id="hljs-light">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css" id="hljs-dark" disabled>
+<style>
+  :root{--bg:#fbfbfa;--surface:#ffffff;--ink:#1f2328;--ink-soft:#57606a;--line:#e6e8eb;--accent:#2f6feb;--accent-soft:#ddeaff;--add:#1f883d;--add-bg:#eaf6ee;--guess:#9a6700;--guess-bg:#fdf6e3;--tnote:#8250df;--tnote-bg:#f3eefd;--info:#2f6feb;--info-bg:#eaf2ff;--warn:#9a6700;--warn-bg:#fff8e6;--danger:#cf222e;--danger-bg:#ffebe9;--code-bg:#f6f8fa;--radius:10px;--maxw:860px;--sidew:280px;--mono:"JetBrains Mono",ui-monospace,Menlo,Consolas,monospace;--sans:"Inter","Noto Sans SC",system-ui,-apple-system,"PingFang SC","Microsoft YaHei",sans-serif}
+  html[data-theme="dark"]{--bg:#0d1117;--surface:#161b22;--ink:#e6edf3;--ink-soft:#9198a1;--line:#30363d;--accent:#4f8cf7;--accent-soft:#16304f;--add:#3fb950;--add-bg:#11271a;--guess:#d29922;--guess-bg:#2a210a;--tnote:#a371f7;--tnote-bg:#21163a;--info:#4f8cf7;--info-bg:#0f2238;--warn:#d29922;--warn-bg:#2a210a;--danger:#f85149;--danger-bg:#2c1416;--code-bg:#161b22}
+  *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);line-height:1.7;font-size:16px;-webkit-font-smoothing:antialiased}
+  a{color:var(--accent);text-decoration:none}a:hover{text-decoration:underline}
+  code{font-family:var(--mono);font-size:.88em;background:var(--code-bg);padding:.12em .4em;border-radius:5px}
+  pre{background:var(--code-bg);border:1px solid var(--line);border-radius:var(--radius);padding:14px 16px;overflow:auto}pre code{background:none;padding:0;font-size:.85em;line-height:1.6}
+  .topbar{position:sticky;top:0;z-index:20;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 20px;background:color-mix(in srgb,var(--surface) 88%,transparent);backdrop-filter:saturate(1.4) blur(8px);border-bottom:1px solid var(--line)}
+  .brand{font-weight:700;letter-spacing:.02em;font-size:14px}.brand .dot{color:var(--accent)}
+  .theme-btn{cursor:pointer;border:1px solid var(--line);background:var(--surface);color:var(--ink-soft);border-radius:8px;padding:6px 10px;font-size:13px;font-family:var(--sans)}.theme-btn:hover{color:var(--ink);border-color:var(--accent)}
+  .wrap{display:grid;grid-template-columns:var(--sidew) minmax(0,1fr);gap:0;max-width:1240px;margin:0 auto}
+  .sidebar{position:sticky;top:53px;align-self:start;height:calc(100vh - 53px);overflow:auto;padding:24px 16px 40px;border-right:1px solid var(--line)}
+  .sidebar h3{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-soft);margin:0 0 10px 8px}
+  .toc{list-style:none;margin:0;padding:0}.toc li{margin:1px 0}
+  .toc a{display:block;padding:6px 10px;border-radius:7px;color:var(--ink-soft);font-size:14px;border-left:2px solid transparent}
+  .toc a:hover{background:var(--surface);color:var(--ink);text-decoration:none}
+  .toc a.active{color:var(--ink);background:var(--accent-soft);border-left-color:var(--accent);font-weight:600}
+  .main{padding:36px clamp(20px,4vw,56px) 120px;min-width:0}.content{max-width:var(--maxw);margin:0 auto}
+  header.doc{margin-bottom:28px}.doc h1{font-size:30px;line-height:1.25;margin:.1em 0 .3em}
+  .oneliner{font-size:17px;color:var(--ink-soft);margin:0 0 14px}
+  .meta{display:flex;flex-wrap:wrap;gap:8px}
+  .chip{font-size:12px;color:var(--ink-soft);background:var(--surface);border:1px solid var(--line);border-radius:999px;padding:3px 10px;font-family:var(--mono)}
+  .keypoints{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:18px 22px;margin:0 0 34px;border-left:4px solid var(--accent)}
+  .keypoints h2{font-size:14px;text-transform:uppercase;letter-spacing:.06em;color:var(--accent);margin:0 0 12px}
+  .keypoints ol{margin:0;padding-left:1.2em}.keypoints li{margin:7px 0;font-weight:500}
+  .sec{padding-top:14px;margin-bottom:30px;scroll-margin-top:64px}
+  .sec h2{font-size:22px;margin:.2em 0 .15em;padding-bottom:6px;border-bottom:1px solid var(--line)}
+  .sec h3{font-size:17px;margin:1.2em 0 .3em}
+  .sec-summary{color:var(--ink-soft);font-size:14px;margin:.2em 0 1em;font-style:italic}
+  .callout{border-radius:var(--radius);padding:12px 16px;margin:14px 0;border:1px solid var(--line);font-size:15px}
+  .callout .tag{display:inline-block;font-size:11px;font-weight:700;font-family:var(--mono);padding:1px 7px;border-radius:6px;margin-right:8px;vertical-align:1px}
+  .callout .src-ref{font-family:var(--mono);font-size:12px;color:var(--ink-soft);display:inline-block;margin-left:6px;padding:1px 6px;background:var(--code-bg);border-radius:5px}
+  .callout.add{background:var(--add-bg);border-color:color-mix(in srgb,var(--add) 35%,var(--line))}.callout.add .tag{background:var(--add);color:#fff}
+  .callout.info{background:var(--info-bg)}.callout.info .tag{background:var(--info);color:#fff}
+  details.deep,details.src{border:1px solid var(--line);border-radius:var(--radius);margin:14px 0;background:var(--surface)}
+  details summary{cursor:pointer;padding:10px 14px;font-size:14px;font-weight:600;color:var(--ink-soft);list-style:none}
+  details summary::-webkit-details-marker{display:none}
+  details summary::before{content:"▸";display:inline-block;margin-right:8px;color:var(--accent)}
+  details[open] summary::before{transform:rotate(90deg)}
+  details.deep > *:not(summary),details.src > *:not(summary){padding:0 16px 14px}
+  details.src{background:transparent;border-style:dashed}
+  details.src summary{color:var(--ink-soft);font-weight:500;font-family:var(--mono);font-size:13px}
+  details.src pre{margin:0 16px 14px;white-space:pre-wrap}
+  .mermaid{margin:18px 0;text-align:center}
+  ul{margin:.5em 0;padding-left:1.4em}li{margin:.35em 0}
+  .checklist{list-style:none;margin:.8em 0;padding:0}
+  .checklist li{position:relative;padding:10px 12px 10px 2.2em;margin:6px 0;background:var(--surface);border:1px solid var(--line);border-radius:8px;font-size:15px;line-height:1.55}
+  .checklist li::before{content:"☐";position:absolute;left:.75em;top:10px;color:var(--ink-soft);font-family:var(--mono);font-size:14px;line-height:1.55}
+  .checklist .task-id{font-family:var(--mono);font-size:12px;color:var(--accent);font-weight:600;margin-right:6px}
+  @media (max-width:880px){.wrap{grid-template-columns:1fr}.sidebar{display:none}}
+</style>
+</head>
+<body>
+<div class="topbar">
+  <span class="brand">BBA<span class="dot">·</span>doc-visualizer · <a href="index.html">add-ios-support</a></span>
+  <button class="theme-btn" id="themeBtn">◐ 主题</button>
+</div>
+<div class="wrap">
+  <nav class="sidebar">
+    <h3>目录</h3>
+    <ul class="toc" id="toc">
+      <li><a href="#sec-1">1. Spikes</a></li>
+      <li><a href="#sec-2">2. Callable entries</a></li>
+      <li><a href="#sec-3">3. iOS runner</a></li>
+      <li><a href="#sec-4">4. CI test</a></li>
+      <li><a href="#sec-5">5. CI bench</a></li>
+      <li><a href="#sec-6">6. Docs</a></li>
+      <li><a href="#sec-7">7. Verification</a></li>
+    </ul>
+  </nav>
+  <div class="main">
+    <div class="content">
+      <header class="doc">
+        <h1>add-ios-support · 任务清单</h1>
+        <p class="oneliner">从 Spike 定路径，到 entry 重构、ios-runner、CI 门禁与 bench 报告、文档与最终验证——共 7 阶段、26 项可勾选任务。</p>
+        <div class="meta">
+          <span class="chip">tasks.md</span>
+          <span class="chip">OpenSpec implementation tasks</span>
+          <span class="chip">EN → 中文</span>
+        </div>
+      </header>
+      <div class="keypoints">
+        <h2>本文要点</h2>
+        <ol>
+          <li><strong>阶段 1 · Spikes</strong>：先验证 CMake/Xcode 集成、signal handler 与 XCTest 共存、C++20 部署版本、<code>MAP_JIT</code> native baseline——定结构前把风险摸清。</li>
+          <li><strong>阶段 2 · Callable entries</strong>：把 correctness suite 和 bench kernel 抽成可调用入口；host CTest 与 <code>bench_business --verify</code> 全程保持绿灯。</li>
+          <li><strong>阶段 3 · iOS runner</strong>：建 <code>ios-runner/</code>（Host App + XCTest），在 arm64 Simulator 跑全套 suite 与 bench；签名配置不进仓库。</li>
+          <li><strong>阶段 4 · CI test</strong>：<code>ci/ios-test.sh</code> + <code>ios-sim-test</code> job——arm64 上跑 <code>xcodebuild test</code> 作确定性门禁；非 arm64 必须显式 SKIP。</li>
+          <li><strong>阶段 5 · CI bench</strong>：<code>ci/ios-bench.sh</code> 挂到 <code>bench.yml</code>，report-only，不在 PR 上跑。</li>
+          <li><strong>阶段 6 · Docs</strong>：更新 <code>docs/refs/ci.md</code>；新增英文 <code>docs/ios.md</code>（本地 build/test/bench、真机流程、签名与 native baseline 说明）。</li>
+          <li><strong>阶段 7 · Verification</strong>：host 回归、Simulator green、真机手动记录、<code>openspec validate add-ios-support --strict</code> 通过。</li>
+        </ol>
+      </div>
+
+      <div class="mermaid">flowchart LR
+  S1["1 Spikes"] --> S2["2 Callable entries"]
+  S2 --> S3["3 iOS runner"]
+  S3 --> S4["4 CI test gate"]
+  S3 --> S5["5 CI bench report"]
+  S4 --> S6["6 Docs"]
+  S5 --> S6
+  S6 --> S7["7 Verification"]</div>
+
+      <section id="sec-1" class="sec">
+        <h2>1. Spikes — 定路径再固定结构</h2>
+        <p class="sec-summary">Spike A 验证 Xcode 集成与 iOS 兼容性；Spike B 验证 native baseline 在 iOS 上能否跑。</p>
+        <p>在提交 <code>ios-runner/</code> 目录结构和 CI job 之前，先用 throwaway app 跑通关键假设。Spike A 覆盖库集成方式、crash-guard 与 XCTest 的 signal handler 共存、C++20 部署版本；Spike B 单独探 <code>MAP_JIT</code> / native baseline 在 Simulator 与真机上的可用范围。</p>
+        <ul class="checklist">
+          <li><span class="task-id">1.1</span>Spike A：用 <code>cmake -G Xcode</code> 生成 <code>gaby_vm</code> Xcode 工程；在临时 app + XCTest 里引用，确认 <code>iphonesimulator</code>（arm64）和 <code>iphoneos</code>（arm64）都能 build 并 link。记录结果；若太别扭，改用 direct-source-compile fallback（design Decision 2）。</li>
+          <li><span class="task-id">1.2</span>Spike A：确认 vixl_port 的 crash-guard signal handler（SIGSEGV/SIGBUS/SIGILL/SIGABRT/SIGALRM）在 Simulator 上与 XCTest 的 handler 能共存；若冲突，定义 iOS 非 signal 上报模式。验证故意崩溃的 test body 仍能被报告，不会静默丢失。</li>
+          <li><span class="task-id">1.3</span>Spike A：确认 runner 在当前 iOS 13 部署版本下能用 C++20（<code>std::span</code> / <code>std::variant</code>）编译；记录实际使用的 floor，只有被迫时才提高。</li>
+          <li><span class="task-id">1.4</span>Spike B：确认 <code>MAP_JIT</code> / native baseline 在 iOS Simulator 和 dev-signed、debugger-attached 真机上能否运行；记录哪里可用、哪里必须降级（design Decision 5）。</li>
+        </ul>
+        <details class="src"><summary>查看原文</summary><pre>## 1. Spikes — decide the path before committing structure
+
+- [ ] 1.1 Spike A: `cmake -G Xcode` generates the `gaby_vm` Xcode project; reference it from a throwaway app + XCTest and confirm it builds and links for both `iphonesimulator` (arm64) and `iphoneos` (arm64). Record the result; if awkward, adopt the direct-source-compile fallback (design Decision 2).
+- [ ] 1.2 Spike A: confirm the vixl_port crash-guard signal handlers (SIGSEGV/SIGBUS/SIGILL/SIGABRT/SIGALRM) coexist with XCTest's handlers on the Simulator; if they conflict, define the iOS non-signal reporting mode. Verify a deliberately-crashing body is still reported, not lost.
+- [ ] 1.3 Spike A: confirm the runner builds at the current iOS 13 deployment floor with C++20 (`std::span`/`std::variant`); record the floor actually used and raise it only if forced.
+- [ ] 1.4 Spike B: confirm `MAP_JIT` / native baseline runs on the iOS Simulator and on a dev-signed, debugger-attached device; record where it works and where it must degrade (design Decision 5).</pre></details>
+      </section>
+
+      <section id="sec-2" class="sec">
+        <h2>2. Callable entry points — host 全程保持绿灯</h2>
+        <p class="sec-summary">先写 failing test 驱动重构，再抽入口；每步都验证 host CTest 与 bench 不退化。</p>
+        <p>重构顺序是 TDD 式的：先加一个会失败的 host test 指向新 callable entry，再把 suite/bench 体抽出来，最后把现有可执行文件收成薄 <code>main()</code>。iOS runner 和 host driver 共用同一套实现，所以 host 侧必须始终 green。</p>
+        <ul class="checklist">
+          <li><span class="task-id">2.1</span>在重构前，加一个会失败的 host test，通过新的 callable entry（例如 <code>run_vixl_port_integer()</code>）驱动一个 correctness suite。</li>
+          <li><span class="task-id">2.2</span>把每个 correctness suite 的 body 抽成 callable entry；对应 CTest 可执行文件收成薄 <code>main()</code> 包装。验证 <code>ctest --test-dir build/debug -R vixl_port</code> 和完整 CTest 仍全绿。</li>
+          <li><span class="task-id">2.3</span>把每个 bench kernel 抽成 callable entry；bench 可执行文件改成分发到该入口。验证 <code>bench_business --verify</code> 通过，bench 报告数值不变。</li>
+        </ul>
+        <div class="callout info"><span class="tag">注意</span>这是 iOS runner 的前置条件：XCTest 只能调用 entry，不能复制一份 suite 逻辑。</div>
+        <details class="src"><summary>查看原文</summary><pre>## 2. Callable entry points — host stays green throughout
+
+- [ ] 2.1 Add a failing host test that drives one correctness suite through a new callable entry (e.g. `run_vixl_port_integer()`) before refactoring.
+- [ ] 2.2 Extract each correctness suite body into a callable entry; reduce its CTest executable to a thin `main()` over it. Verify `ctest --test-dir build/debug -R vixl_port` and the full CTest suite stay green.
+- [ ] 2.3 Extract each bench kernel into a callable entry; bench executables dispatch to it. Verify `bench_business --verify` is OK and the bench reports are unchanged.</pre></details>
+      </section>
+
+      <section id="sec-3" class="sec">
+        <h2>3. iOS runner project</h2>
+        <p class="sec-summary">提交 <code>ios-runner/</code> Xcode 项目，XCTest 跑 suite 与 bench；Simulator 免签名，真机签名不进仓库。</p>
+        <p>按 Spike A 结论消费库（CMake 生成的 subproject，或 direct-compile + drift guard）。XCTest 逐项调用阶段 2 抽出的 entry；bench 路径输出 harness 报告，native baseline 按 Spike B 结果尝试或显式报告未运行。</p>
+        <ul class="checklist">
+          <li><span class="task-id">3.1</span>创建 <code>ios-runner/</code> Xcode 项目：Host App target + XCTest target，按 Spike A 结论消费库（generated subproject 或 direct-compile）。</li>
+          <li><span class="task-id">3.2</span>若走 fallback 路径，加 source-list drift guard；验证当 CMake lists 里有文件但 runner 里缺失时会失败。</li>
+          <li><span class="task-id">3.3</span>加 XCTest case，调用 correctness-suite entry（一个 suite → pass/fail）。验证 arm64 Simulator 上 <code>xcodebuild test</code> 跑全 suite 且全绿。</li>
+          <li><span class="task-id">3.4</span>在 runner 里加 benchmark 路径，调用 bench entry 并输出 harness 报告；按 Spike B 尝试 native baseline，不行则显式 fallback 为「未运行」。验证能看到数值或明确的缺失说明。</li>
+          <li><span class="task-id">3.5</span>签名：Simulator build 不需要 identity；真机签名来自 untracked xcconfig / automatic signing——不把 team 或 identity 提交进仓库。验证干净 checkout 在无签名配置下能 build Simulator。</li>
+        </ul>
+        <details class="src"><summary>查看原文</summary><pre>## 3. iOS runner project
+
+- [ ] 3.1 Create `ios-runner/` Xcode project: host app target + XCTest target, consuming the library per Spike A (generated subproject, or direct-compile).
+- [ ] 3.2 If on the fallback path, add the source-list drift guard; verify it fails when a file is in CMake's lists but missing from the runner.
+- [ ] 3.3 Add XCTest cases that call the correctness-suite entries (one suite → pass/fail). Verify `xcodebuild test` on an arm64 Simulator runs all suites green.
+- [ ] 3.4 Add the benchmark run path in the runner that calls the bench entries and emits the harness report; attempt native baseline per Spike B with the explicit "not run" fallback. Verify numbers (or the explicit absence) appear.
+- [ ] 3.5 Signing: simulator builds need no identity; device signing comes from an untracked xcconfig / automatic signing; no team or identity committed. Verify a clean checkout builds for the Simulator with no signing config.</pre></details>
+      </section>
+
+      <section id="sec-4" class="sec">
+        <h2>4. CI — iOS Simulator gate</h2>
+        <p class="sec-summary"><code>ci/ios-test.sh</code> 作确定性门禁；非 arm64 runner 大声 SKIP，test 失败则 job 非零退出。</p>
+        <p>脚本复用 <code>ci/util.sh</code>，先做 arch 检查。arm64 上选 arm64 iOS Simulator destination 跑 <code>xcodebuild test</code>；否则在 job summary 和 sticky comment 里显式 SKIP（exit 0）。Workflow 只调用脚本，不内联 build/test 逻辑。</p>
+        <ul class="checklist">
+          <li><span class="task-id">4.1</span>写 <code>ci/ios-test.sh</code>：arch 检查；非 arm64 时显式 loud SKIP（job summary + sticky comment，exit 0）；否则选 arm64 iOS Simulator destination 跑 <code>xcodebuild test</code>，test 失败则非零退出。复用 <code>ci/util.sh</code>。验证 arm64 本地能 gate，强制非 arm64 时能打印显式 skip 行。</li>
+          <li><span class="task-id">4.2</span>在 <code>.github/workflows/ci.yml</code>（macos-14）加 <code>ios-sim-test</code> job，只调用 <code>ci/ios-test.sh</code> 并喂 report/sticky comment。验证 YAML 不内联 build/test 逻辑。</li>
+        </ul>
+        <details class="src"><summary>查看原文</summary><pre>## 4. CI — iOS Simulator gate
+
+- [ ] 4.1 Write `ci/ios-test.sh`: arch check; explicit loud SKIP (job summary + sticky comment, exit 0) when not arm64; else select an arm64 iOS Simulator destination and run `xcodebuild test`, non-zero on test failure. Reuse `ci/util.sh`. Verify it gates locally on arm64 and prints the explicit skip line when arch is forced non-arm64.
+- [ ] 4.2 Add an `ios-sim-test` job to `.github/workflows/ci.yml` (macos-14) that only invokes `ci/ios-test.sh` and feeds the report/sticky comment. Verify the YAML inlines no build/test logic.</pre></details>
+      </section>
+
+      <section id="sec-5" class="sec">
+        <h2>5. CI — iOS benchmark report</h2>
+        <p class="sec-summary">iOS bench 只报告、不 gate；同样在非 arm64 上显式 SKIP；不在 PR 上跑。</p>
+        <ul class="checklist">
+          <li><span class="task-id">5.1</span>写 <code>ci/ios-bench.sh</code>：同样的 arch/skip 逻辑；在 arm64 Simulator 跑 iOS bench 并输出报告；永不 gate。验证本地能报告，skip 路径显式。</li>
+          <li><span class="task-id">5.2</span>把 iOS bench 步骤加到 <code>.github/workflows/bench.yml</code>（main + manual dispatch，report-only）。验证不在 pull request 上运行。</li>
+        </ul>
+        <details class="src"><summary>查看原文</summary><pre>## 5. CI — iOS benchmark report
+
+- [ ] 5.1 Write `ci/ios-bench.sh`: same arch/skip logic; run the iOS bench on the arm64 Simulator; emit the report; never gate. Verify it reports locally and the skip path is explicit.
+- [ ] 5.2 Add the iOS bench step to `.github/workflows/bench.yml` (main + manual dispatch, report-only). Verify it does not run on pull requests.</pre></details>
+      </section>
+
+      <section id="sec-6" class="sec">
+        <h2>6. Docs</h2>
+        <p class="sec-summary">CI 文档补 iOS job 与 skip 语义；新增 <code>docs/ios.md</code> 作 iOS 开发与真机指南。</p>
+        <ul class="checklist">
+          <li><span class="task-id">6.1</span>更新 <code>docs/refs/ci.md</code>：新 iOS job、显式 skip 语义、本地复现命令。</li>
+          <li><span class="task-id">6.2</span>新增英文 <code>docs/ios.md</code>：iOS build/test/bench、本地真机流程、签名说明、iOS 上 native baseline 的注意事项。</li>
+        </ul>
+        <details class="src"><summary>查看原文</summary><pre>## 6. Docs
+
+- [ ] 6.1 Update `docs/refs/ci.md`: the new iOS job, the explicit-skip semantics, and the local reproduce commands.
+- [ ] 6.2 Add English `docs/ios.md`: building/testing/benching on iOS, the local device flow, signing, and the native-baseline-on-iOS caveat.</pre></details>
+      </section>
+
+      <section id="sec-7" class="sec">
+        <h2>7. Verification</h2>
+        <p class="sec-summary">收尾回归：host 不退化、Simulator 全绿、真机手动记录、OpenSpec 校验与文档链接。</p>
+        <ul class="checklist">
+          <li><span class="task-id">7.1</span>完整 host CTest 全绿，<code>bench_business --verify</code> 通过——entry 重构无回归。</li>
+          <li><span class="task-id">7.2</span>arm64 iOS Simulator 上 <code>xcodebuild test</code> 全绿；iOS bench 能产出数值。</li>
+          <li><span class="task-id">7.3</span>本地真机：在已连接的 iPhone 上从 Xcode 跑 suite + bench（手动；记录数值）。</li>
+          <li><span class="task-id">7.4</span><code>openspec validate add-ios-support --strict</code> 通过；文档交叉链接可解析。</li>
+        </ul>
+        <details class="src"><summary>查看原文</summary><pre>## 7. Verification
+
+- [ ] 7.1 Full host CTest green and `bench_business --verify` OK — no regression from the entry refactor.
+- [ ] 7.2 `xcodebuild test` green on an arm64 iOS Simulator; iOS bench produces numbers.
+- [ ] 7.3 Local device: suites + bench run from Xcode on a connected iPhone (manual; record the numbers).
+- [ ] 7.4 `openspec validate add-ios-support --strict` passes; cross-links in docs resolve.</pre></details>
+      </section>
+    </div>
+  </div>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<script>
+const root=document.documentElement;const prefersDark=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches;
+function setTheme(t){root.dataset.theme=t;document.getElementById('hljs-dark').disabled=(t!=='dark');document.getElementById('hljs-light').disabled=(t==='dark');try{mermaid.initialize({startOnLoad:false,theme:t==='dark'?'dark':'default'});renderMermaid()}catch(e){}}
+setTheme(prefersDark?'dark':'light');document.getElementById('themeBtn').onclick=()=>setTheme(root.dataset.theme==='dark'?'light':'dark');
+document.querySelectorAll('pre code').forEach(b=>{try{hljs.highlightElement(b)}catch(e){}});
+let mermaidSrc=[...document.querySelectorAll('.mermaid')].map(el=>el.textContent);
+function renderMermaid(){document.querySelectorAll('.mermaid').forEach((el,i)=>{el.removeAttribute('data-processed');el.innerHTML=mermaidSrc[i]});try{mermaid.run({querySelector:'.mermaid'})}catch(e){}}
+renderMermaid();
+const links=[...document.querySelectorAll('.toc a')];const map=new Map(links.map(a=>[a.getAttribute('href').slice(1),a]));
+const obs=new IntersectionObserver(es=>{es.forEach(e=>{if(e.isIntersecting){links.forEach(l=>l.classList.remove('active'));const a=map.get(e.target.id);if(a)a.classList.add('active')}})},{rootMargin:'-10% 0px -80% 0px'});
+document.querySelectorAll('section.sec').forEach(s=>obs.observe(s));
+</script>
+</body>
+</html>
