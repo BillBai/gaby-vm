@@ -46,6 +46,14 @@ jobs:
           ci/build.sh dev-release -DGABY_VM_BUILD_BENCHMARKS=ON
           ci/bench-verify.sh dev-release
 
+      # iOS Simulator gate (deterministic): build the iOS runner and run its
+      # XCTest suites on an arm64 Simulator; a test failure fails the gate. A
+      # step in this job (not a separate one) so its result joins the single
+      # sticky comment. macos-14 is arm64; on a non-arm64 runner the script
+      # would skip loudly and pass.
+      - name: iOS Simulator tests
+        run: ci/ios-test.sh
+
       # Pull the latest successful main run's size baseline so the PR can show
       # deltas. Best-effort: a missing baseline just yields an absolute report.
       - name: Fetch base size baseline (PR only)

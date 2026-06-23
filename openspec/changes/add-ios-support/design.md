@@ -84,9 +84,11 @@ iOS.
 
 - `ci/ios-test.sh` and `ci/ios-bench.sh` hold all logic; workflows only call
   them (matches [`docs/refs/ci.md`](../../../docs/refs/ci.md)).
-- Correctness on the Simulator is deterministic → it **gates** the PR, as a new
-  `ios-sim-test` job in `ci.yml`. iOS bench is report-only → a step in
-  `bench.yml`.
+- Correctness on the Simulator is deterministic → it **gates** the PR, as a
+  step in `ci.yml`'s existing `build-test-size` job (a step, not a separate job,
+  so its result joins the one sticky PR comment — two jobs posting via
+  `gh pr comment --edit-last` would clobber each other). iOS bench is
+  report-only → a step in `bench.yml`.
 - Both scripts check the runner arch first. Not arm64 (e.g. an x86 runner with
   no arm64 simulator) → print a loud `SKIPPED` line to the job summary and
   sticky comment, exit 0. The skip is surfaced, never a silent pass.

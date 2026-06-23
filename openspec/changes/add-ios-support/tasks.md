@@ -21,8 +21,8 @@
 
 ## 4. CI — iOS Simulator gate
 
-- [ ] 4.1 Write `ci/ios-test.sh`: arch check; explicit loud SKIP (job summary + sticky comment, exit 0) when not arm64; else select an arm64 iOS Simulator destination and run `xcodebuild test`, non-zero on test failure. Reuse `ci/util.sh`. Verify it gates locally on arm64 and prints the explicit skip line when arch is forced non-arm64.
-- [ ] 4.2 Add an `ios-sim-test` job to `.github/workflows/ci.yml` (macos-14) that only invokes `ci/ios-test.sh` and feeds the report/sticky comment. Verify the YAML inlines no build/test logic.
+- [x] 4.1 `ci/ios-test.sh`: arch check with an explicit loud SKIP (exit 0) when not arm64; else generate the runner (installs xcodegen on demand), pick the first available iPhone Simulator, run `xcodebuild test`, non-zero on failure. Reuses `ci/util.sh`. Verified locally: `Executed 14 tests, with 0 failures`, `### ✅ iOS Simulator tests` in the report.
+- [x] 4.2 Added an `iOS Simulator tests` step to `ci.yml`'s `build-test-size` job (macos-14) that only invokes `ci/ios-test.sh`. A step, not a separate job, so its result joins the single sticky PR comment. No build/test logic inlined in the YAML.
 
 ## 5. CI — iOS benchmark report
 
