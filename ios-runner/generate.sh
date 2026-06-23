@@ -65,6 +65,21 @@ if grep -q "PBXBuildStyle" "$pbxproj"; then
   exit 1
 fi
 
+# Local, untracked signing config (git-ignored). project.yml references it via
+# configFiles, so XcodeGen needs it to exist. Write a placeholder once; a
+# developer fills in DEVELOPMENT_TEAM for on-device runs (the Simulator needs
+# none).
+signing_xcconfig="$ios_dir/Signing.xcconfig"
+if [ ! -f "$signing_xcconfig" ]; then
+  cat > "$signing_xcconfig" <<'XCCONFIG'
+// Local signing config for the iOS runner — git-ignored, never committed.
+// To run on a physical device, set your Apple Development team here:
+//   DEVELOPMENT_TEAM = ABCDE12345
+// Leave it empty for the Simulator (no signing needed).
+DEVELOPMENT_TEAM =
+XCCONFIG
+fi
+
 echo "[3/3] host app + XCTest project (xcodegen)"
 ( cd "$ios_dir" && xcodegen generate )
 

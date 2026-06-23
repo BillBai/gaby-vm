@@ -19,12 +19,20 @@ projectReferences:
   GabyVMLib:
     path: ../build/ios-xcode/gaby_vm.xcodeproj
 
+# Optional local, untracked signing config (DEVELOPMENT_TEAM) for on-device
+# runs. generate.sh writes a placeholder if it is absent; it is git-ignored, so
+# no team is ever committed. Leave it empty for Simulator-only use.
+configFiles:
+  Debug: Signing.xcconfig
+  Release: Signing.xcconfig
+
 settings:
   base:
     CLANG_CXX_LANGUAGE_STANDARD: "c++20"
-    # Simulator + device dev builds; no team/identity committed (device signing
-    # comes from a local, untracked configuration).
-    CODE_SIGNING_ALLOWED: "NO"
+    # Simulator builds need no signing (no team — CI and quick local runs).
+    # Device builds DO sign: Automatic signing + DEVELOPMENT_TEAM (set in
+    # Signing.xcconfig, or pick a team in Xcode). No team/identity is committed.
+    "CODE_SIGNING_ALLOWED[sdk=iphonesimulator*]": "NO"
 
 targets:
   # Minimal host application — exists so the XCTest bundle has a process to load
@@ -37,6 +45,7 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: dev.gabyvm.runner
+        CODE_SIGN_STYLE: Automatic
         GENERATE_INFOPLIST_FILE: "YES"
         INFOPLIST_KEY_UILaunchScreen_Generation: "YES"
 
@@ -48,6 +57,7 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: dev.gabyvm.runnerTests
+        CODE_SIGN_STYLE: Automatic
         # Public gaby_vm headers (#include "gaby_vm/..."). The private VIXL
         # headers stay inside the library target, not here.
         HEADER_SEARCH_PATHS:

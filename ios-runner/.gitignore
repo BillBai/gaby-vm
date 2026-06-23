@@ -2,3 +2,6 @@
 # truth are project.yml (host) and the repo CMakeLists (library); the .xcodeproj
 # is regenerated, never committed.
 *.xcodeproj/
+
+# Local, untracked signing config (DEVELOPMENT_TEAM for on-device runs).
+Signing.xcconfig
