@@ -237,10 +237,15 @@ The suite would otherwise return green on any `failed == 0` run, so a regression
 that silently moves cases from "ran" to "skipped" (a leaked sim knob like the
 guarded-pages bug below, a widened feature deny, a new gaby-track abort) would
 shrink coverage invisibly. The per-family main therefore pins the expected
-ran/skipped split (`kFamilyBaselines`) and FAILs on any drift. Debug and release
-differ by exactly one integer case (`branch_tagged_and_adr_adrp`, gated by a
-debug-only assertion), so the baseline carries a pair per config and selects by
-`NDEBUG`. To re-baseline after an intended change, run with
+ran/skipped split (`kFamilyBaselines`) and FAILs on any drift. The baseline
+carries a pair per config (selected by `NDEBUG`) for the case a debug-only host
+assertion shifts a body from "ran" to "skipped"; today debug and release agree
+for every family. (They differed historically by one integer case,
+`branch_tagged_and_adr_adrp`: the assembler's debug-only
+`AllowPageOffsetDependentCode()` assertion aborted its `adrp`-to-label assembly
+until `SETUP_CUSTOM` was fixed to honour the upstream PIC request, so the body
+now assembles and runs under both configs — see `gaby_two_track_macros.h`.) To
+re-baseline after an intended change, run with
 `VIXL_PORT_REBASELINE=1` (prints the observed split instead of failing) and update
 the table in the same commit. The drift decision is a pure function
 (`IsBaselineViolation`) with its own check in `vixl_asm_harness_selftest`, so both

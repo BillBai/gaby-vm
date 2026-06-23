@@ -210,13 +210,15 @@ inline bool AssertEntryEquivalentOnce() {
 // VIXL_PORT_REBASELINE=1 to print the observed numbers, then update the table
 // here in the same commit.
 //
-// Debug and Release differ for exactly ONE integer case,
-// branch_tagged_and_adr_adrp: under VIXL_DEBUG (the debug preset) a host-side
-// assertion aborts it during the reference run, so it is skipped; in release
-// (NDEBUG) that assertion is compiled out, so it runs on both tracks and passes
-// the oracle. Both splits are stable across reruns, so each config carries its
-// own expected pair and the check selects by NDEBUG. fp / neon / smoke are
-// identical across configs.
+// The per-config fields exist for the case a debug-only host assertion shifts a
+// body from "ran" to "skipped" under VIXL_DEBUG. Historically that happened for
+// one integer case, branch_tagged_and_adr_adrp: the assembler's debug-only
+// AllowPageOffsetDependentCode() assertion aborted its adrp-to-label assembly,
+// which the crash guard caught as a skip. That is now fixed at the source —
+// SETUP_CUSTOM honours the upstream PIC request (PageOffsetDependentCode), so
+// the body assembles and runs under both configs (see gaby_two_track_macros.h).
+// With it fixed, debug and release agree for every current family; the split
+// fields are kept because the mechanism can recur after a VIXL upgrade.
 struct FamilyBaseline {
   const char* family;
   int ran_debug;
@@ -226,15 +228,16 @@ struct FamilyBaseline {
 };
 
 inline constexpr FamilyBaseline kFamilyBaselines[] = {
-    {"integer", 192, 66, 193, 65},
+    {"integer", 193, 65, 193, 65},
     {"fp", 74, 2, 74, 2},
     {"neon", 254, 1, 254, 1},
     {"harness_smoke", 2, 0, 2, 0},  // G4 smoke: one scalar body + one RMW body
     // iOS runner: integer + fp + neon all link into one XCTest bundle (one
     // process), so a single RunRegisteredTests walk covers every registered
-    // body. The baseline is the sum of the three families: ran 192+74+254=520
-    // (debug) / 193+74+254=521 (release); skipped 66+2+1=69 / 65+2+1=68.
-    {"ios_runner_all", 520, 69, 521, 68},
+    // body. The baseline is the sum of the three families: ran 193+74+254=521,
+    // skipped 65+2+1=68 — identical in debug and release now that the adrp
+    // bodies assemble under both configs (see the struct comment above).
+    {"ios_runner_all", 521, 68, 521, 68},
 };
 
 inline const FamilyBaseline* FindBaseline(const char* family) {

@@ -273,6 +273,21 @@ struct LiveRig {
   gaby_vm::RegisterFile& decoder_state = State().decoder_state;
   RefStateView core{
       &State().ref_state};  // `core` alias for upstream body exprs
+
+  // Default PIC matches MacroAssembler's own default (PositionIndependentCode).
+  LiveRig() = default;
+  // SETUP_CUSTOM(size, pic) bodies request a specific PIC mode — most often
+  // PageOffsetDependentCode, which legalises `adrp`-to-label. The
+  // MacroAssembler fixes PIC at construction (there is no setter), so the rig
+  // forwards it to the masm here. Honouring it is what lets the adrp /
+  // adrp_page_boundaries / branch_tagged_and_adr_adrp bodies assemble under
+  // VIXL_DEBUG instead of tripping the assembler's
+  // AllowPageOffsetDependentCode() assertion — which the crash guard would
+  // otherwise have to catch as an abort and turn into a skip (fragile: a real
+  // iOS device / attached debugger may not let that abort be caught, so the
+  // body kills the test process instead of skipping).
+  explicit LiveRig(vixl::aarch64::PositionIndependentCodeOption pic)
+      : masm(pic) {}
 };
 
 // Snapshot the reference sim's post-ResetState architectural state into a gaby
@@ -1026,18 +1041,30 @@ void AssertEqualRegisters(LiveRig& rig, const Dump&) {
 
 #define TEST(name) TEST_(AARCH64_ASM_##name)
 
-#define SETUP()                                              \
-  ::gaby_vm::vixl_port_live::LiveRig rig_;                   \
+// Shared SETUP body. `rig_decl` is the LiveRig declaration — default PIC for
+// SETUP(), a specific PIC for SETUP_CUSTOM (see LiveRig's PIC constructor). The
+// masm / simulator / core aliases let upstream body expressions compile
+// unchanged. `simulator` aliases the REFERENCE sim.
+#define SETUP_RIG_(rig_decl)                                 \
+  rig_decl;                                                  \
   vixl::aarch64::MacroAssembler& masm = rig_.masm;           \
   vixl::aarch64::Simulator& simulator = rig_.eng.ref_sim;    \
   ::gaby_vm::vixl_port_live::RefStateView& core = rig_.core; \
   (void)simulator;                                           \
   (void)core
 
+#define SETUP() SETUP_RIG_(::gaby_vm::vixl_port_live::LiveRig rig_)
+
 // gaby registers under All(); feature restrictions are filtered by *seen*
 // features after the reference run, so the feature arguments are ignored here.
 #define SETUP_WITH_FEATURES(...) SETUP()
-#define SETUP_CUSTOM(size, pic) SETUP()
+// Honour the requested PIC mode (2nd arg): upstream uses
+// SETUP_CUSTOM(size, PageOffsetDependentCode) for adrp-to-label bodies, and
+// passing it to the masm is what makes them assemble under VIXL_DEBUG (see
+// LiveRig). The buffer-size arg is irrelevant — the island uses a growable
+// malloc code buffer — so it is ignored.
+#define SETUP_CUSTOM(size, pic) \
+  SETUP_RIG_(::gaby_vm::vixl_port_live::LiveRig rig_{pic})
 #define SETUP_CUSTOM_SIM(...) SETUP()
 
 // The reference sim is REUSED across cases (constructing one is ~100ms in
