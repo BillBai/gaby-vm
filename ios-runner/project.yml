@@ -33,6 +33,13 @@ settings:
     # Device builds DO sign: Automatic signing + DEVELOPMENT_TEAM (set in
     # Signing.xcconfig, or pick a team in Xcode). No team/identity is committed.
     "CODE_SIGNING_ALLOWED[sdk=iphonesimulator*]": "NO"
+    # The CMake-generated gaby_vm library project builds arm64 only (the iOS
+    # target is arm64 device + arm64 simulator). A Release build otherwise sets
+    # ONLY_ACTIVE_ARCH=NO and tries to also build the x86_64 simulator slice,
+    # which finds no x86_64 in the arm64-only libs and fails to link. Pin to the
+    # active arch so the runner matches the library it links (arm64 on this
+    # arm64-only project); the runner is a dev/test host, never distributed.
+    ONLY_ACTIVE_ARCH: "YES"
 
 targets:
   # Minimal host application — exists so the XCTest bundle has a process to load

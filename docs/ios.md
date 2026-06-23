@@ -78,6 +78,27 @@ executable memory — so the numbers are cache vs decoder (the real on-device
 interpreter speed), without the slowdown-vs-native denominator. That denominator
 stays a macOS-arm64 measurement; see [`bench/README.md`](../bench/README.md).
 
+For **representative** numbers add `-configuration Release` — Xcode's default
+`Debug` is unoptimised and runs roughly an order of magnitude slower per
+instruction (the `build_type:` line in the report tells you which you measured).
+The cache-vs-decoder *ratio* still holds in Debug, but the absolute ns/insn is
+only meaningful in Release.
+
+## Build configuration and architecture
+
+The runner is **arm64-only** (`ONLY_ACTIVE_ARCH = YES`): the CMake-generated
+library project builds arm64, so a Release `xcodebuild` — which would otherwise
+also build the x86_64 simulator slice — is pinned to the active arch to match.
+On an Apple-silicon Mac that is arm64 for both device and the (arm64) Simulator.
+
+The vixl_port families register their `TEST()` bodies through file-scope
+constructors in their static libraries; `vixl_port_ios_all.cc` anchors those
+libraries through a `void* volatile` sink so the references survive `-O2`/LTO and
+the registrations link in. Without that, a Release build links zero of them and
+the suite reports "no TEST() registered" (it works in Debug, which doesn't
+optimise the anchor away). If you ever see that message after a refactor, the
+anchor is the place to look.
+
 ## On a physical device (local)
 
 Open `ios-runner/GabyRunner.xcodeproj` in Xcode, select your connected iPhone,
