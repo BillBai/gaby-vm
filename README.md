@@ -42,7 +42,10 @@ debug build:
 ./build/debug/demos/cli/gaby-vm --help    # usage
 ```
 
-An iOS Xcode demo will land at `demos/ios/` in a follow-up change.
+gaby-vm's correctness suites and its business benchmark also run on iOS — the
+Simulator in CI, a physical device locally — through the committed Xcode host
+under `ios-runner/`. Generate it with `ios-runner/generate.sh`; see
+[`docs/ios.md`](docs/ios.md).
 
 ### Embedding
 

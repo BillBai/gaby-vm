@@ -31,12 +31,12 @@
 
 ## 6. Docs
 
-- [ ] 6.1 Update `docs/refs/ci.md`: the new iOS job, the explicit-skip semantics, and the local reproduce commands.
-- [ ] 6.2 Add English `docs/ios.md`: building/testing/benching on iOS, the local device flow, signing, and the native-baseline-on-iOS caveat.
+- [x] 6.1 Updated `docs/refs/ci.md`: the iOS test gate + iOS bench in the workflow table, `ci/ios-test.sh`/`ci/ios-bench.sh` in the scripts table, the explicit-skip note, and the local reproduce commands. Also refreshed the README's stale "iOS demo to come" line.
+- [x] 6.2 Added English `docs/ios.md`: one-command setup, running tests/bench on the Simulator and on a device, signing, the build option, the excluded fork-based death tests, and the no-native-baseline-on-iOS caveat.
 
 ## 7. Verification
 
-- [ ] 7.1 Full host CTest green and `bench_business --verify` OK — no regression from the entry refactor.
-- [ ] 7.2 `xcodebuild test` green on an arm64 iOS Simulator; iOS bench produces numbers.
-- [ ] 7.3 Local device: suites + bench run from Xcode on a connected iPhone (manual; record the numbers).
-- [ ] 7.4 `openspec validate add-ios-support --strict` passes; cross-links in docs resolve.
+- [x] 7.1 Full host CTest green (22/22) and `bench_business --verify` OK after the entry/CMake refactors — no host regression.
+- [x] 7.2 `ci/ios-test.sh` green on the arm64 Simulator: 14 tests, 0 failures (correctness suites; `BenchTests` skipped by the gate). `ci/ios-bench.sh` produces cache/decoder numbers for all five kernels.
+- [ ] 7.3 Local device: suites + bench run from Xcode on a connected iPhone (manual; record the numbers). Left for a developer with a device — the runner builds for `iphoneos` arm64; device signing comes from the local team (see `docs/ios.md`).
+- [x] 7.4 `openspec validate add-ios-support --strict` passes; docs cross-links resolve.

@@ -14,13 +14,13 @@ mac with the same script and get the same result.
 
 | workflow | triggers | runner | what it does | can it fail a PR? |
 | --- | --- | --- | --- | --- |
-| `.github/workflows/ci.yml` | pull request + push to `main` | `macos-14` | build (debug) + full CTest, build (release) + cache/decoder parity, binary-size report | yes — only on build error, test failure, or parity mismatch |
-| `.github/workflows/bench.yml` | push to `main` + manual dispatch | `macos-14` | full benchmark harness → moving-baseline artifact | no (report-only) |
+| `.github/workflows/ci.yml` | pull request + push to `main` | `macos-14` | build (debug) + full CTest, build (release) + cache/decoder parity, iOS Simulator tests, binary-size report | yes — only on build error, test failure (host or iOS), or parity mismatch |
+| `.github/workflows/bench.yml` | push to `main` + manual dispatch | `macos-14` | full benchmark harness + iOS Simulator benchmark → moving-baseline artifact | no (report-only) |
 
 The split is deliberate: the **PR gate is deterministic**. GitHub's shared
 runners are too noisy to gate on timing, so the only things that fail a PR are a
-build break, a CTest failure, or a `bench_business --verify` parity mismatch
-(all bit-exact). Performance is measured on `main` as a moving baseline, never
+build break, a CTest failure (host or the iOS Simulator suites), or a
+`bench_business --verify` parity mismatch (all bit-exact). Performance is measured on `main` as a moving baseline, never
 as a PR gate.
 
 ## The `ci/` scripts
@@ -35,6 +35,8 @@ Each script is independently runnable; arguments are explicit.
 | `ci/bench-verify.sh [preset]` | `bench_business --verify` — bit-exact cache==decoder parity | mismatch fails |
 | `ci/size-report.sh [--base sizes.json]` | raw `libgaby_vm.a` + stripped `size_probe`; deltas vs base | never |
 | `ci/bench-report.sh [--seconds s]` | whole harness: business three-way + mixed workload + smoke sanity | never |
+| `ci/ios-test.sh` | build the iOS runner + run its XCTest correctness suites on an arm64 Simulator (skips `BenchTests`); skips loudly on a non-arm64 host | test failure fails |
+| `ci/ios-bench.sh` | run `BenchTests` (business kernels, cache vs decoder) on an arm64 Simulator; report-only | never |
 
 `presets` are the CMake presets: `dev-debug` → `build/debug`, `dev-release` →
 `build/release`.
@@ -49,13 +51,19 @@ ci/ctest.sh dev-debug                                   # 22/22 expected
 ci/build.sh dev-release -DGABY_VM_BUILD_BENCHMARKS=ON
 ci/bench-verify.sh dev-release                          # "verify: OK"
 ci/size-report.sh --out sizes.json                      # raw + stripped sizes
+ci/ios-test.sh                                          # iOS Simulator suites (arm64 host)
 ```
+
+The iOS scripts generate the runner with `ios-runner/generate.sh` (installing
+XcodeGen on demand) and need an arm64 iOS Simulator; on any other host they skip
+loudly and exit 0. See [`docs/ios.md`](../ios.md) for the runner itself.
 
 The `bench.yml` run (adds the native baseline, arm64-only):
 
 ```sh
 ci/build.sh dev-release -DGABY_VM_BUILD_BENCHMARKS=ON -DGABY_VM_BUILD_NATIVE_BASELINE=ON
 ci/bench-report.sh --out bench.json                     # three-way table + JSON
+ci/ios-bench.sh                                         # iOS cache/decoder (report-only)
 ```
 
 Without `$GITHUB_STEP_SUMMARY` set, the scripts print their markdown report to
