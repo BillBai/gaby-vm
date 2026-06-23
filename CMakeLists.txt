@@ -48,6 +48,10 @@ if(GABY_VM_BUILD_DEMOS)
   add_subdirectory(demos/cli)
 endif()
 
-if(GABY_VM_BUILD_BENCHMARKS)
+# bench/ holds the developer benchmark executables and, under
+# GABY_VM_BUILD_IOS_RUNNER, the business-bench library for the iOS runner
+# (cache/decoder only — no native baseline). The shared bench_runner builds for
+# both; the executables stay gated on GABY_VM_BUILD_BENCHMARKS inside.
+if(GABY_VM_BUILD_BENCHMARKS OR GABY_VM_BUILD_IOS_RUNNER)
   add_subdirectory(bench)
 endif()

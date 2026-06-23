@@ -191,6 +191,39 @@ void PrintUsage(const char* prog) {
 
 }  // namespace
 
+// iOS runner entry (report-only). Runs every business kernel in cache mode then
+// decoder mode at a short fixed duration, emitting the usual key:value report
+// to stdout. The iOS runner has no native-baseline track (that needs JIT /
+// executable memory), so this is cache-vs-decoder only; it is never a gate and
+// always returns 0. Built into a library with main() renamed under
+// GABY_VM_BUILD_IOS_RUNNER (see bench/CMakeLists.txt); the host bench_business
+// executable keeps its main() and leaves this unused.
+int gaby_vm_ios_run_business_bench() {
+  char arg0[] = "bench_business";
+  char mode_flag[] = "--mode";
+  char cache_mode[] = "cache";
+  char decoder_mode[] = "decoder";
+  char sec_flag[] = "--seconds";
+  char sec_val[] = "0.5";
+  char* modes[] = {cache_mode, decoder_mode};
+  for (char* mode : modes) {
+    char* argv[] = {arg0, mode_flag, mode, sec_flag, sec_val};
+    for (std::size_t idx = 0; idx < kKernelCount; ++idx) {
+      const Kernel& k = kKernels[idx];
+      std::printf("\n");
+      gaby_vm_bench::RunBenchmark(k.name,
+                                  k.description,
+                                  k.tag,
+                                  k.code,
+                                  k.static_words,
+                                  k.dynamic_per_iter,
+                                  5,
+                                  argv);
+    }
+  }
+  return 0;
+}
+
 int main(int argc, char* argv[]) {
   const char* selected = "all";
   bool verify = false;

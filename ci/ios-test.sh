@@ -57,7 +57,8 @@ set +e
 xcodebuild test \
   -project ios-runner/GabyRunner.xcodeproj \
   -scheme GabyRunner \
-  -destination "platform=iOS Simulator,id=$udid" 2>&1 | tee "$log_file"
+  -destination "platform=iOS Simulator,id=$udid" \
+  -skip-testing:GabyRunnerTests/BenchTests 2>&1 | tee "$log_file"
 status=${PIPESTATUS[0]}
 set -e
 

@@ -25,4 +25,10 @@ int gaby_vm_ios_run_typed_register_io();
 int gaby_vm_ios_run_branch_hook_dispatch();
 int gaby_vm_ios_run_branch_hook_reentrancy();
 
+// Report-only benchmark: runs the business microkernels in cache then decoder
+// mode and prints the key:value report to stdout. Always returns 0 (never a
+// pass/fail gate). Defined in bench/business.cc; the iOS runner has no
+// native-baseline track (that needs JIT), so it is cache-vs-decoder only.
+int gaby_vm_ios_run_business_bench();
+
 #endif  // GABY_VM_TEST_IOS_RUNNER_ENTRIES_H_

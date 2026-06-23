@@ -35,6 +35,11 @@ jobs:
       - name: Benchmark report (full harness)
         run: ci/bench-report.sh --out bench.json
 
+      # iOS business benchmark on the Simulator (cache vs decoder — no native
+      # baseline on iOS). Report-only: ci/ios-bench.sh never fails the run.
+      - name: iOS benchmark (Simulator, report-only)
+        run: ci/ios-bench.sh
+
       - name: Upload bench baseline
         uses: actions/upload-artifact@v6
         with:

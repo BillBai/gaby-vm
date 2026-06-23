@@ -3,7 +3,7 @@
 - [x] 1.1 Spike A: `cmake -G Xcode` generates the `gaby_vm` library project; it builds clean for both `iphonesimulator` arm64 (platform 7, minos 14.0) and `iphoneos` arm64 (platform 2, minos 13.0), static lib needs no signing. Chosen consumption: the library project stays CMake-generated (single-sourced); the XcodeGen host references it as an external project; `generate.sh` runs both generators (design Decision 2, resolved).
 - [x] 1.2 Spike A resolved: the vixl_port crash-guard signal handlers coexist with XCTest. The XCTest saves the six `sigaction`s before the run and restores them after, containing the guard's handlers to the suite. The integer family ran green on the Simulator (192 passed / 66 skipped / 0 FAILED, matching the macOS Debug baseline exactly) — no signal fired and XCTest reported success.
 - [x] 1.3 Spike A: runner builds and runs at iOS deployment target 13.0 with C++20; the gaby_vm public headers (which use `std::span`/`std::variant`) compile into the XCTest bundle. Recorded floor: device 13.0; arm64 **simulator** is effectively 14.0 (the inherent Apple-silicon-simulator minimum), which is fine.
-- [ ] 1.4 Spike B: confirm `MAP_JIT` / native baseline runs on the iOS Simulator and on a dev-signed, debugger-attached device; record where it works and where it must degrade (design Decision 5).
+- [x] 1.4 Spike B descoped by decision: the iOS benchmark is **cache vs decoder only** — no native baseline. `MAP_JIT` is not pursued (it would need JIT-entitlement plumbing for marginal value; the on-device cache/decoder absolute numbers are what matter for tater). The "slowdown-vs-native" denominator stays a macOS-arm64 measurement.
 
 ## 2. Callable entry points — host stays green throughout
 
@@ -16,7 +16,7 @@
 - [x] 3.1 Created `ios-runner/`: committed `project.yml` (XcodeGen, host app + XCTest), minimal host app (`App/main.m`), `generate.sh` (runs `cmake -G Xcode` → strips legacy `PBXBuildStyle` via a structural plist edit → `xcodegen`). The host references the CMake project (`projectReferences`) and depends on its `gaby_vm` target; Xcode builds the library per destination and links it. Generated `.xcodeproj`s are git-ignored.
 - [x] 3.2 Smoke-validated end to end: `xcodebuild test` on an arm64 iOS Simulator is green — `testLibraryLinks` constructs `PredecodeCache` (forces the link; proves the CMake-built libgaby_vm.a was built as the cross-project dependency and linked), `testVersionIsNonEmpty` passes too.
 - [x] 3.3 XCTest runs every suite green on an arm64 Simulator: `VixlPortTests` runs the combined integer+fp+neon set (520/69/0, matching the summed macOS baseline) and `BaselineSuiteTests` runs all 11 baseline/unit suites — 15 test cases, 0 failures. The two fork()-based death tests are the only exclusions.
-- [ ] 3.4 Add the benchmark run path in the runner that calls the bench entries and emits the harness report; attempt native baseline per Spike B with the explicit "not run" fallback. Verify numbers (or the explicit absence) appear.
+- [x] 3.4 `bench/business.cc` exposes `gaby_vm_ios_run_business_bench()` (built as a library under `GABY_VM_BUILD_IOS_RUNNER`, main renamed); `BenchTests.testBusinessBenchmark` runs every business kernel in cache then decoder mode and prints the harness report. Report-only — no native baseline on iOS. Verified locally: cache ≈ 313–331 ns/insn, decoder ≈ 2.6 µs/insn on the Simulator.
 - [ ] 3.5 Signing: simulator builds need no identity; device signing comes from an untracked xcconfig / automatic signing; no team or identity committed. Verify a clean checkout builds for the Simulator with no signing config.
 
 ## 4. CI — iOS Simulator gate
@@ -26,8 +26,8 @@
 
 ## 5. CI — iOS benchmark report
 
-- [ ] 5.1 Write `ci/ios-bench.sh`: same arch/skip logic; run the iOS bench on the arm64 Simulator; emit the report; never gate. Verify it reports locally and the skip path is explicit.
-- [ ] 5.2 Add the iOS bench step to `.github/workflows/bench.yml` (main + manual dispatch, report-only). Verify it does not run on pull requests.
+- [x] 5.1 `ci/ios-bench.sh`: same arch/skip logic as the test gate; runs only `BenchTests` on the arm64 Simulator (`-only-testing`), extracts the key:value report into the summary, and always exits 0 (report-only). Verified locally: cache/decoder numbers captured for all five kernels.
+- [x] 5.2 Added an `iOS benchmark (Simulator, report-only)` step to `bench.yml` (push to main + manual dispatch only). It does not run on pull requests (bench.yml has no `pull_request` trigger). The PR test gate skips `BenchTests` via `-skip-testing`, so timing never gates.
 
 ## 6. Docs
 

@@ -29,6 +29,11 @@ target_compile_definitions(bench_runner PRIVATE
 target_link_libraries(bench_runner PUBLIC gaby_vm::gaby_vm)
 gaby_vm_apply_compile_flags(bench_runner)
 
+# The benchmark executables (and the dev-only native baseline) build only for
+# the developer benchmark path. The iOS runner reuses bench_runner and the
+# business kernels as a library (the GABY_VM_BUILD_IOS_RUNNER block at the end).
+if(GABY_VM_BUILD_BENCHMARKS)
+
 # bench_smoke — millisecond-scale end-to-end harness self-test. Drives the
 # llvm-mc-assembled straight-line workload; not registered with CTest
 # (benchmarks stay separate from the correctness suite — see spec). The
@@ -145,4 +150,23 @@ if(GABY_VM_BUILD_NATIVE_BASELINE)
       endforeach()
     endif()
   endif()
+endif()
+
+endif()  # GABY_VM_BUILD_BENCHMARKS
+
+# iOS runner: the business-logic microkernels as a report-only library
+# (cache/decoder only — no native baseline). Same source and privileged build as
+# the bench_business executable, with main() renamed so the iOS XCTest can call
+# gaby_vm_ios_run_business_bench() instead.
+if(GABY_VM_BUILD_IOS_RUNNER)
+  add_library(gaby_vm_ios_business_bench_lib STATIC business.cc)
+  target_link_libraries(gaby_vm_ios_business_bench_lib PRIVATE bench_runner)
+  target_include_directories(gaby_vm_ios_business_bench_lib PRIVATE
+    ${PROJECT_SOURCE_DIR}/Sources/gaby_vm/src)
+  target_compile_definitions(gaby_vm_ios_business_bench_lib PRIVATE
+    VIXL_INCLUDE_TARGET_A64
+    VIXL_INCLUDE_SIMULATOR_AARCH64
+    $<$<CONFIG:Debug>:VIXL_DEBUG>
+    main=gaby_vm_ios_business_bench_unused_main)
+  gaby_vm_apply_compile_flags(gaby_vm_ios_business_bench_lib)
 endif()

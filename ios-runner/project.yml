@@ -81,6 +81,8 @@ targets:
       - target: GabyVMLib/gaby_vm_ios_run_typed_register_io_lib
       - target: GabyVMLib/gaby_vm_ios_run_branch_hook_dispatch_lib
       - target: GabyVMLib/gaby_vm_ios_run_branch_hook_reentrancy_lib
+      # Report-only business benchmark (cache/decoder), run by BenchTests.
+      - target: GabyVMLib/gaby_vm_ios_business_bench_lib
       - target: GabyVMLib/gaby_vm
 
 schemes:
