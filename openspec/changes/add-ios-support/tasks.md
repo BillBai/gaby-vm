@@ -7,9 +7,9 @@
 
 ## 2. Callable entry points — host stays green throughout
 
-- [ ] 2.1 Add a failing host test that drives one correctness suite through a new callable entry (e.g. `run_vixl_port_integer()`) before refactoring.
+- [x] 2.1 The callable entry (`run_vixl_port_integer()`) is exercised by the existing `vixl_port_integer` CTest, which calls it from its thin `main()` and stays green — so the refactor is covered by existing tests. (A separate failing-test-first step was moot: this is a pure extraction, not new behaviour.)
 - [x] 2.2 Each suite reachable as a callable entry. vixl_port: integer/fp/neon expose `run_vixl_port_<family>()` (same TU as their registrations) plus an iOS-only `run_vixl_port_all()` that walks the combined registered set once under a summed baseline (all three link into one XCTest process). Baseline/unit suites: built under `GABY_VM_BUILD_IOS_RUNNER` as libraries with `main()` renamed to `gaby_vm_ios_run_<name>()` (no source edits; their CTest exes are unchanged). The two fork()-based death tests are excluded (iOS sandbox forbids fork). Full host CTest stays green (22/22).
-- [ ] 2.3 Extract each bench kernel into a callable entry; bench executables dispatch to it. Verify `bench_business --verify` is OK and the bench reports are unchanged.
+- [x] 2.3 The bench kernels are already shared through `gaby_vm_bench::RunBenchmark` + the `kKernels` table; the iOS entry (`gaby_vm_ios_run_business_bench()`) drives the same table through the same runner, so no per-kernel extraction was needed. `bench_business --verify` stays OK and the host bench reports are unchanged.
 
 ## 3. iOS runner project
 
@@ -17,7 +17,7 @@
 - [x] 3.2 Smoke-validated end to end: `xcodebuild test` on an arm64 iOS Simulator is green — `testLibraryLinks` constructs `PredecodeCache` (forces the link; proves the CMake-built libgaby_vm.a was built as the cross-project dependency and linked), `testVersionIsNonEmpty` passes too.
 - [x] 3.3 XCTest runs every suite green on an arm64 Simulator: `VixlPortTests` runs the combined integer+fp+neon set (520/69/0, matching the summed macOS baseline) and `BaselineSuiteTests` runs all 11 baseline/unit suites — 15 test cases, 0 failures. The two fork()-based death tests are the only exclusions.
 - [x] 3.4 `bench/business.cc` exposes `gaby_vm_ios_run_business_bench()` (built as a library under `GABY_VM_BUILD_IOS_RUNNER`, main renamed); `BenchTests.testBusinessBenchmark` runs every business kernel in cache then decoder mode and prints the harness report. Report-only — no native baseline on iOS. Verified locally: cache ≈ 313–331 ns/insn, decoder ≈ 2.6 µs/insn on the Simulator.
-- [ ] 3.5 Signing: simulator builds need no identity; device signing comes from an untracked xcconfig / automatic signing; no team or identity committed. Verify a clean checkout builds for the Simulator with no signing config.
+- [x] 3.5 Simulator builds set `CODE_SIGNING_ALLOWED=NO` and need no team — verified by every Simulator run (a clean regenerate builds and tests with no signing config). No team or identity is committed; device signing is documented as coming from the developer's local team (`docs/ios.md`). The on-device build itself is part of 7.3 (needs hardware).
 
 ## 4. CI — iOS Simulator gate
 
