@@ -48,6 +48,11 @@ targets:
         CODE_SIGN_STYLE: Automatic
         GENERATE_INFOPLIST_FILE: "YES"
         INFOPLIST_KEY_UILaunchScreen_Generation: "YES"
+        # Adopt the UIScene lifecycle (App/main.m provides the scene delegate).
+        # Generates a UIApplicationSceneManifest declaring scene support, which
+        # silences UIKit's "UIScene lifecycle will soon be required" warning and
+        # future launch assertion.
+        INFOPLIST_KEY_UIApplicationSceneManifest_Generation: "YES"
 
   GabyRunnerTests:
     type: bundle.unit-test
