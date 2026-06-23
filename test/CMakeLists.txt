@@ -1,3 +1,8 @@
+# The CTest executables and their add_test registrations build only for the
+# CTest path. The iOS runner (the GABY_VM_BUILD_IOS_RUNNER block at the bottom)
+# reuses the same test sources as libraries, but none of these executables.
+if(GABY_VM_BUILD_TESTS)
+
 add_executable(gaby_vm_smoke smoke.cc)
 target_link_libraries(gaby_vm_smoke PRIVATE gaby_vm::gaby_vm)
 gaby_vm_apply_compile_flags(gaby_vm_smoke)
@@ -159,3 +164,59 @@ add_test(NAME branch_hook_reentrancy COMMAND branch_hook_reentrancy_test)
 # this directory) so it can also serve the iOS runner under
 # GABY_VM_BUILD_IOS_RUNNER. The vixl_port family CTest executables are defined
 # inside it, guarded by GABY_VM_BUILD_TESTS.
+
+endif()  # GABY_VM_BUILD_TESTS
+
+# Baseline / unit suites as iOS-runner libraries. Each is the same test TU as
+# its CTest executable above, built as a static library with main() renamed to a
+# unique gaby_vm_ios_run_<name>() that the iOS XCTest calls (declared in
+# test/ios_runner_entries.h). The two fork()-based death tests
+# (typed_register_io_abort, simulator_constructor_stack) are excluded: they fork
+# a child to observe a deliberate abort, which the iOS sandbox forbids and a
+# single XCTest process cannot host.
+if(GABY_VM_BUILD_IOS_RUNNER)
+  function(gaby_vm_add_ios_baseline_lib entry source)
+    add_library(${entry}_lib STATIC ${source})
+    target_link_libraries(${entry}_lib PRIVATE gaby_vm::gaby_vm)
+    target_compile_definitions(${entry}_lib PRIVATE main=${entry})
+    gaby_vm_apply_compile_flags(${entry}_lib)
+  endfunction()
+
+  # Public-API-only suites: just link gaby_vm.
+  gaby_vm_add_ios_baseline_lib(gaby_vm_ios_run_smoke smoke.cc)
+  gaby_vm_add_ios_baseline_lib(gaby_vm_ios_run_simulator_correctness
+    simulator_correctness.cc)
+  gaby_vm_add_ios_baseline_lib(gaby_vm_ios_run_predecode_cache_data_in_stream
+    predecode_cache_data_in_stream_test.cc)
+  gaby_vm_add_ios_baseline_lib(gaby_vm_ios_run_reentrancy reentrancy_test.cc)
+  gaby_vm_add_ios_baseline_lib(gaby_vm_ios_run_shadow_runner
+    shadow_runner_test.cc)
+  gaby_vm_add_ios_baseline_lib(gaby_vm_ios_run_typed_register_io
+    typed_register_io_test.cc)
+  gaby_vm_add_ios_baseline_lib(gaby_vm_ios_run_branch_hook_dispatch
+    branch_hook_dispatch_test.cc)
+  gaby_vm_add_ios_baseline_lib(gaby_vm_ios_run_branch_hook_reentrancy
+    branch_hook_reentrancy_test.cc)
+
+  # Privileged-build suites: reach imported VIXL headers directly (PRIVATE src/
+  # include + the VIXL build defines), matching their CTest executables.
+  gaby_vm_add_ios_baseline_lib(gaby_vm_ios_run_simulator_smoke
+    simulator_smoke.cc)
+  gaby_vm_add_ios_baseline_lib(gaby_vm_ios_run_instructions_constexpr_smoke
+    instructions_aarch64_constexpr_smoke_test.cc)
+  foreach(_priv gaby_vm_ios_run_simulator_smoke
+                gaby_vm_ios_run_instructions_constexpr_smoke)
+    target_include_directories(${_priv}_lib PRIVATE
+      ${PROJECT_SOURCE_DIR}/Sources/gaby_vm/src)
+    target_compile_definitions(${_priv}_lib PRIVATE
+      VIXL_INCLUDE_TARGET_A64
+      VIXL_INCLUDE_SIMULATOR_AARCH64
+      $<$<CONFIG:Debug>:VIXL_DEBUG>)
+  endforeach()
+
+  # workload_shadow consumes the committed workload headers under bench/.
+  gaby_vm_add_ios_baseline_lib(gaby_vm_ios_run_workload_shadow
+    workload_shadow_test.cc)
+  target_include_directories(gaby_vm_ios_run_workload_shadow_lib PRIVATE
+    ${PROJECT_SOURCE_DIR}/bench)
+endif()

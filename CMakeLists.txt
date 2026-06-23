@@ -37,7 +37,10 @@ if(GABY_VM_BUILD_TESTS OR GABY_VM_BUILD_IOS_RUNNER)
   add_subdirectory(test/test_support/vixl_asm)
 endif()
 
-if(GABY_VM_BUILD_TESTS)
+# test/ holds the CTest suites and, under GABY_VM_BUILD_IOS_RUNNER, the baseline
+# suite libraries for the iOS runner. The CTest executables stay gated on
+# GABY_VM_BUILD_TESTS inside the subdirectory.
+if(GABY_VM_BUILD_TESTS OR GABY_VM_BUILD_IOS_RUNNER)
   add_subdirectory(test)
 endif()
 

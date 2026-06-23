@@ -54,6 +54,8 @@ targets:
           - "$(SRCROOT)/../Sources/gaby_vm/include"
           # vixl_port_entries.h — the thin, dependency-free suite entry points.
           - "$(SRCROOT)/../test/test_support/vixl_asm/harness"
+          # ios_runner_entries.h — the baseline/unit suite entry points.
+          - "$(SRCROOT)/../test"
         TEST_HOST: "$(BUILT_PRODUCTS_DIR)/GabyRunner.app/GabyRunner"
         BUNDLE_LOADER: "$(TEST_HOST)"
     dependencies:
@@ -67,6 +69,18 @@ targets:
       - target: GabyVMLib/gaby_vm_vixl_port_fp_lib
       - target: GabyVMLib/gaby_vm_vixl_port_neon_lib
       - target: GabyVMLib/gaby_vm_vixl_asm_testonly
+      # Baseline / unit suite libraries (each renames main() to its entry).
+      - target: GabyVMLib/gaby_vm_ios_run_smoke_lib
+      - target: GabyVMLib/gaby_vm_ios_run_simulator_smoke_lib
+      - target: GabyVMLib/gaby_vm_ios_run_instructions_constexpr_smoke_lib
+      - target: GabyVMLib/gaby_vm_ios_run_simulator_correctness_lib
+      - target: GabyVMLib/gaby_vm_ios_run_predecode_cache_data_in_stream_lib
+      - target: GabyVMLib/gaby_vm_ios_run_reentrancy_lib
+      - target: GabyVMLib/gaby_vm_ios_run_shadow_runner_lib
+      - target: GabyVMLib/gaby_vm_ios_run_workload_shadow_lib
+      - target: GabyVMLib/gaby_vm_ios_run_typed_register_io_lib
+      - target: GabyVMLib/gaby_vm_ios_run_branch_hook_dispatch_lib
+      - target: GabyVMLib/gaby_vm_ios_run_branch_hook_reentrancy_lib
       - target: GabyVMLib/gaby_vm
 
 schemes:
