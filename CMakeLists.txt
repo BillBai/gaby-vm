@@ -17,12 +17,27 @@ option(GABY_VM_BUILD_BENCHMARKS "Build gaby-vm benchmarks" ${PROJECT_IS_TOP_LEVE
 # bench subdirectory, so it also requires GABY_VM_BUILD_BENCHMARKS.
 option(GABY_VM_BUILD_NATIVE_BASELINE
        "Build the dev-only native (host-CPU) workload baseline tools" OFF)
+# iOS runner: build the vixl_port family bodies as libraries (no main, no CTest
+# executables) so the iOS XCTest host can link them and call the suite entries.
+# Pulls in the TEST-ONLY VIXL assembler island without enabling the CTest path.
+option(GABY_VM_BUILD_IOS_RUNNER
+       "Build the vixl_port family libraries for the iOS runner (no CTest exes)" OFF)
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/CompileFlags.cmake)
 
 add_subdirectory(Sources/gaby_vm/src)
 
 if(GABY_VM_BUILD_TESTS)
   enable_testing()
+endif()
+
+# The TEST-ONLY VIXL assembler island (and, under GABY_VM_BUILD_IOS_RUNNER, the
+# vixl_port family libraries) serve both the CTest path and the iOS runner.
+# Added before test/ so the island target and its link helper exist first.
+if(GABY_VM_BUILD_TESTS OR GABY_VM_BUILD_IOS_RUNNER)
+  add_subdirectory(test/test_support/vixl_asm)
+endif()
+
+if(GABY_VM_BUILD_TESTS)
   add_subdirectory(test)
 endif()
 

@@ -30,6 +30,7 @@ cmake -B "$lib_build" -G Xcode \
   -DGABY_VM_BUILD_TESTS=OFF \
   -DGABY_VM_BUILD_DEMOS=OFF \
   -DGABY_VM_BUILD_BENCHMARKS=OFF \
+  -DGABY_VM_BUILD_IOS_RUNNER=ON \
   "$repo_root" >/dev/null
 
 echo "[2/3] strip legacy PBXBuildStyle (so XcodeGen can parse the project)"

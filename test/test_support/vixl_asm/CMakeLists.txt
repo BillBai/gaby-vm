@@ -130,6 +130,11 @@ function(gaby_vm_vixl_asm_link_island target)
     -Wno-deprecated-literal-operator)    # decoder-constants-aarch64.h operator"" _b
 endfunction()
 
+# The CTest executables below build only for the CTest path. The iOS runner
+# (further down) reuses the island lib + the family libraries, but none of these
+# executables or their add_test registrations.
+if(GABY_VM_BUILD_TESTS)
+
 # ODR/link smoke gate (migration step 3), kept as a permanent linkage canary.
 add_executable(gaby_vm_vixl_asm_island_smoke harness/island_smoke.cc)
 gaby_vm_vixl_asm_link_island(gaby_vm_vixl_asm_island_smoke)
@@ -176,3 +181,25 @@ endfunction()
 gaby_vm_add_vixl_port_family(vixl_port_integer harness/vixl_port_integer.cc)
 gaby_vm_add_vixl_port_family(vixl_port_fp harness/vixl_port_fp.cc)
 gaby_vm_add_vixl_port_family(vixl_port_neon harness/vixl_port_neon.cc)
+
+endif()  # GABY_VM_BUILD_TESTS
+
+# iOS runner family libraries. Same family TU as the CTest exe above, but built
+# as a static library with main() renamed out of the way: the XCTest provides
+# the entry and calls run_vixl_port_<family>(), which lives in the same TU as
+# the registered TEST() bodies — referencing it pulls the registrations in, so
+# no -force_load is needed. Consumers also link gaby_vm_vixl_asm_testonly and
+# gaby_vm::gaby_vm for the family TU's assembler + leaf symbols.
+if(GABY_VM_BUILD_IOS_RUNNER)
+  function(gaby_vm_add_vixl_port_family_lib name source)
+    add_library(${name} STATIC ${source})
+    gaby_vm_vixl_asm_link_island(${name})
+    target_compile_definitions(${name} PRIVATE
+      main=gaby_vm_vixl_port_family_unused_main)
+    # Expose vixl_port_entries.h to consumers (the iOS XCTest includes it).
+    target_include_directories(${name} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/harness)
+  endfunction()
+
+  gaby_vm_add_vixl_port_family_lib(gaby_vm_vixl_port_integer_lib
+    harness/vixl_port_integer.cc)
+endif()

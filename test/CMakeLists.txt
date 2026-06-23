@@ -154,4 +154,8 @@ add_test(NAME branch_hook_reentrancy COMMAND branch_hook_reentrancy_test)
 # differential oracles. PRIVATE-linked, no :: alias, never part of gaby_vm. This
 # replaces the former frozen-fixture replay. See
 # docs/refs/gaby-vm-vixl-port-live-assemble-rewrite-2026-06-09.md.
-add_subdirectory(test_support/vixl_asm)
+#
+# The island subdirectory is now added from the top-level CMakeLists (before
+# this directory) so it can also serve the iOS runner under
+# GABY_VM_BUILD_IOS_RUNNER. The vixl_port family CTest executables are defined
+# inside it, guarded by GABY_VM_BUILD_TESTS.

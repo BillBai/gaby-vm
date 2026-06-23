@@ -52,12 +52,17 @@ targets:
         # headers stay inside the library target, not here.
         HEADER_SEARCH_PATHS:
           - "$(SRCROOT)/../Sources/gaby_vm/include"
+          # vixl_port_entries.h — the thin, dependency-free suite entry points.
+          - "$(SRCROOT)/../test/test_support/vixl_asm/harness"
         TEST_HOST: "$(BUILT_PRODUCTS_DIR)/GabyRunner.app/GabyRunner"
         BUNDLE_LOADER: "$(TEST_HOST)"
     dependencies:
       - target: GabyRunner
-      # Cross-project dependency on the CMake library target; Xcode builds it
-      # for the active destination and links libgaby_vm.a automatically.
+      # Cross-project dependencies on the CMake library targets (built under
+      # GABY_VM_BUILD_IOS_RUNNER). Ordered dependent-first: the family lib needs
+      # the assembler island and the gaby_vm leaf symbols.
+      - target: GabyVMLib/gaby_vm_vixl_port_integer_lib
+      - target: GabyVMLib/gaby_vm_vixl_asm_testonly
       - target: GabyVMLib/gaby_vm
 
 schemes:
