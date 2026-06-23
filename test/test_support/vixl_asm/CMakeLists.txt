@@ -202,4 +202,18 @@ if(GABY_VM_BUILD_IOS_RUNNER)
 
   gaby_vm_add_vixl_port_family_lib(gaby_vm_vixl_port_integer_lib
     harness/vixl_port_integer.cc)
+  gaby_vm_add_vixl_port_family_lib(gaby_vm_vixl_port_fp_lib
+    harness/vixl_port_fp.cc)
+  gaby_vm_add_vixl_port_family_lib(gaby_vm_vixl_port_neon_lib
+    harness/vixl_port_neon.cc)
+
+  # Aggregate entry (run_vixl_port_all): runs the combined registered set once.
+  # No test bodies and no main(), so it is not a family lib — it just needs the
+  # island link environment for the harness header. It references the three
+  # family entries (to pull their registrations in), so consumers link it before
+  # the family libs.
+  add_library(gaby_vm_vixl_port_all_lib STATIC harness/vixl_port_ios_all.cc)
+  gaby_vm_vixl_asm_link_island(gaby_vm_vixl_port_all_lib)
+  target_include_directories(gaby_vm_vixl_port_all_lib PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}/harness)
 endif()

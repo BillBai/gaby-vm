@@ -17,7 +17,14 @@ namespace gaby_vm {
 namespace ios_runner {
 
 int run_vixl_port_integer();
-// run_vixl_port_fp() / run_vixl_port_neon() land with their slices.
+int run_vixl_port_fp();
+int run_vixl_port_neon();
+
+// iOS runner: run every registered body once, under the summed "ios_runner_all"
+// baseline. Used when all three families are linked into a single process (the
+// XCTest bundle), where the per-family entries would each re-walk the whole
+// set.
+int run_vixl_port_all();
 
 }  // namespace ios_runner
 }  // namespace gaby_vm

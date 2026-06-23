@@ -59,9 +59,13 @@ targets:
     dependencies:
       - target: GabyRunner
       # Cross-project dependencies on the CMake library targets (built under
-      # GABY_VM_BUILD_IOS_RUNNER). Ordered dependent-first: the family lib needs
-      # the assembler island and the gaby_vm leaf symbols.
+      # GABY_VM_BUILD_IOS_RUNNER). Ordered dependent-first: the aggregate entry
+      # references the family libs, which need the assembler island and the
+      # gaby_vm leaf symbols.
+      - target: GabyVMLib/gaby_vm_vixl_port_all_lib
       - target: GabyVMLib/gaby_vm_vixl_port_integer_lib
+      - target: GabyVMLib/gaby_vm_vixl_port_fp_lib
+      - target: GabyVMLib/gaby_vm_vixl_port_neon_lib
       - target: GabyVMLib/gaby_vm_vixl_asm_testonly
       - target: GabyVMLib/gaby_vm
 

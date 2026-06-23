@@ -230,6 +230,11 @@ inline constexpr FamilyBaseline kFamilyBaselines[] = {
     {"fp", 74, 2, 74, 2},
     {"neon", 254, 1, 254, 1},
     {"harness_smoke", 2, 0, 2, 0},  // G4 smoke: one scalar body + one RMW body
+    // iOS runner: integer + fp + neon all link into one XCTest bundle (one
+    // process), so a single RunRegisteredTests walk covers every registered
+    // body. The baseline is the sum of the three families: ran 192+74+254=520
+    // (debug) / 193+74+254=521 (release); skipped 66+2+1=69 / 65+2+1=68.
+    {"ios_runner_all", 520, 69, 521, 68},
 };
 
 inline const FamilyBaseline* FindBaseline(const char* family) {
