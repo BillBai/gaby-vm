@@ -1,6 +1,6 @@
 # Gaby-VM
 
-> **Note:** `CLAUDE.md` in this repository is a symbolic link to this file (`AGENTS.md`). Both paths resolve to the same content — edit `AGENTS.md` and Claude Code, along with any other agent that reads `CLAUDE.md`, will see the change automatically. Do not edit `CLAUDE.md` directly; do not duplicate its contents.
+> **Note:** `CLAUDE.md` in this repository is a small Claude Code entry file that imports this file with `@AGENTS.md`. Edit `AGENTS.md` for the canonical instructions, and keep `CLAUDE.md` as the import wrapper instead of duplicating these contents.
 
 ## Context
 
