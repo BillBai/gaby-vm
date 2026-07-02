@@ -851,6 +851,19 @@ void Simulator::RunFrom(const Instruction* first) {
   Run();
 }
 
+// gaby-vm BEGIN:
+// cache track range-miss 的冷 abort 辅助（声明见 simulator-aarch64.h）。放在
+// .cc 里让它天然不内联进头文件的热路径 ExecuteInstructionCached；再叠一层
+// noinline 兜住可能的 LTO 内联。消息文本与原先内联在热函数里的版本一字不差。
+__attribute__((noinline)) void Simulator::GabyAbortPcNotInRange(
+    uintptr_t pc_addr) {
+  std::ostringstream oss;
+  oss << "cache-track PC 0x" << std::hex << pc_addr
+      << " is not in any registered code range ";
+  VIXL_ABORT_WITH_MSG(oss.str().c_str());
+}
+// gaby-vm END
+
 
 // clang-format off
 const char* Simulator::xreg_names[] = {"x0",  "x1",  "x2",  "x3",  "x4",  "x5",

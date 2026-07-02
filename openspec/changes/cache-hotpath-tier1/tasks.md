@@ -88,13 +88,32 @@ hash 10.49 / struct 10.81 / fsm 9.34 / applogic 14.26.
 
 ## 5. T4 — Dispatch-hub epilogue strip
 
-- [ ] 5.1 Single trace-mask gate replacing the three `ShouldTrace*` tests on
+- [x] 5.1 Single trace-mask gate replacing the three `ShouldTrace*` tests on
       the cache track; conditional `UpdateBType` (idempotence-guarded).
-- [ ] 5.2 Fold `kEndOfSimAddress` load to a null compare on the cache-track
+      **5.1a: unconditional `LogAllWrittenRegisters()` → gated behind a single
+      `GetTraceParameters() != 0` test (superset of the three inner
+      `ShouldTrace*` conditions; trace-ON behavior identical). 5.1b:
+      `UpdateBType()` guarded by `(btype_ != DefaultBType) || (next_btype_ !=
+      DefaultBType)` — idempotent when both default (two no-op stores), so the
+      common non-branch step skips both. Shadow test green.**
+- [x] 5.2 Fold `kEndOfSimAddress` load to a null compare on the cache-track
       step path; move the abort-path `ostringstream` out of
       `ExecuteInstructionCached` into a cold noinline helper; add
-      likely/unlikely hints on the hot-path branches.
-- [ ] 5.3 GRL (one commit for 5.1+5.2).
+      likely/unlikely hints on the hot-path branches. **5.2a: cache-track
+      `StepOnce` uses `pc_ == nullptr` (kEndOfSimAddress == NULL upstream;
+      tied down by a `VIXL_ASSERT` in `SetPredecodeCache`); `DebugStepOnce`
+      still calls `IsSimulationFinished()`. 5.2b: range-miss `ostringstream`
+      moved to cold `noinline`/`[[noreturn]]` `Simulator::GabyAbortPcNotInRange`
+      in simulator-aarch64.cc; abort text unchanged. 5.2c: `GABY_LIKELY`/
+      `GABY_UNLIKELY` (`__builtin_expect`) on range-hit/BTI/movprfx-prev/pc-null/
+      trace branches, scoped + `#undef`'d.**
+- [x] 5.3 GRL (one commit for 5.1+5.2). **Debug+release build green;
+      `vixl_port` 3/3; full debug ctest 24/24; `--verify` OK. Bench (median of
+      3 vs T3): parse 8.659→8.521 (-1.6%), hash 10.426→7.287 (-30.1%), struct
+      9.561→9.362 (-2.1%), fsm 9.096→8.796 (-3.3%), applogic 10.597→10.410
+      (-1.8%). Same-session A/B confirmed the hash win is real, not drift
+      (drift-free deltas: hash -30.8%, others -1.4..-3.8%). See numbers.md
+      "T4 detail".**
 
 ## 6. T5 — Branch-interception probe flag
 

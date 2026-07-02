@@ -1618,7 +1618,22 @@ class Simulator : public DecoderVisitor {
   // R1/R2）。
   // 详见 docs/refs/gaby-vm-predecode-cache-design.md §3、§4.1、
   // §6.1、§6.5。
-  void SetPredecodeCache(gaby_vm::PredecodeCache* cache) { cache_ = cache; }
+
+// 热路径分支预测提示。VIXL 自身没有 likely/unlikely 宏（globals-vixl.h /
+// utils-vixl.h 都没有），这里在 gaby marker 区里定义一对小宏，只用
+// clang/gcc 的 __builtin_expect（Windows 非目标）。范围仅限 cache track 的
+// 几个热函数，用完即 #undef（见下方 DebugStepOnce 后），不外泄。
+#define GABY_LIKELY(x) (__builtin_expect(!!(x), 1))
+#define GABY_UNLIKELY(x) (__builtin_expect(!!(x), 0))
+
+  void SetPredecodeCache(gaby_vm::PredecodeCache* cache) {
+    // cache track 的 StepOnce 把 IsSimulationFinished() 折成 pc_ == nullptr
+    // 的直接比较，前提是 kEndOfSimAddress 恒为 NULL（simulator-aarch64.cc
+    // 里的定义）。它不是 constexpr，没法 static_assert；在这个只在装 cache
+    // 时走一次的 gaby 入口里断言一次，把这条等价关系钉死。
+    VIXL_ASSERT(kEndOfSimAddress == nullptr);
+    cache_ = cache;
+  }
 
   // cache 命中执行。前后置步骤（pc_modified_、BType / guarded page 检查、
   // last_instr_、IncrementPc、LogAllWrittenRegisters、UpdateBType）跟
@@ -1640,15 +1655,15 @@ class Simulator : public DecoderVisitor {
     // 不静默回退到 decoder（design doc §4.3.1）。
     const uintptr_t pc_addr = reinterpret_cast<uintptr_t>(pc_);
     const gaby_vm::PredecodeCache::CodeRange* range = cur_range_;
-    if ((range == nullptr) ||
-        ((pc_addr - range->start) >= range->size_bytes)) {
+    // range-hit（cur_range_ 覆盖本 pc_）是绝对常态，标 unlikely 让编译器把
+    // cur_range_ 未命中的慢路径排到冷区。
+    if (GABY_UNLIKELY((range == nullptr) ||
+                      ((pc_addr - range->start) >= range->size_bytes))) {
       range = cache_->FindRange(pc_addr);
-      if (range == nullptr) {
-        std::ostringstream oss;
-        oss << "cache-track PC 0x" << std::hex << pc_addr
-            << " is not in any registered code range ";
-        VIXL_ABORT_WITH_MSG(oss.str().c_str());
-      }
+      // 落界是真正的错误路径，正常 workload 永不触发。ostringstream 构造 +
+      // abort 挪进 GabyAbortPcNotInRange（noinline、[[noreturn]]，定义在 .cc），
+      // 热函数栈帧就不必为字符串流和异常展开留空间。消息文本与原内联版一致。
+      if (GABY_UNLIKELY(range == nullptr)) GabyAbortPcNotInRange(pc_addr);
       cur_range_ = range;
     }
     const gaby_vm::PredecodeCache::PredecodedEntry* entry =
@@ -1662,7 +1677,7 @@ class Simulator : public DecoderVisitor {
     // predictable branch. The body inside the outer gate is byte-for-byte
     // the imported VIXL check. See predecode-cache-hotpath-speedup
     // design.md D3.
-    if ((entry->flags & 1u) != 0u) {
+    if (GABY_UNLIKELY((entry->flags & 1u) != 0u)) {
       // On guarded pages, if BType is not zero, take an exception on any
       // instruction other than BTI, PACI[AB]SP, HLT or BRK.
       if (PcIsInGuardedPage() && (ReadBType() != DefaultBType)) {
@@ -1708,15 +1723,24 @@ class Simulator : public DecoderVisitor {
         *static_cast<const FormToVisitorFnMap::mapped_type*>(entry->leaf);
     (this->*pmf)(pc_);
 
-    if (last_instr_was_movprfx) {
+    if (GABY_UNLIKELY(last_instr_was_movprfx)) {
       VIXL_ASSERT(last_instr_ != NULL);
       VIXL_CHECK(pc_->CanTakeSVEMovprfx(form_hash_, last_instr_));
     }
 
     last_instr_ = ReadPc();
     IncrementPc();
-    LogAllWrittenRegisters();
-    UpdateBType();
+    // epilogue 收尾。cache track 把 trace mask 钉死在 0（simulator.cc 的
+    // ExecutionScope），LogAllWrittenRegisters 里那三个 ShouldTrace* 判断恒假。
+    // 用一次「任意 trace 位是否置位」的判断整体门控：trace 开着时照旧进函数、
+    // 三个内部判断各自决定输出，行为完全一致；trace 关着（cache track 常态）
+    // 时把三次判断+分支收成一次可预测分支。
+    if (GABY_UNLIKELY(GetTraceParameters() != 0)) LogAllWrittenRegisters();
+    // UpdateBType 幂等（btype_ = next_btype_; next_btype_ = DefaultBType），两者
+    // 都已是 DefaultBType 时是两条空写。只有 register-indirect 分支 leaf 会
+    // WriteNextBType，常态下两者恒为默认，跳过这两条 store；ShadowRunner 每条
+    // 指令比对 BType，行为一致由 shadow 测试兜底。
+    if ((btype_ != DefaultBType) || (next_btype_ != DefaultBType)) UpdateBType();
     // 此处刻意不做 ExecuteInstruction 末尾的
     // VIXL_CHECK(cpu_features_auditor_.InstructionIsAvailable())。
   }
@@ -1726,7 +1750,13 @@ class Simulator : public DecoderVisitor {
   // 路径；两者都先判 IsSimulationFinished()，所以执行完终止指令（如 RET 到
   // 空 LR）的那一步返回 true，再下一次调用才返回 false。
   bool StepOnce() {
-    if (IsSimulationFinished()) return false;
+    // cache track 专用：把 IsSimulationFinished() 的 pc_ == kEndOfSimAddress
+    // 折成对 nullptr 的直接比较，省掉每步一次对全局符号 kEndOfSimAddress
+    // （非 constexpr）的 load。kEndOfSimAddress 按上游定义恒为 NULL
+    // （simulator-aarch64.cc），等价关系由 SetPredecodeCache 里的 VIXL_ASSERT
+    // 钉住。DebugStepOnce 仍调 IsSimulationFinished()，上游成员与定义都不动。
+    // 模拟结束在每步里是罕见事件，标 unlikely。
+    if (GABY_UNLIKELY(pc_ == nullptr)) return false;
     ExecuteInstructionCached();
     return true;
   }
@@ -1736,6 +1766,14 @@ class Simulator : public DecoderVisitor {
     ExecuteInstruction();
     return true;
   }
+#undef GABY_LIKELY
+#undef GABY_UNLIKELY
+
+  // cache track 落界（pc_ 不在任何已注册 range 内）的冷 abort 辅助。定义在
+  // simulator-aarch64.cc 里，让它天然不内联进 ExecuteInstructionCached 的热
+  // 路径，把 ostringstream 构造和 [[noreturn]] 的异常展开脚手架挪出热函数
+  // 栈帧。消息文本与原内联版一字不差。
+  VIXL_NO_RETURN static void GabyAbortPcNotInRange(uintptr_t pc_addr);
   // gaby-vm END
 
   // gaby-vm BEGIN:

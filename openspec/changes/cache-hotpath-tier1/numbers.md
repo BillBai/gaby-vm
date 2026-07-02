@@ -30,7 +30,7 @@ commit, cumulative on the branch)
 | T2a (trace tail + guard bounds) | 8.996 | 10.341 | 9.966 | 9.254 | 10.783 | vs T1: parse -4.2%, struct -6.9%, applogic -4.9%, fsm -1.1%; hash +0.6% (noise). |
 | T2b (MaybeClear LCG) | 8.671 | 10.354 | 9.476 | 9.137 | 10.603 | vs T2a: parse -3.6%, struct -4.9%, applogic -1.7%, fsm -1.3%; hash +0.1% (noise). |
 | T3 (MOVPRFX flag) | 8.659 | 10.426 | 9.561 | 9.096 | 10.597 | performance-neutral (see T3 detail); landed for spec/structural reasons. |
-| T4 (hub epilogue) | | | | | | |
+| T4 (hub epilogue) | 8.521 | 7.287 | 9.362 | 8.796 | 10.410 | every shape improves; hash -30% (same-session A/B-confirmed, not drift), scalar/FP -1.4..-3.8% (see T4 detail). |
 | T5 (interception flag) | | | | | | |
 | T6 (AddWithCarry) | | | | | | go/no-go per task 1.2 |
 
@@ -163,6 +163,78 @@ check, `bench_business --verify` OK. Adjudication: Fable orchestrator,
 2026-07-03 (the implementing agent stopped at the task 4.3 bench gate as
 instructed; the design's ≥-neutral criterion takes precedence over the
 brief's 1.5% execution threshold).
+
+### T4 detail (task 5.3) — dispatch-hub epilogue strip
+
+Five edits in one commit (tasks 5.1 + 5.2), cache track only; the decoder
+track (`ExecuteInstruction` / `DebugStepOnce` / `DebugRunFrom`) is
+byte-identical:
+
+- 5.1a: `ExecuteInstructionCached`'s unconditional `LogAllWrittenRegisters()`
+  (three `ShouldTrace*` tests + branches, all reading `trace_parameters_`) is
+  gated behind a single `GetTraceParameters() != 0` test. The cache track pins
+  the trace mask to 0 (simulator.cc `ExecutionScope`), so three tests+branches
+  become one predictable branch; trace-ON behavior is identical (the gate is a
+  superset of the three inner conditions, and the inner tests still decide
+  output when any bit is set).
+- 5.1b: `UpdateBType()` is guarded by
+  `(btype_ != DefaultBType) || (next_btype_ != DefaultBType)`. `UpdateBType`
+  is idempotent when both are `DefaultBType` (`btype_ = next_btype_;
+  next_btype_ = DefaultBType` — two no-op stores), and only indirect-branch
+  leaves call `WriteNextBType`, so the common case skips two stores per step.
+  ShadowRunner compares BType per instruction; the shadow test stays green.
+- 5.2a: the cache-track `StepOnce` replaces `IsSimulationFinished()`
+  (`pc_ == kEndOfSimAddress`, a per-step load of the non-constexpr global
+  `kEndOfSimAddress`) with a direct `pc_ == nullptr` compare. `kEndOfSimAddress`
+  is `NULL` by upstream definition (simulator-aarch64.cc:58); a `VIXL_ASSERT`
+  in `SetPredecodeCache` ties the equivalence down. The upstream member,
+  definition, and `DebugStepOnce`'s call are untouched.
+- 5.2b: the range-miss abort's inline `std::ostringstream` (which forced
+  string-stream + EH scaffolding into the hot frame) moves to a cold
+  `noinline`, `[[noreturn]]` helper `Simulator::GabyAbortPcNotInRange`
+  (defined in simulator-aarch64.cc). The abort message text is unchanged.
+- 5.2c: branch-likelihood hints on the hot-path branches via a local
+  `GABY_LIKELY`/`GABY_UNLIKELY` (`__builtin_expect`; VIXL ships no such macro),
+  scoped to the cache-track functions and `#undef`'d after `DebugStepOnce`:
+  range-hit (likely / miss unlikely), BTI flag (unlikely), MOVPRFX prev flag
+  (unlikely), `pc_ == nullptr` (unlikely), trace mask (unlikely).
+
+Three `--mode cache --seconds 1.0` runs after the commit (median in the row
+above), ns/insn:
+
+| run | parse | hash | struct | fsm | applogic |
+|-----|------:|-----:|-------:|----:|---------:|
+| 1 | 8.523 | 7.298 | 9.358 | 8.829 | 10.398 |
+| 2 | 8.521 | 7.287 | 9.362 | 8.796 | 10.432 |
+| 3 | 8.508 | 7.287 | 9.373 | 8.773 | 10.410 |
+| med | 8.521 | 7.287 | 9.362 | 8.796 | 10.410 |
+
+vs the T3 row every shape improves: parse 8.659 → 8.521 (-1.6%), hash
+10.426 → 7.287 (-30.1%), struct 9.561 → 9.362 (-2.1%), fsm 9.096 → 8.796
+(-3.3%), applogic 10.597 → 10.410 (-1.8%). The hash swing is far larger than
+the expected epilogue effect, so — as with T3 — it was checked against
+session drift with a controlled same-session A/B (stash T4 → rebuild HEAD
+d421c3a → 3 runs → pop → rebuild T4 → 3 runs). HEAD reproduced the T3 row
+(parse 8.632 / hash 10.553 / struct 9.563 / fsm 9.131 / applogic 10.586,
+medians), and T4 measured (parse 8.508 / hash 7.308 / struct 9.373 / fsm
+8.782 / applogic 10.411), giving drift-free deltas of parse -1.4%, hash
+-30.8%, struct -2.0%, fsm -3.8%, applogic -1.7%. So the hash win is real and
+reproducible, not drift; no shape regresses.
+
+Why hash moves ~10× more than the others: hash is the cheapest-leaf,
+highest-throughput shape (~7.3 ns/insn, ~137M instrs), so the fixed
+per-instruction dispatch-hub bookkeeping this item strips — the two
+unconditional `UpdateBType` stores sitting on the store queue every step, the
+three `trace_parameters_` loads, and the `kEndOfSimAddress` global load — is
+the largest fraction of its per-instruction cost. The heavier-leaf shapes
+(parse/struct/fsm do memory work, applogic does FP/NEON) amortize the same
+fixed overhead over more expensive leaves, so they see the modest 1.4–3.8%.
+This is the item the design's "dispatch hub is 38–42% of self-time on scalar
+kernels" context predicted would matter.
+
+`bench_business --verify` OK (cache == decoder for all kernels);
+`ctest --test-dir build/debug` 24/24 (incl. shadow_runner, both movprfx
+tests, branch-hook reentrancy); `ctest -R vixl_port` 3/3.
 
 ## T6 disassembly gate (task 1.2)
 
