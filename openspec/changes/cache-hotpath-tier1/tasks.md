@@ -63,9 +63,18 @@ hash 10.49 / struct 10.81 / fsm 9.34 / applogic 14.26.
       3 vs T1): parse 9.395→8.996 (-4.2%), struct 10.702→9.966 (-6.9%),
       applogic 11.335→10.783 (-4.9%), fsm 9.360→9.254 (-1.1%), hash
       10.282→10.341 (+0.6%, noise). See numbers.md "T2a detail".**
-- [ ] 3.4 Separate commit (design D5): early-return `LocalMonitor::
+- [x] 3.4 Separate commit (design D5): early-return `LocalMonitor::
       MaybeClear` when unarmed, with the marker comment naming the upstream
-      LCG-sequence deviation. GRL.
+      LCG-sequence deviation. GRL. **Early return on `size_ == 0` in
+      `SimExclusiveLocalMonitor::MaybeClear` (the actual class; brief's
+      "LocalMonitor h:1273-1280" hint was stale, real site h:~1348). Marker
+      names the D5 hazard (shifted LCG seed sequence; a future island re-sync
+      importing an upstream no-retry STXR-status test could diverge; revert
+      this commit in isolation). Own commit. Debug+release green; `vixl_port`
+      3/3; full debug ctest 24/24; `--verify` OK. Bench (median of 3 vs T2a):
+      parse 8.996→8.671 (-3.6%), struct 9.966→9.476 (-4.9%), applogic
+      10.783→10.603 (-1.7%), fsm 9.254→9.137 (-1.3%), hash +0.1% (noise). See
+      numbers.md "T2b detail".**
 
 ## 4. T3 — MOVPRFX flag-gating (needs 1.3 green)
 

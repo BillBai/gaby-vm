@@ -1346,6 +1346,30 @@ class SimExclusiveLocalMonitor {
 
   // Clear the exclusive monitor most of the time.
   void MaybeClear() {
+    // gaby-vm BEGIN:
+    // Skip everything when the monitor is unarmed (size_ == 0). Clear() only
+    // resets address_/size_, which are already 0 in that state, so the sole
+    // effect of the upstream body on an unarmed monitor is to step the LCG.
+    // Early-returning removes the 64-bit multiply+modulo from every memory
+    // access that runs with no exclusive reservation held (the common case on
+    // the load/store hot path).
+    //
+    // HAZARD (design D5): this changes the LCG seed *sequence* relative to
+    // upstream VIXL. MaybeClear no longer advances seed_ on unarmed accesses,
+    // so the seed value observed at a later armed access differs from upstream.
+    // All three in-repo simulators (cache track, decoder track, and the
+    // absolute reference oracle) share this one class, so the differential and
+    // absolute oracles stay aligned and vixl_port stays green. But a future
+    // island re-sync that imports an upstream test asserting a specific
+    // store-exclusive (STXR) status WITHOUT a retry loop could then observe a
+    // different pass/fail outcome from the shifted seed sequence. This edit is
+    // deliberately isolated in its own commit for exactly that reason:
+    // bisect/revert THIS commit independently if such a test ever fails.
+    // [cache-hotpath-tier1 T2]
+    if (size_ == 0) {
+      return;
+    }
+    // gaby-vm END
     if ((seed_ % kSkipClearProbability) != 0) {
       Clear();
     }

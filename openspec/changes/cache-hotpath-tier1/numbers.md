@@ -28,7 +28,7 @@ commit, cumulative on the branch)
 |-------|------:|-----:|-------:|----:|---------:|-------|
 | T1 (LogicVRegister) | 9.395 | 10.282 | 10.702 | 9.360 | 11.335 | applogic -20.9% vs baseline; scalar within noise (±0.8%). |
 | T2a (trace tail + guard bounds) | 8.996 | 10.341 | 9.966 | 9.254 | 10.783 | vs T1: parse -4.2%, struct -6.9%, applogic -4.9%, fsm -1.1%; hash +0.6% (noise). |
-| T2b (MaybeClear LCG) | | | | | | |
+| T2b (MaybeClear LCG) | 8.671 | 10.354 | 9.476 | 9.137 | 10.603 | vs T2a: parse -3.6%, struct -4.9%, applogic -1.7%, fsm -1.3%; hash +0.1% (noise). |
 | T3 (MOVPRFX flag) | | | | | | |
 | T4 (hub epilogue) | | | | | | |
 | T5 (interception flag) | | | | | | |
@@ -102,6 +102,39 @@ in-repo test compares printed simulator trace output — `VIXL_PORT_TRACE` only
 drives harness `[run]` logging, not `SetTraceParameters` — so the correctness
 guard rails cover state equivalence (24/24 ctest, `vixl_port` 3/3, `--verify`
 bit-identical) rather than byte-for-byte trace text.
+
+### T2b detail (task 3.4) — MaybeClear LCG early-return (own commit, design D5)
+
+`SimExclusiveLocalMonitor::MaybeClear` ran a 64-bit multiply + modulo LCG on
+every memory access even when no exclusive reservation is held. When the
+monitor is unarmed (`size_ == 0`) `Clear()` is a no-op, so the upstream body's
+only effect is stepping the seed; the business kernels never arm the monitor
+(no ldxr/stxr), so the early return fires on every memory access. Own commit,
+marker comment naming the design-D5 hazard: this shifts the LCG seed *sequence*
+vs upstream VIXL, harmless because all three in-repo simulators share the class
+(oracles stay aligned) but a future island re-sync importing an upstream test
+that asserts a specific STXR status without a retry loop could diverge — revert
+this commit in isolation if that ever happens.
+
+Three `--mode cache --seconds 1.0` runs after the commit (median in the row
+above), ns/insn:
+
+| run | parse | hash | struct | fsm | applogic |
+|-----|------:|-----:|-------:|----:|---------:|
+| 1 | 8.671 | 10.259 | 9.484 | 9.137 | 10.603 |
+| 2 | 8.670 | 10.514 | 9.476 | 9.122 | 10.633 |
+| 3 | 8.697 | 10.354 | 9.475 | 9.170 | 10.600 |
+| med | 8.671 | 10.354 | 9.476 | 9.137 | 10.603 |
+
+vs the T2a row: parse 8.996 → 8.671 (-3.6%), struct 9.966 → 9.476 (-4.9%),
+applogic 10.783 → 10.603 (-1.7%), fsm 9.254 → 9.137 (-1.3%); hash
+10.341 → 10.354 (+0.1%, per-run -0.8% / +1.7% / +0.1%, within noise, no >2%
+regression in any run). `bench_business --verify` OK (cache == decoder);
+`ctest -R vixl_port` 3/3; full debug ctest 24/24.
+
+Cumulative T2 (a+b) vs the pre-T2 T1 row: parse 9.395 → 8.671 (-7.7%),
+struct 10.702 → 9.476 (-11.5%), applogic 11.335 → 10.603 (-6.5%),
+fsm 9.360 → 9.137 (-2.4%), hash 10.282 → 10.354 (+0.7%, noise).
 
 ## T6 disassembly gate (task 1.2)
 
