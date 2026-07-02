@@ -529,11 +529,35 @@ class SimRegisterBase {
     SetSizeInBytes(size_in_bits / kBitsPerByte);
   }
 
+  // gaby-vm BEGIN:
+  // Zero-extension clear bound. The pre-write clear only needs to cover the
+  // register's observable width; at the pinned VL=128 that is 16B for V/Z, 2B
+  // for P and 8B for scalar r-regs, versus the full kMaxSizeInBytes backing
+  // store (256B for V/Z at SVE-max) the upstream Clear() zeroed on every write.
+  // The applogic FP profile charged that full-width memset to memset/bzero.
+  // We bound it to a *compile-time constant* min(kMaxSizeInBytes,
+  // kZRegMinSizeInBytes) rather than the runtime size_in_bytes_: a runtime
+  // length forces a general memset call and pessimises the scalar W-register
+  // write hot path (~5% on the scalar business kernels), whereas the constant
+  // lowers to a couple of stores (a single store for scalar, where the value
+  // stays 8B). Safe for every instantiation: SetVectorLengthInBits pins VL<=128
+  // (guarded there), so size_in_bytes_ never exceeds this span (V/Z<=16, P<=2,
+  // scalar==8) and the span never exceeds kMaxSizeInBytes, so the clear stays
+  // in bounds and covers the whole observable register before WriteLane
+  // restores lane 0. [cache-hotpath-tier1 T1]
+  static const unsigned kGabyWriteClearBytes =
+      (kMaxSizeInBytes < kZRegMinSizeInBytes) ? kMaxSizeInBytes
+                                              : kZRegMinSizeInBytes;
+
   // Write the specified value. The value is zero-extended if necessary.
   template <typename T>
   void Write(T new_value) {
     // All AArch64 registers are zero-extending.
-    if (sizeof(new_value) < GetSizeInBytes()) Clear();
+    if (sizeof(new_value) < GetSizeInBytes()) {
+      memset(value_, 0, kGabyWriteClearBytes);
+      NotifyRegisterWrite();
+    }
+    // gaby-vm END
     WriteLane(new_value, 0);
     NotifyRegisterWrite();
   }
@@ -1081,12 +1105,31 @@ class LogicVRegister {
  private:
   SimVRegister& register_;
 
-  // Allocate one saturation state entry per lane; largest register is type Q,
-  // and lanes can be a minimum of one byte wide.
-  Saturation saturated_[kZRegMaxSizeInBytes];
+  // gaby-vm BEGIN:
+  // Right-size the per-lane saturation/rounding scratch from the SVE-max
+  // (VL=2048 -> 256 lanes) extent to the VL=128 lane bound. The simulator pins
+  // the vector length to kZRegMinSize (128b) in SetVectorLengthInBits, which
+  // also rejects any larger VL while this bound is in force (see
+  // simulator-aarch64.cc). At VL=128 the most lanes any format can address is
+  // 16 (16xB in a 128-bit NEON Q; SVE at VL=128 is likewise 128/8 = 16), so 16
+  // entries is exact rather than a heuristic. Every writer indexes these arrays
+  // by a lane in [0, LaneCountFromFormat(vform)) (extractnarrow's offset+i tops
+  // out at 15 for dstform kFormat16B), all <= 16 at VL=128. Shrinking these
+  // arrays collapses the per-construction zeroing and by-value copies that the
+  // applogic FP profile charged to memset/memmove. Widening SVE coverage or
+  // unpinning VL must revisit this bound (see docs/refs/vixl-extraction-map.md).
+  // [cache-hotpath-tier1 T1]
+  //
+  // Tied to kZRegMinSize so the constant tracks the pinned VL: 128 / 8 = 16.
+  static const unsigned kGabyLogicVRegMaxLanes = kZRegMinSizeInBytes;
+  VIXL_STATIC_ASSERT(kGabyLogicVRegMaxLanes == (kZRegMinSize / kBitsPerByte));
+
+  // Allocate one saturation state entry per lane.
+  Saturation saturated_[kGabyLogicVRegMaxLanes];
 
   // Allocate one rounding state entry per lane.
-  bool round_[kZRegMaxSizeInBytes];
+  bool round_[kGabyLogicVRegMaxLanes];
+  // gaby-vm END
 };
 
 // Represent an SVE addressing mode and abstract per-lane address generation to

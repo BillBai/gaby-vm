@@ -785,6 +785,15 @@ void Simulator::SetVectorLengthInBits(unsigned vector_length) {
   VIXL_ASSERT((vector_length >= kZRegMinSize) &&
               (vector_length <= kZRegMaxSize));
   VIXL_ASSERT(IsPowerOf2(vector_length));
+  // gaby-vm BEGIN:
+  // The simulator stays pinned at VL=128 while LogicVRegister's per-lane
+  // saturation/rounding scratch is sized to kGabyLogicVRegMaxLanes (16 lanes,
+  // simulator-aarch64.h). A larger VL would let NEON/SVE leaves index those
+  // arrays past 16 lanes and corrupt the stack, so reject it here. Revisit this
+  // guard and that array bound together before unpinning VL or widening SVE
+  // coverage. [cache-hotpath-tier1 T1]
+  VIXL_ASSERT(vector_length <= kZRegMinSize);
+  // gaby-vm END
   vector_length_ = vector_length;
 
   for (unsigned i = 0; i < kNumberOfZRegisters; i++) {
@@ -6702,7 +6711,13 @@ void Simulator::SimulateFPRoundIntToSize(const Instruction* instr) {
     FrintMode frint_mode;
   };
 
-  std::unordered_map<uint32_t, FPRoundInfo> modes = {
+  // gaby-vm BEGIN:
+  // Hoist the form-hash lookup table to a function-local static so the FP round
+  // hot path stops rebuilding an unordered_map on every instruction. Magic
+  // static init is thread-safe; the table is read-only after init and the
+  // one-simulator-per-thread model is unaffected. operator[] becomes at()
+  // because the map is now const. [cache-hotpath-tier1 T1]
+  static const std::unordered_map<uint32_t, FPRoundInfo> modes = {
       {"frint32x_d_floatdp1"_h, {kFormatD, true, kFrintToInt32}},
       {"frint32x_s_floatdp1"_h, {kFormatS, true, kFrintToInt32}},
       {"frint64x_d_floatdp1"_h, {kFormatD, true, kFrintToInt64}},
@@ -6712,9 +6727,12 @@ void Simulator::SimulateFPRoundIntToSize(const Instruction* instr) {
       {"frint64z_d_floatdp1"_h, {kFormatD, false, kFrintToInt64}},
       {"frint64z_s_floatdp1"_h, {kFormatS, false, kFrintToInt64}},
   };
+  // gaby-vm END
   VIXL_ASSERT(modes.count(form_hash_) == 1);
 
-  auto [vform, use_fpcr, frint_mode] = modes[form_hash_];
+  // gaby-vm:
+  // Const map: read via at() instead of the inserting operator[].
+  auto [vform, use_fpcr, frint_mode] = modes.at(form_hash_);
   FPRounding rounding_mode =
       use_fpcr ? static_cast<FPRounding>(ReadFpcr().GetRMode()) : FPZero;
   bool inexact_exception = true;
@@ -6738,7 +6756,13 @@ void Simulator::SimulateFPRoundInt(const Instruction* instr) {
     bool inexact_exception;
   };
 
-  std::unordered_map<uint32_t, FPRoundInfo> modes =
+  // gaby-vm BEGIN:
+  // Hoist the form-hash lookup table to a function-local static so the FP round
+  // hot path stops rebuilding an unordered_map on every instruction. Magic
+  // static init is thread-safe; the table is read-only after init and the
+  // one-simulator-per-thread model is unaffected. operator[] becomes at()
+  // because the map is now const. [cache-hotpath-tier1 T1]
+  static const std::unordered_map<uint32_t, FPRoundInfo> modes =
       {{"frinta_d_floatdp1"_h, {kFormatD, false, FPTieAway, false}},
        {"frinta_h_floatdp1"_h, {kFormatH, false, FPTieAway, false}},
        {"frinta_s_floatdp1"_h, {kFormatS, false, FPTieAway, false}},
@@ -6760,9 +6784,13 @@ void Simulator::SimulateFPRoundInt(const Instruction* instr) {
        {"frintz_d_floatdp1"_h, {kFormatD, false, FPZero, false}},
        {"frintz_h_floatdp1"_h, {kFormatH, false, FPZero, false}},
        {"frintz_s_floatdp1"_h, {kFormatS, false, FPZero, false}}};
+  // gaby-vm END
   VIXL_ASSERT(modes.count(form_hash_) == 1);
 
-  auto [vform, use_fpcr, rounding_mode, inexact_exception] = modes[form_hash_];
+  // gaby-vm:
+  // Const map: read via at() instead of the inserting operator[].
+  auto [vform, use_fpcr, rounding_mode, inexact_exception] =
+      modes.at(form_hash_);
 
   rounding_mode =
       use_fpcr ? static_cast<FPRounding>(ReadFpcr().GetRMode()) : rounding_mode;

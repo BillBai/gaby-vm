@@ -24,17 +24,22 @@ hash 10.49 / struct 10.81 / fsm 9.34 / applogic 14.26.
 
 ## 2. T1 — LogicVRegister right-sizing (largest item, applogic target)
 
-- [ ] 2.1 Shrink `LogicVRegister::saturated_` / `round_` to the VL=128 lane
+- [x] 2.1 Shrink `LogicVRegister::saturated_` / `round_` to the VL=128 lane
       bound with `static_assert` tied to `kZRegMinSizeInBytes`; marker
       convention (design D1).
-- [ ] 2.2 Add the runtime VL guard in `SetVectorLengthInBits` (reject VL >
+- [x] 2.2 Add the runtime VL guard in `SetVectorLengthInBits` (reject VL >
       128 while the bound is in force) and the revisit note in
       `docs/refs/vixl-extraction-map.md` (design D2).
-- [ ] 2.3 Bound `SimRegisterBase::Write`'s clear to the actual register size
-      (precedent: `ClearTail`).
-- [ ] 2.4 Hoist the per-call `unordered_map` in `SimulateFPRoundInt` /
+- [x] 2.3 Bound `SimRegisterBase::Write`'s clear to the actual register size
+      (precedent: `ClearTail`). **Bounded to a compile-time constant
+      `min(kMaxSizeInBytes, kZRegMinSizeInBytes)` rather than the runtime
+      `size_in_bytes_`: the runtime length regressed the scalar kernels ~5%
+      by turning the scalar write's single-store clear into a `memset` call.
+      See numbers.md.**
+- [x] 2.4 Hoist the per-call `unordered_map` in `SimulateFPRoundInt` /
       `SimulateFPRoundIntToSize` to static storage.
-- [ ] 2.5 GRL; expect the big applogic move (~14.3 → ~10-11 on this host).
+- [x] 2.5 GRL; expect the big applogic move (~14.3 → ~10-11 on this host).
+      **applogic 14.326 → 11.335 (-20.9%); scalar within noise.**
 
 ## 3. T2 — Load/store leaf de-layering
 

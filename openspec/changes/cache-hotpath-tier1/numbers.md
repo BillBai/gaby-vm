@@ -26,13 +26,40 @@ commit, cumulative on the branch)
 
 | after | parse | hash | struct | fsm | applogic | notes |
 |-------|------:|-----:|-------:|----:|---------:|-------|
-| T1 (LogicVRegister) | | | | | | |
+| T1 (LogicVRegister) | 9.395 | 10.282 | 10.702 | 9.360 | 11.335 | applogic -20.9% vs baseline; scalar within noise (±0.8%). |
 | T2a (trace tail + guard bounds) | | | | | | |
 | T2b (MaybeClear LCG) | | | | | | |
 | T3 (MOVPRFX flag) | | | | | | |
 | T4 (hub epilogue) | | | | | | |
 | T5 (interception flag) | | | | | | |
 | T6 (AddWithCarry) | | | | | | go/no-go per task 1.2 |
+
+### T1 detail (task 2.5)
+
+Three `--mode cache --seconds 1.0` runs after the T1 commit (median in the
+row above), ns/insn:
+
+| run | parse | hash | struct | fsm | applogic |
+|-----|------:|-----:|-------:|----:|---------:|
+| 1 | 9.395 | 10.365 | 10.694 | 9.336 | 11.334 |
+| 2 | 9.400 | 10.190 | 10.710 | 9.360 | 11.335 |
+| 3 | 9.362 | 10.282 | 10.702 | 9.355 | 11.338 |
+| med | 9.395 | 10.282 | 10.702 | 9.360 | 11.335 |
+
+applogic runs: 11.334 / 11.335 / 11.338 (median 11.335), down from the 14.326
+baseline — a 20.9% drop, at the strong end of the ~14.3 → ~10-11 paper estimate.
+Scalar shapes are unchanged within run-to-run noise (parse +0.3%, hash -0.0%,
+struct -0.8%, fsm +0.2%). `bench_business --verify` OK (cache == decoder for all
+kernels); `ctest -R vixl_port` 3/3; full debug ctest 24/24.
+
+Implementation note: task 2.3 (`SimRegisterBase::Write` clear) was bounded to a
+**compile-time constant** `min(kMaxSizeInBytes, kZRegMinSizeInBytes)`, not the
+runtime `size_in_bytes_`. A first cut using the runtime length (via `ClearTail`)
+regressed the scalar kernels ~5% consistently across 3 runs because it turned
+the scalar W-register write's single-store clear into a general `memset` call;
+the constant bound keeps the scalar path single-store while still shrinking the
+V/Z clear from 256B to 16B, so it recovers the scalar cost and also improves
+applogic over the runtime-length version (11.3 vs 12.3).
 
 ## T6 disassembly gate (task 1.2)
 

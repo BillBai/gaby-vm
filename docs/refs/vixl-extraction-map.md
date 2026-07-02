@@ -324,6 +324,14 @@ rewrites). Final layout decided when import lands.
 - **`<mutex>` in `simulator-aarch64.h`** suggests at least one
   per-instance lock (likely in `MetaDataDepot`). Audit for
   thread-safety implications during the multi-instance work.
+- **`LogicVRegister` per-lane scratch is right-sized to VL=128**
+  (`kGabyLogicVRegMaxLanes` = 16, `simulator-aarch64.h`; cache-hotpath-tier1
+  T1). The `saturated_` / `round_` arrays no longer cover the SVE-max lane
+  count, and `SetVectorLengthInBits` asserts VL stays at `kZRegMinSize` (128b).
+  Widening SVE test coverage (which would let the island run vl512/vl2048
+  bodies) or otherwise unpinning the vector length requires revisiting that
+  lane bound and its VL guard together — grow the arrays back before allowing
+  a larger VL.
 
 ## Where to read next
 
