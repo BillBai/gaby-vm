@@ -4683,29 +4683,44 @@ void Simulator::LoadStoreHelper(const Instruction* instr,
       VIXL_UNIMPLEMENTED();
   }
 
-  // Print a detailed trace (including the memory address).
-  bool extend = (extend_to_size != 0);
-  unsigned access_size = 1 << instr->GetSizeLS();
-  unsigned result_size = extend ? extend_to_size : access_size;
-  PrintRegisterFormat print_format =
-      rt_is_vreg ? GetPrintRegisterFormatForSizeTryFP(result_size)
-                 : GetPrintRegisterFormatForSize(result_size);
+  // gaby-vm BEGIN:
+  // Gate the trace-preparation tail on the trace mask. With tracing off
+  // (GetTraceParameters() == 0) every Log* call below is a no-op: each one
+  // guards on ShouldTrace{Regs,Writes,VRegs}(), which are bits of the same
+  // GetTraceParameters() value. So the data-size re-derivation, the
+  // GetPrintRegisterFormatForSize[TryFP] runtime switch, and the cross-TU
+  // IsLoad()/IsStore() mask classification are pure dead work on the memory
+  // hot path. Testing the same mask the Log* helpers test keeps trace-enabled
+  // output byte-identical (when nonzero the whole tail runs exactly as before)
+  // while skipping it entirely when it can produce nothing. The
+  // local_monitor_.MaybeClear() below is a non-trace side effect and stays
+  // unconditional. [cache-hotpath-tier1 T2]
+  if (GetTraceParameters() != 0) {
+    // Print a detailed trace (including the memory address).
+    bool extend = (extend_to_size != 0);
+    unsigned access_size = 1 << instr->GetSizeLS();
+    unsigned result_size = extend ? extend_to_size : access_size;
+    PrintRegisterFormat print_format =
+        rt_is_vreg ? GetPrintRegisterFormatForSizeTryFP(result_size)
+                   : GetPrintRegisterFormatForSize(result_size);
 
-  if (instr->IsLoad()) {
-    if (rt_is_vreg) {
-      LogVRead(srcdst, print_format, address);
+    if (instr->IsLoad()) {
+      if (rt_is_vreg) {
+        LogVRead(srcdst, print_format, address);
+      } else {
+        LogExtendingRead(srcdst, print_format, access_size, address);
+      }
+    } else if (instr->IsStore()) {
+      if (rt_is_vreg) {
+        LogVWrite(srcdst, print_format, address);
+      } else {
+        LogWrite(srcdst, GetPrintRegisterFormatForSize(result_size), address);
+      }
     } else {
-      LogExtendingRead(srcdst, print_format, access_size, address);
+      VIXL_ASSERT(op == PRFM);
     }
-  } else if (instr->IsStore()) {
-    if (rt_is_vreg) {
-      LogVWrite(srcdst, print_format, address);
-    } else {
-      LogWrite(srcdst, GetPrintRegisterFormatForSize(result_size), address);
-    }
-  } else {
-    VIXL_ASSERT(op == PRFM);
   }
+  // gaby-vm END
 
   local_monitor_.MaybeClear();
 }
@@ -4829,32 +4844,43 @@ void Simulator::LoadStorePairHelper(const Instruction* instr,
       VIXL_UNREACHABLE();
   }
 
-  // Print a detailed trace (including the memory address).
-  unsigned result_size = sign_extend ? kXRegSizeInBytes : element_size;
-  PrintRegisterFormat print_format =
-      rt_is_vreg ? GetPrintRegisterFormatForSizeTryFP(result_size)
-                 : GetPrintRegisterFormatForSize(result_size);
+  // gaby-vm BEGIN:
+  // Gate the trace-preparation tail on the trace mask, same rationale as the
+  // single-register LoadStoreHelper above: with tracing off every Log* call
+  // guards on a bit of GetTraceParameters(), so the result-size derivation and
+  // the GetPrintRegisterFormatForSize[TryFP] runtime switch are dead work on
+  // the memory hot path. The gate tests the same mask, so trace-enabled output
+  // stays byte-identical; local_monitor_.MaybeClear() is a non-trace side
+  // effect and stays unconditional below. [cache-hotpath-tier1 T2]
+  if (GetTraceParameters() != 0) {
+    // Print a detailed trace (including the memory address).
+    unsigned result_size = sign_extend ? kXRegSizeInBytes : element_size;
+    PrintRegisterFormat print_format =
+        rt_is_vreg ? GetPrintRegisterFormatForSizeTryFP(result_size)
+                   : GetPrintRegisterFormatForSize(result_size);
 
-  if (instr->IsLoad()) {
-    if (rt_is_vreg) {
-      LogVRead(rt, print_format, address);
-      LogVRead(rt2, print_format, address2);
-    } else if (sign_extend) {
-      LogExtendingRead(rt, print_format, element_size, address);
-      LogExtendingRead(rt2, print_format, element_size, address2);
+    if (instr->IsLoad()) {
+      if (rt_is_vreg) {
+        LogVRead(rt, print_format, address);
+        LogVRead(rt2, print_format, address2);
+      } else if (sign_extend) {
+        LogExtendingRead(rt, print_format, element_size, address);
+        LogExtendingRead(rt2, print_format, element_size, address2);
+      } else {
+        LogRead(rt, print_format, address);
+        LogRead(rt2, print_format, address2);
+      }
     } else {
-      LogRead(rt, print_format, address);
-      LogRead(rt2, print_format, address2);
-    }
-  } else {
-    if (rt_is_vreg) {
-      LogVWrite(rt, print_format, address);
-      LogVWrite(rt2, print_format, address2);
-    } else {
-      LogWrite(rt, print_format, address);
-      LogWrite(rt2, print_format, address2);
+      if (rt_is_vreg) {
+        LogVWrite(rt, print_format, address);
+        LogVWrite(rt2, print_format, address2);
+      } else {
+        LogWrite(rt, print_format, address);
+        LogWrite(rt2, print_format, address2);
+      }
     }
   }
+  // gaby-vm END
 
   local_monitor_.MaybeClear();
 }

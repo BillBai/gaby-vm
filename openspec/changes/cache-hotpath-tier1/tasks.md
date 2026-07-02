@@ -43,11 +43,26 @@ hash 10.49 / struct 10.81 / fsm 9.34 / applogic 14.26.
 
 ## 3. T2 — Load/store leaf de-layering
 
-- [ ] 3.1 Gate the trace-preparation tail in `LoadStoreHelper` and
+- [x] 3.1 Gate the trace-preparation tail in `LoadStoreHelper` and
       `LoadStorePairHelper` on the trace mask; verify decoder-track
-      trace-enabled output is unchanged.
-- [ ] 3.2 Precompute `SimStack` guard-region bounds at construction.
-- [ ] 3.3 GRL for 3.1+3.2 (one commit).
+      trace-enabled output is unchanged. **Gated on `GetTraceParameters() != 0`
+      (same mask the `Log*` helpers test); trace-ON output is byte-identical by
+      construction. No in-repo test compares printed trace text
+      (`VIXL_PORT_TRACE` only drives harness `[run]` logging), so identity is
+      covered by state equivalence: 24/24 ctest, `vixl_port` 3/3, `--verify`.**
+- [x] 3.2 Precompute `SimStack` guard-region bounds at construction.
+      **Cached inclusive allocation bounds in `SimStack::Allocated` at
+      `Allocate()`; `IsAccessInGuardRegion` rewritten to a two-compare
+      not-in-allocation fast-out (the common heap/code case) + two-compare
+      in-guard test, bit-identical to the original four-compare OR. The
+      exploration's plain "two compares" `(start<=limit_)||(end>=base_)` would
+      have wrongly aborted every heap access below the allocation — see
+      numbers.md / report.**
+- [x] 3.3 GRL for 3.1+3.2 (one commit). **Debug+release build green;
+      `vixl_port` 3/3; full debug ctest 24/24; `--verify` OK. Bench (median of
+      3 vs T1): parse 9.395→8.996 (-4.2%), struct 10.702→9.966 (-6.9%),
+      applogic 11.335→10.783 (-4.9%), fsm 9.360→9.254 (-1.1%), hash
+      10.282→10.341 (+0.6%, noise). See numbers.md "T2a detail".**
 - [ ] 3.4 Separate commit (design D5): early-return `LocalMonitor::
       MaybeClear` when unarmed, with the marker comment naming the upstream
       LCG-sequence deviation. GRL.

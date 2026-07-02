@@ -160,11 +160,27 @@ class SimStack {
       // Inclusive bounds.
       const char* start = reinterpret_cast<const char*>(base);
       const char* end = start + size - 1;
-      const char* data_start = data_.get();
-      const char* data_end = data_start + alloc_size_ - 1;
-      bool in_base_guard = (start <= data_end) && (end >= base_);
-      bool in_limit_guard = (start <= limit_) && (end >= data_start);
-      return in_base_guard || in_limit_guard;
+      // gaby-vm BEGIN:
+      // Use the allocation bounds cached at Allocate() time instead of
+      // reloading data_.get() and recomputing data_start + alloc_size_ - 1 on
+      // every access. This runs on the memory hot path (Memory::Read/Write call
+      // it for every access, the vast majority of which are ordinary
+      // heap/code addresses far outside the stack allocation). Fast-out on the
+      // common case with two compares: an access that does not overlap the
+      // allocation [data_start_, data_end_] cannot touch either guard region.
+      // For an access that does overlap, being in a guard region is exactly
+      // "not entirely inside the usable window (limit_, base_)", i.e.
+      // (start <= limit_) || (end >= base_). This is bit-identical to the
+      // original four-compare OR of the two guard-region overlap tests: given
+      // start <= data_end_ the base-guard test reduces to (end >= base_), and
+      // given end >= data_start_ the limit-guard test reduces to
+      // (start <= limit_); an access outside the allocation matched neither
+      // guard there either. [cache-hotpath-tier1 T2]
+      if ((end < data_start_) || (start > data_end_)) {
+        return false;
+      }
+      return (start <= limit_) || (end >= base_);
+      // gaby-vm END
     }
 
    private:
@@ -172,6 +188,14 @@ class SimStack {
     char* limit_;
     char* base_;
     size_t alloc_size_;
+    // gaby-vm BEGIN:
+    // Inclusive allocation bounds precomputed in SimStack::Allocate() so
+    // IsAccessInGuardRegion() above avoids the per-access unique_ptr deref and
+    // pointer arithmetic. data_start_ == data_.get(),
+    // data_end_ == data_.get() + alloc_size_ - 1. [cache-hotpath-tier1 T2]
+    const char* data_start_;
+    const char* data_end_;
+    // gaby-vm END
 
     friend class SimStack;
   };
@@ -193,6 +217,14 @@ class SimStack {
     a.limit_ = data_aligned + l - 1;
     a.base_ = data_aligned + l + u;
     a.alloc_size_ = alloc_size;
+    // gaby-vm BEGIN:
+    // Cache the inclusive allocation bounds read by IsAccessInGuardRegion() on
+    // the memory hot path. This is the only place the Allocated members are
+    // set (private, friended to SimStack), so caching here covers every
+    // Allocated instance. [cache-hotpath-tier1 T2]
+    a.data_start_ = a.data_.get();
+    a.data_end_ = a.data_.get() + alloc_size - 1;
+    // gaby-vm END
     return a;
   }
 

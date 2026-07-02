@@ -27,7 +27,7 @@ commit, cumulative on the branch)
 | after | parse | hash | struct | fsm | applogic | notes |
 |-------|------:|-----:|-------:|----:|---------:|-------|
 | T1 (LogicVRegister) | 9.395 | 10.282 | 10.702 | 9.360 | 11.335 | applogic -20.9% vs baseline; scalar within noise (±0.8%). |
-| T2a (trace tail + guard bounds) | | | | | | |
+| T2a (trace tail + guard bounds) | 8.996 | 10.341 | 9.966 | 9.254 | 10.783 | vs T1: parse -4.2%, struct -6.9%, applogic -4.9%, fsm -1.1%; hash +0.6% (noise). |
 | T2b (MaybeClear LCG) | | | | | | |
 | T3 (MOVPRFX flag) | | | | | | |
 | T4 (hub epilogue) | | | | | | |
@@ -60,6 +60,48 @@ the scalar W-register write's single-store clear into a general `memset` call;
 the constant bound keeps the scalar path single-store while still shrinking the
 V/Z clear from 256B to 16B, so it recovers the scalar cost and also improves
 applogic over the runtime-length version (11.3 vs 12.3).
+
+### T2a detail (task 3.3) — trace tail gate + guard-region bounds
+
+Two changes in one commit (tasks 3.1 + 3.2), cumulative on top of T1:
+
+- 3.1 gates the dead trace-preparation tail in `LoadStoreHelper` /
+  `LoadStorePairHelper` behind a single `GetTraceParameters() != 0` test (the
+  same mask the `Log*` helpers already test bit-by-bit), so with tracing off
+  the second data-size derivation, the `GetPrintRegisterFormatForSize[TryFP]`
+  runtime switch, and the cross-TU `IsLoad()/IsStore()` classification are
+  skipped. `local_monitor_.MaybeClear()` stays unconditional.
+- 3.2 caches the inclusive allocation bounds in `SimStack::Allocated` at
+  `Allocate()` time and rewrites `IsAccessInGuardRegion` to a two-compare
+  fast-out (access does not overlap the allocation → not a guard access,
+  which is the common case: every heap/code access) followed by a two-compare
+  in-guard test, bit-identical to the original four-compare form.
+
+Three `--mode cache --seconds 1.0` runs after the commit (median in the row
+above), ns/insn:
+
+| run | parse | hash | struct | fsm | applogic |
+|-----|------:|-----:|-------:|----:|---------:|
+| 1 | 9.003 | 10.371 | 9.966 | 9.254 | 10.783 |
+| 2 | 8.996 | 10.341 | 9.940 | 9.213 | 10.888 |
+| 3 | 8.984 | 10.273 | 9.968 | 9.257 | 10.773 |
+| med | 8.996 | 10.341 | 9.966 | 9.254 | 10.783 |
+
+vs the T1 row: the load/store-heavy shapes move as predicted — parse
+9.395 → 8.996 (-4.2%), struct 10.702 → 9.966 (-6.9%). applogic 11.335 → 10.783
+(-4.9%) and fsm 9.360 → 9.254 (-1.1%) also improve (both do memory work).
+hash 10.282 → 10.341 (+0.6%) is compute-bound and stays within run-to-run
+noise (per-run deltas +0.9% / +0.6% / -0.1%; no shape regresses >2% in any of
+the three runs). `bench_business --verify` OK (cache == decoder for all
+kernels); `ctest -R vixl_port` 3/3; full debug ctest 24/24.
+
+Trace-ON identity is by construction: the 3.1 gate tests the exact
+`GetTraceParameters()` value each `Log*` call tests, so with any trace bit set
+the whole tail runs unchanged and with none set every `Log*` is a no-op. No
+in-repo test compares printed simulator trace output — `VIXL_PORT_TRACE` only
+drives harness `[run]` logging, not `SetTraceParameters` — so the correctness
+guard rails cover state equivalence (24/24 ctest, `vixl_port` 3/3, `--verify`
+bit-identical) rather than byte-for-byte trace text.
 
 ## T6 disassembly gate (task 1.2)
 
