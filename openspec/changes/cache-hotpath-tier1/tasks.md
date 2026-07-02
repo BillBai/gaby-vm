@@ -117,11 +117,26 @@ hash 10.49 / struct 10.81 / fsm 9.34 / applogic 14.26.
 
 ## 6. T5 — Branch-interception probe flag
 
-- [ ] 6.1 Add the "any interception registered" flag on `MetaDataDepot`,
+- [x] 6.1 Add the "any interception registered" flag on `MetaDataDepot`,
       set/cleared by registration and `ResetState`; skip the per-BR/BLR map
-      probe when clear.
-- [ ] 6.2 Confirm the interception-registering vixl_port bodies still pass
-      (they keep the flag-on path covered); GRL.
+      probe when clear. **`gaby_has_branch_interception_` on `MetaDataDepot`,
+      set at the sole insert site (`RegisterBranchInterception`) and cleared at
+      the sole clear site (`ResetState`); the BR/BLR probe in
+      `VisitUnconditionalBranchToRegister` is gated behind
+      `meta_data_.HasBranchInterception()`. Audit: `branch_interceptions_` has
+      no erase path (insert + clear are its only two mutators), so the flag
+      cannot desync from emptiness — no other mutation site to handle. Marker
+      convention on every edit.**
+- [x] 6.2 Confirm the interception-registering vixl_port bodies still pass
+      (they keep the flag-on path covered); GRL. **`vixl_port` `branch_interception`
+      body registers 8 interceptions then BLRs to them (flag-ON path); passes.
+      Debug+release build green; full debug ctest 24/24; `vixl_port` 3/3;
+      `--verify` OK. Bench (median of 3 vs T4): parse 8.521→8.455 (-0.8%), hash
+      7.287→7.177 (-1.5%), struct 9.362→9.384 (+0.2%), fsm 8.796→8.944 (+1.7%),
+      applogic 10.410→10.416 (+0.1%). fsm's swing is a layout artifact (it runs
+      zero BR/BLR probes); a same-session A/B put drift-free deltas at parse
+      -0.24%, hash -1.32%, struct -0.23%, fsm +1.29%, applogic -0.33% — nothing
+      >2%. Expected-neutral, landed. See numbers.md "T5 detail".**
 
 ## 7. T6 — AddWithCarry flag-skip (only if 1.2 says go)
 

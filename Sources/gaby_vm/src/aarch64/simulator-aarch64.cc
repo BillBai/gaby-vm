@@ -4091,7 +4091,15 @@ void Simulator::VisitUnconditionalBranchToRegister(const Instruction* instr) {
     GCSPush(reinterpret_cast<uint64_t>(instr->GetNextInstruction()));
   }
 
-  if (!ret) {
+  // gaby-vm BEGIN:
+  //   perf(cache-hotpath T5): gate the per-BR/BLR interception probe on the
+  //   "any interception registered" flag. FindBranchInterception is an
+  //   unordered_map lookup run on every executed non-ret BR/BLR; when no
+  //   interception has been registered the map is empty and the lookup always
+  //   misses, so skipping it is behavior-preserving. When interceptions ARE
+  //   registered the flag is set and the original probe runs unchanged, so
+  //   decoder/debug-track behavior is identical in that case.
+  if (!ret && meta_data_.HasBranchInterception()) {
     // Check for interceptions to the target address, if one is found, call it.
     MetaDataDepot::BranchInterceptionAbstract* interception =
         meta_data_.FindBranchInterception(addr);
@@ -4106,6 +4114,7 @@ void Simulator::VisitUnconditionalBranchToRegister(const Instruction* instr) {
       (*interception)(this);
     }
   }
+  // gaby-vm END
 
   WriteNextBType(GetBTypeFromInstruction(instr));
   // gaby-vm:

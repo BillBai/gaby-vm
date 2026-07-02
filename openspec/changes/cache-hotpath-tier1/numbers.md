@@ -31,7 +31,7 @@ commit, cumulative on the branch)
 | T2b (MaybeClear LCG) | 8.671 | 10.354 | 9.476 | 9.137 | 10.603 | vs T2a: parse -3.6%, struct -4.9%, applogic -1.7%, fsm -1.3%; hash +0.1% (noise). |
 | T3 (MOVPRFX flag) | 8.659 | 10.426 | 9.561 | 9.096 | 10.597 | performance-neutral (see T3 detail); landed for spec/structural reasons. |
 | T4 (hub epilogue) | 8.521 | 7.287 | 9.362 | 8.796 | 10.410 | every shape improves; hash -30% (same-session A/B-confirmed, not drift), scalar/FP -1.4..-3.8% (see T4 detail). |
-| T5 (interception flag) | | | | | | |
+| T5 (interception flag) | 8.455 | 7.177 | 9.384 | 8.944 | 10.416 | expected-neutral (see T5 detail): the suite runs no non-ret BR/BLR, so the gated probe never fires; A/B-confirmed drift-free within ±1.3%, nothing regresses >2%. |
 | T6 (AddWithCarry) | | | | | | go/no-go per task 1.2 |
 
 ### T1 detail (task 2.5)
@@ -235,6 +235,66 @@ kernels" context predicted would matter.
 `bench_business --verify` OK (cache == decoder for all kernels);
 `ctest --test-dir build/debug` 24/24 (incl. shadow_runner, both movprfx
 tests, branch-hook reentrancy); `ctest -R vixl_port` 3/3.
+
+### T5 detail (task 6.2) — branch-interception probe flag
+
+One edit, cache and decoder track alike: every executed non-ret BR/BLR ran a
+`std::unordered_map::find` on `MetaDataDepot::branch_interceptions_`
+(`VisitUnconditionalBranchToRegister`) to look up a registered branch
+interception. A bool `gaby_has_branch_interception_` on `MetaDataDepot` now
+mirrors "the map is non-empty" — set at the sole insert site
+(`RegisterBranchInterception`), cleared at the sole clear site (`ResetState`) —
+and the probe is gated on it. The map has no erase path (audited: insert +
+clear are its only two mutators), so the flag can never desync from emptiness;
+`FindBranchInterception` on an empty map already returns nullptr, so gating is
+behavior-preserving. When interceptions ARE registered the flag is set and the
+original probe runs unchanged, so decoder/debug-track behavior is identical in
+that case (the `vixl_port` `branch_interception` body keeps that path covered).
+
+**Expected neutral on this suite, and it is.** The five business kernels are
+self-contained single functions compiled `no-jump-tables`; none executes a
+non-ret BR/BLR, so the gated probe never runs and the flag only ever removes a
+lookup that was already a guaranteed miss. This item's value is for real
+embedder workloads that register interceptions and take indirect calls, which
+this suite does not model.
+
+Three `--mode cache --seconds 1.0` runs after the commit (median in the row
+above), ns/insn:
+
+| run | parse | hash | struct | fsm | applogic |
+|-----|------:|-----:|-------:|----:|---------:|
+| 1 | 8.477 | 7.177 | 9.375 | 8.939 | 10.439 |
+| 2 | 8.444 | 7.175 | 9.384 | 8.944 | 10.414 |
+| 3 | 8.455 | 7.177 | 9.414 | 8.944 | 10.416 |
+| med | 8.455 | 7.177 | 9.384 | 8.944 | 10.416 |
+
+vs the committed T4 row: parse 8.521 → 8.455 (-0.8%), hash 7.287 → 7.177
+(-1.5%), struct 9.362 → 9.384 (+0.2%), fsm 8.796 → 8.944 (+1.7%), applogic
+10.410 → 10.416 (+0.1%). fsm is the only apparent regression, and it is under
+2%; because fsm executes zero BR/BLR probes the change cannot touch its hot
+path, so a cross-session +1.7% points at code/data layout (the extra
+`MetaDataDepot` member + the added branch shift `.text`/struct offsets; fsm is
+the branch-densest, most alignment-sensitive kernel). A same-session A/B
+(stash → rebuild HEAD 1ee1765 → measure → pop → rebuild T5 → measure), two
+back-to-back 5-run batches to null out cross-session drift, isolated the effect:
+
+- T4 (HEAD) medians: parse 8.478 / hash 7.290 / struct 9.389 / fsm 8.815 /
+  applogic 10.409
+- T5 medians: parse 8.458 / hash 7.194 / struct 9.367 / fsm 8.929 /
+  applogic 10.375
+- drift-free deltas: parse -0.24%, hash -1.32%, struct -0.23%, fsm +1.29%,
+  applogic -0.33%
+
+So four shapes improve or stay flat and fsm settles at +1.3% (a layout
+artifact, not the algorithm; an earlier single A/B batch caught a +2.2% thermal
+transient on fsm that did not reproduce across the wider batches). Nothing
+regresses >2% consistently. Landed per the design's "each item ≥ neutral"
+acceptance criterion.
+
+`bench_business --verify` OK (cache == decoder for all kernels);
+`ctest --test-dir build/debug` 24/24 (incl. the `vixl_port` `branch_interception`
+body that registers interceptions and exercises the flag-ON path);
+`ctest -R vixl_port` 3/3.
 
 ## T6 disassembly gate (task 1.2)
 

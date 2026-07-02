@@ -390,6 +390,11 @@ class MetaDataDepot {
     std::unique_ptr<BranchInterceptionAbstract> intercept =
         std::make_unique<BranchInterception<R, P...>>(function, callback);
     branch_interceptions_.insert(std::make_pair(addr, std::move(intercept)));
+    // gaby-vm:
+    //   perf(cache-hotpath T5): arm the fast-path flag so the per-BR/BLR probe
+    //   runs (see gaby_has_branch_interception_). This is the sole insert site
+    //   into branch_interceptions_.
+    gaby_has_branch_interception_ = true;
   }
 
   // Search for branch interceptions to the branch_target address; If one is
@@ -404,7 +409,21 @@ class MetaDataDepot {
     }
   }
 
-  void ResetState() { branch_interceptions_.clear(); }
+  // gaby-vm BEGIN:
+  //   perf(cache-hotpath T5): expose the fast-path flag so the hot BR/BLR path
+  //   (VisitUnconditionalBranchToRegister) can skip the unordered_map probe
+  //   entirely when no interception has ever been registered. See
+  //   gaby_has_branch_interception_ for the invariant.
+  bool HasBranchInterception() const { return gaby_has_branch_interception_; }
+  // gaby-vm END
+
+  void ResetState() {
+    branch_interceptions_.clear();
+    // gaby-vm:
+    //   perf(cache-hotpath T5): clear the fast-path flag alongside the map.
+    //   This is the sole clear site for branch_interceptions_.
+    gaby_has_branch_interception_ = false;
+  }
 
  private:
   // Tag recording of each allocated memory in the tag-granule.
@@ -414,6 +433,21 @@ class MetaDataDepot {
   // interception object, see 'BranchInterception'.
   std::unordered_map<uintptr_t, std::unique_ptr<BranchInterceptionAbstract>>
       branch_interceptions_;
+
+  // gaby-vm BEGIN:
+  //   perf(cache-hotpath T5): fast-path flag mirroring "branch_interceptions_
+  //   is non-empty". Every executed non-ret BR/BLR otherwise runs an
+  //   unordered_map `find` on branch_interceptions_ (see the probe in
+  //   Simulator::VisitUnconditionalBranchToRegister), a map that embedders on
+  //   the cache track almost never populate. The flag is set at the sole insert
+  //   site (RegisterBranchInterception) and cleared at the sole clear site
+  //   (ResetState); branch_interceptions_ has no erase path (audited: insert +
+  //   clear are its only mutators), so this bool can never desync from the map
+  //   being empty. Because FindBranchInterception on an empty map already
+  //   returns nullptr, gating the probe on this flag is behavior-preserving on
+  //   both tracks when interceptions ARE registered.
+  bool gaby_has_branch_interception_ = false;
+  // gaby-vm END
 };
 
 
