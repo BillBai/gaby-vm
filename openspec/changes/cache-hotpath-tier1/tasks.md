@@ -9,7 +9,7 @@ hash 10.49 / struct 10.81 / fsm 9.34 / applogic 14.26.
 
 ## 1. Prerequisites
 
-- [ ] 1.1 Record the pre-change baseline: build current branch, run GRL
+- [x] 1.1 Record the pre-change baseline: build current branch, run GRL
       measurement steps (no code change), commit the numbers table skeleton.
 - [ ] 1.2 T6 gate: disassemble `AddWithCarry` / `AddSubHelper` in the
       dev-release build; record whether clang already sinks the NZCV
