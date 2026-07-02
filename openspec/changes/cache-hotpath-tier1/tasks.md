@@ -78,12 +78,12 @@ hash 10.49 / struct 10.81 / fsm 9.34 / applogic 14.26.
 
 ## 4. T3 — MOVPRFX flag-gating (needs 1.3 green)
 
-- [ ] 4.1 Predecode: classify the two MOVPRFX form hashes into `flags` bit 1
+- [x] 4.1 Predecode: classify the two MOVPRFX form hashes into `flags` bit 1
       in `predecode_cache.cc`; document the bit next to bit 0.
-- [ ] 4.2 Cache track: replace the per-step `form_hash_` compare-pair with
+- [x] 4.2 Cache track: replace the per-step `form_hash_` compare-pair with
       the predecoded bit via `prev_was_movprfx_` (design D3); add the member
       to the re-entrancy cursor save/restore set.
-- [ ] 4.3 Confirm 1.3's negative test still aborts and the re-entrancy tests
+- [x] 4.3 Confirm 1.3's negative test still aborts and the re-entrancy tests
       pass; GRL.
 
 ## 5. T4 — Dispatch-hub epilogue strip

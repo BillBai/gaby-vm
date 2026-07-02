@@ -91,6 +91,22 @@ bool IsBtiRelevant(uint32_t /*form_hash*/,
   return insn->IsBti() || insn->IsPAuth() || insn->IsException();
 }
 
+// Predecode-time SVE-MOVPRFX classifier, written to bit 1 of
+// PredecodedEntry::flags. The cache-track hot path loads this bit into its
+// prev_was_movprfx_ member instead of re-deriving "was the previous
+// instruction a MOVPRFX" from two per-step form_hash_ comparisons (see
+// cache-hotpath-tier1 design.md D3). The two forms are exactly the pair the
+// per-step code compared before this change: "movprfx_z_z" (unpredicated) and
+// "movprfx_z_p_z" (predicated). vixl::Hash is the constexpr backing of the
+// ""_h literal these hashes come from in utils-vixl.h, so the constants match
+// the header literals bit-for-bit; this file already uses vixl::Hash to
+// capture form hashes (FormCaptureVisitor above).
+bool IsMovprfx(uint32_t form_hash) {
+  static constexpr uint32_t kMovprfxZZ = vixl::Hash("movprfx_z_z");
+  static constexpr uint32_t kMovprfxZPZ = vixl::Hash("movprfx_z_p_z");
+  return (form_hash == kMovprfxZZ) || (form_hash == kMovprfxZPZ);
+}
+
 // Decoder visitor used only by the predecode pass. For each decoded
 // instruction it records the form hash and whether the encoding is
 // unallocated, reading both off the Metadata the decoder hands every visitor.
@@ -278,10 +294,16 @@ RegistrationStatus PredecodeCache::Impl::RegisterCodeRange(const void* start,
     entries[i].form_hash = form_hash;
     // Bit 0 of `flags` marks the entry as BTI-relevant so the cache-track
     // hot path can elide the BType / guarded-page check on forms whose
-    // outcome doesn't interact with BType. Remaining bits stay zero —
-    // future per-form predecode work (operand pre-extraction, etc.) lands
-    // in this slot. See predecode-cache-hotpath-speedup design.md D3/D4.
-    entries[i].flags = IsBtiRelevant(form_hash, insn) ? 1u : 0u;
+    // outcome doesn't interact with BType. Bit 1 marks the entry as an SVE
+    // MOVPRFX so the cache-track hot path can carry "the previous instruction
+    // was a MOVPRFX" as a member bool instead of re-deriving it from two
+    // per-step form_hash_ comparisons (cache-hotpath-tier1 design.md D3).
+    // Remaining bits stay zero — future per-form predecode work (operand
+    // pre-extraction, etc.) lands in this slot. See predecode-cache-hotpath-
+    // speedup design.md D3/D4.
+    uint32_t flags = IsBtiRelevant(form_hash, insn) ? 1u : 0u;
+    if (IsMovprfx(form_hash)) flags |= 2u;
+    entries[i].flags = flags;
     entries[i].leaf = leaf;
   }
 

@@ -29,7 +29,7 @@ commit, cumulative on the branch)
 | T1 (LogicVRegister) | 9.395 | 10.282 | 10.702 | 9.360 | 11.335 | applogic -20.9% vs baseline; scalar within noise (±0.8%). |
 | T2a (trace tail + guard bounds) | 8.996 | 10.341 | 9.966 | 9.254 | 10.783 | vs T1: parse -4.2%, struct -6.9%, applogic -4.9%, fsm -1.1%; hash +0.6% (noise). |
 | T2b (MaybeClear LCG) | 8.671 | 10.354 | 9.476 | 9.137 | 10.603 | vs T2a: parse -3.6%, struct -4.9%, applogic -1.7%, fsm -1.3%; hash +0.1% (noise). |
-| T3 (MOVPRFX flag) | | | | | | |
+| T3 (MOVPRFX flag) | 8.659 | 10.426 | 9.561 | 9.096 | 10.597 | performance-neutral (see T3 detail); landed for spec/structural reasons. |
 | T4 (hub epilogue) | | | | | | |
 | T5 (interception flag) | | | | | | |
 | T6 (AddWithCarry) | | | | | | go/no-go per task 1.2 |
@@ -135,6 +135,34 @@ regression in any run). `bench_business --verify` OK (cache == decoder);
 Cumulative T2 (a+b) vs the pre-T2 T1 row: parse 9.395 → 8.671 (-7.7%),
 struct 10.702 → 9.476 (-11.5%), applogic 11.335 → 10.603 (-6.5%),
 fsm 9.360 → 9.137 (-2.4%), hash 10.282 → 10.354 (+0.7%, noise).
+
+### T3 detail (task 4.3) — neutral by measurement, landed by adjudication
+
+Three post-change runs (medians in the row above): parse 8.659 / hash
+10.426 / struct 9.561 / fsm 9.096 / applogic 10.597. Because session drift
+was on the order of the expected effect, a controlled same-session A/B
+(stash → rebuild HEAD → 3 runs → pop → rebuild T3 → 3 runs) measured:
+parse +0.14%, hash +1.7% (noisy compute-bound shape, no consistent >2%
+regression), struct +0.57%, fsm −0.51%, applogic −0.05% — i.e. **neutral**.
+
+Why the 2026-06-11 ablation's ~6% did not materialize here: the ablation
+deleted the *entire* MOVPRFX machinery (branch + cross-call bool +
+derivation); the behavior-preserving formulation must keep the `form_hash_`
+store (leaves depend on it) and the post-leaf check with a bool live across
+the leaf call (a pre-leaf check would inspect the wrong `pc_` for
+branch-shaped illegal consumers). What remains removable — two constant
+compares — is hidden by the out-of-order core behind the indirect leaf call.
+
+Landed anyway per the design's acceptance criterion ("each item ≥ neutral"):
+it realizes the delta-spec scenarios (predecode-derived classification,
+check still enforced, cursor-covered state), and it removes the hub's
+per-step `form_hash_` *read* dependency — a structural precondition for the
+Tier-2 flatten work. Guard rails all green: full debug ctest 24/24,
+vixl_port 3/3, movprfx negative test aborts at the same `CanTakeSVEMovprfx`
+check, `bench_business --verify` OK. Adjudication: Fable orchestrator,
+2026-07-03 (the implementing agent stopped at the task 4.3 bench gate as
+instructed; the design's ≥-neutral criterion takes precedence over the
+brief's 1.5% execution threshold).
 
 ## T6 disassembly gate (task 1.2)
 

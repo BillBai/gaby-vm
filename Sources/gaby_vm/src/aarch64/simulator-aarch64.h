@@ -1680,8 +1680,22 @@ class Simulator : public DecoderVisitor {
     }
     // gaby-vm END
 
-    bool last_instr_was_movprfx =
-        (form_hash_ == "movprfx_z_z"_h) || (form_hash_ == "movprfx_z_p_z"_h);
+    // gaby-vm BEGIN:
+    // MOVPRFX protocol without the per-step form_hash_ compare pair. The
+    // previous step recorded whether it was itself a MOVPRFX into
+    // gaby_prev_was_movprfx_; read that into the local (it means "the last
+    // executed instruction was a MOVPRFX"), then overwrite the member with
+    // this step's classification straight from the already-loaded entry->flags
+    // bit 1. Nothing between here and the post-leaf check reads the member, so
+    // the store lands before the leaf call — off the read/write dependency
+    // chain the old two-compare form built through form_hash_. The member
+    // persists across cache-track steps exactly as form_hash_ does, and joins
+    // the re-entrancy cursor (GabyInterpreterCursor) so a nested run cannot
+    // corrupt the enclosing run's MOVPRFX chain. See cache-hotpath-tier1
+    // design.md D3.
+    const bool last_instr_was_movprfx = gaby_prev_was_movprfx_;
+    gaby_prev_was_movprfx_ = (entry->flags & 2u) != 0u;
+    // gaby-vm END
 
     // form_hash_ 必须在调 leaf 之前写好：共享的 Simulate_* 入口靠它选分支
     // (deep-dive R1)。leaf 是个不透明指针，predecode 阶段由
@@ -1804,7 +1818,8 @@ class Simulator : public DecoderVisitor {
   // 可以在同一个 Simulator 上再发起一次 RunFrom；嵌套调用据此
   // 先存档、返回时还原「解释器游标」——也就是「跑到哪了」这组
   // 运行期状态：pc_、cache 的 cur_range_、form_hash_、
-  // last_instr_、pc_modified_，以及 BTI 的 btype_/next_btype_。游标刻意
+  // last_instr_、pc_modified_、cache track 的 MOVPRFX 链
+  // gaby_prev_was_movprfx_，以及 BTI 的 btype_/next_btype_。游标刻意
   // 不含寄存器堆：寄存器要跨嵌套调用透传（参数进、返回值出），跟真实
   // 调用边界一致。
   //   btype_/next_btype_ 为什么也要存档：branch hook 是从分支 leaf 里触
@@ -1826,6 +1841,10 @@ class Simulator : public DecoderVisitor {
     bool pc_modified;
     BType btype;
     BType next_btype;
+    // cache track 的 MOVPRFX 链状态，跟 form_hash_ / last_instr_ 一并存档：
+    // 嵌套运行不能把「上一步是不是 MOVPRFX」污染回外层
+    // （cache-hotpath-tier1 design.md D3）。
+    bool prev_was_movprfx;
   };
 
   GabyInterpreterCursor GabySaveCursor() const {
@@ -1835,7 +1854,8 @@ class Simulator : public DecoderVisitor {
             last_instr_,
             pc_modified_,
             btype_,
-            next_btype_};
+            next_btype_,
+            gaby_prev_was_movprfx_};
   }
 
   void GabyRestoreCursor(const GabyInterpreterCursor& cursor) {
@@ -1846,6 +1866,7 @@ class Simulator : public DecoderVisitor {
     pc_modified_ = cursor.pc_modified;
     btype_ = cursor.btype;
     next_btype_ = cursor.next_btype;
+    gaby_prev_was_movprfx_ = cursor.prev_was_movprfx;
   }
   // gaby-vm END
 
@@ -5828,10 +5849,17 @@ class Simulator : public DecoderVisitor {
   //                  的可变状态，所以挂在 Simulator 上、每实例一份，命中时
   //                  无锁。CodeRange 记录在 cache 里稳定存储、永不重定位，
   //                  这个指针在 cache 生命周期内不会悬空。
+  //   gaby_prev_was_movprfx_ —— cache track 的 MOVPRFX 协议链状态：上一步执行
+  //                  的指令是不是 MOVPRFX。ExecuteInstructionCached 每步从
+  //                  entry->flags bit 1 写入本步的分类、下一步再读出，跨步持
+  //                  久靠它是普通成员这一点，跟 form_hash_ 一样。它同样进
+  //                  GabyInterpreterCursor 存档 / 还原集合，嵌套运行不会污染外
+  //                  层的 MOVPRFX 链。见 cache-hotpath-tier1 design.md D3。
   //   详见 docs/refs/gaby-vm-predecode-cache-design.md §4.2.2、§4.2.3、§4.4.2。
   MemoryWriteSink* write_sink_ = nullptr;
   gaby_vm::PredecodeCache* cache_ = nullptr;
   const gaby_vm::PredecodeCache::CodeRange* cur_range_ = nullptr;
+  bool gaby_prev_was_movprfx_ = false;
   // gaby-vm END
 
   // gaby-vm BEGIN:

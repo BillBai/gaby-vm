@@ -100,10 +100,13 @@ class PredecodeCache {
     // pass and consumed per-instruction on the cache track. Bit 0 marks the
     // entry as BTI-relevant (the cache-track BType / guarded-page check runs
     // only when this bit is set; see the predecode-cache-hotpath-speedup
-    // change). Remaining bits are reserved for future per-form predecode work
-    // (e.g. operand pre-extraction; design doc §4.6). Always written by the
-    // predecode pass — embedders MUST treat the slot as opaque storage owned
-    // by the cache.
+    // change). Bit 1 marks the entry as an SVE MOVPRFX (the cache-track
+    // MOVPRFX-protocol check carries "previous instruction was a MOVPRFX" from
+    // this bit instead of recomputing it from form_hash_ comparisons; see the
+    // cache-hotpath-tier1 change). Remaining bits are reserved for future
+    // per-form predecode work (e.g. operand pre-extraction; design doc §4.6).
+    // Always written by the predecode pass — embedders MUST treat the slot as
+    // opaque storage owned by the cache.
     uint32_t flags;
     // Opaque handle to the leaf dispatcher. predecode_cache.cc resolves and
     // interprets this; a null value never appears in a populated entry (an
