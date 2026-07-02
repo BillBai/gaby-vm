@@ -146,10 +146,10 @@ hash 10.49 / struct 10.81 / fsm 9.34 / applogic 14.26.
 
 ## 8. Wrap-up
 
-- [ ] 8.1 Fill the final numbers table (per-item and cumulative, 3-run
+- [x] 8.1 Fill the final numbers table (per-item and cumulative, 3-run
       ranges) in `openspec/changes/cache-hotpath-tier1/numbers.md`.
-- [ ] 8.2 Run the full test suite once more (both presets) + `--verify`;
+- [x] 8.2 Run the full test suite once more (both presets) + `--verify`;
       confirm every commit message references its task ID.
-- [ ] 8.3 Leave the branch unmerged; summary of measured wins vs paper
+- [x] 8.3 Leave the branch unmerged; summary of measured wins vs paper
       estimates recorded in numbers.md (do NOT merge to main — explicit
       instruction).

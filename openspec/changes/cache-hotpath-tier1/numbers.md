@@ -308,3 +308,43 @@ flag block on `tbnz w21, #29` (the instruction's S bit). The
 `set_flags == false` path already executes only add-and-mask. A source-level
 early return would remove zero instructions. (Analysis: Opus subagent,
 2026-07-03; predicted by the exploration review's D6/B-P2 caveat.)
+
+## Final summary (task 8.1/8.3) — measured wins vs paper estimates
+
+Cumulative, baseline (03a4a03) → final (2485a40), medians, ns/insn:
+
+| shape | baseline | final | Δ | speedup |
+|-------|---------:|------:|---:|--------:|
+| parse | 9.364 | 8.455 | **−9.7%** | 1.11× |
+| hash | 10.285 | 7.177 | **−30.2%** | 1.43× |
+| struct | 10.788 | 9.384 | **−13.0%** | 1.15× |
+| fsm | 9.344 | 8.944 | **−4.3%** | 1.04× |
+| applogic | 14.326 | 10.416 | **−27.3%** | 1.38× |
+
+Against the exploration's paper estimates (scalar −10–15%, applogic
+−25–30%): parse and struct landed inside the band; applogic landed inside
+the band (T1 alone delivered −20.9%); fsm came in under (its per-byte
+dispatch shape spends proportionally more in irreducible leaf semantics);
+hash landed far above — the paper attributed no specific win to it, but the
+T4 epilogue strip (two per-step `UpdateBType` stores, three trace-mask
+tests, one global load) turned out to be the dominant fixed cost of the
+cheapest-leaf shape (−30%, same-session A/B-confirmed).
+
+Item attribution (each vs its predecessor): T1 applogic −20.9%; T2a+T2b
+parse −7.7% / struct −11.5%; T3 neutral (landed for spec/structural
+reasons); T4 every shape, hash −30.8% drift-free; T5 neutral here by
+design (targets indirect-call workloads this suite doesn't contain).
+Per-item estimates were correctly treated as non-additive; the tier total
+is well past "meaningfully positive".
+
+Final state: 10 commits on `perf/cache-hotpath-tier1`, every commit
+task-referenced, tree clean, **branch deliberately left unmerged** (explicit
+instruction). Wrap-up verification (2026-07-03): full ctest 24/24 on BOTH
+dev-debug and dev-release presets, `bench_business --verify` OK.
+
+Follow-up headroom (separate OpenSpec changes, per the exploration's Tier
+2/3): flat-thunk devirtualized dispatch → threaded dispatch
+(direct-threading data structure + `[[clang::musttail]]` chaining),
+range-descriptor loop locals, unity TU/ThinLTO, predecode-specialized
+scalar handlers, then PGO once the code shape stabilizes. Re-profile first:
+T1–T5 changed the cost distribution these plans were priced against.
