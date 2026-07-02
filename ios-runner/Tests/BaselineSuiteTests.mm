@@ -58,4 +58,8 @@
   XCTAssertEqual(gaby_vm_ios_run_branch_hook_reentrancy(), 0);
 }
 
+- (void)testMovprfxProtocol {
+  XCTAssertEqual(gaby_vm_ios_run_movprfx_protocol(), 0);
+}
+
 @end

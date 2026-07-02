@@ -23,6 +23,7 @@ int gaby_vm_ios_run_workload_shadow();
 int gaby_vm_ios_run_typed_register_io();
 int gaby_vm_ios_run_branch_hook_dispatch();
 int gaby_vm_ios_run_branch_hook_reentrancy();
+int gaby_vm_ios_run_movprfx_protocol();
 
 // Report-only benchmark: runs the business microkernels in cache then decoder
 // mode and prints the key:value report to stdout. Always returns 0 (never a

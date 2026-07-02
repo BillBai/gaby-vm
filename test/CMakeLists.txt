@@ -153,6 +153,30 @@ gaby_vm_apply_compile_flags(branch_hook_reentrancy_test)
 
 add_test(NAME branch_hook_reentrancy COMMAND branch_hook_reentrancy_test)
 
+# MOVPRFX protocol, positive case: a MOVPRFX + legal consumer pair executes on
+# both tracks (RunFrom / DebugRunFrom) without the per-step CanTakeSVEMovprfx
+# check aborting, and the prefixed Z0 destination is identical across tracks.
+# Public-API only. Tests-first guard for the T3 MOVPRFX flag-gating work (design
+# D4) — passes against the current per-step implementation. See
+# openspec/changes/cache-hotpath-tier1/.
+add_executable(movprfx_protocol_test movprfx_protocol_test.cc)
+target_link_libraries(movprfx_protocol_test PRIVATE gaby_vm::gaby_vm)
+gaby_vm_apply_compile_flags(movprfx_protocol_test)
+
+add_test(NAME movprfx_protocol COMMAND movprfx_protocol_test)
+
+# MOVPRFX protocol, negative case: a MOVPRFX + illegal (plain scalar) consumer
+# must abort via CanTakeSVEMovprfx on the cache track exactly as it does on the
+# decoder track. Same fork-and-check-for-signal pattern as
+# typed_register_io_abort_test (WILL_FAIL does not invert SIGABRT), so the test
+# exits 0/1 the normal way. Host/CTest-only — excluded from the iOS runner,
+# which forbids the fork-and-abort pattern. Public-API only.
+add_executable(movprfx_protocol_abort_test movprfx_protocol_abort_test.cc)
+target_link_libraries(movprfx_protocol_abort_test PRIVATE gaby_vm::gaby_vm)
+gaby_vm_apply_compile_flags(movprfx_protocol_abort_test)
+
+add_test(NAME movprfx_protocol_abort COMMAND movprfx_protocol_abort_test)
+
 # Ported VIXL simulator tests (the vixl_port suite): a TEST-ONLY copy of the
 # Tier-0 VIXL assembler + test infra (at the pinned import SHA) live-assembles
 # each upstream TEST() body and runs it on both gaby tracks under absolute +
@@ -197,6 +221,8 @@ if(GABY_VM_BUILD_IOS_RUNNER)
     branch_hook_dispatch_test.cc)
   gaby_vm_add_ios_baseline_lib(gaby_vm_ios_run_branch_hook_reentrancy
     branch_hook_reentrancy_test.cc)
+  gaby_vm_add_ios_baseline_lib(gaby_vm_ios_run_movprfx_protocol
+    movprfx_protocol_test.cc)
 
   # Privileged-build suites: reach imported VIXL headers directly (PRIVATE src/
   # include + the VIXL build defines), matching their CTest executables.

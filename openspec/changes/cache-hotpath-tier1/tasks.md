@@ -17,7 +17,7 @@ hash 10.49 / struct 10.81 / fsm 9.34 / applogic 14.26.
       it no-op (design D6). **Result: NO-OP — flag computation is already
       branch-gated in both copies; T6 (section 7) is skipped. See
       numbers.md.**
-- [ ] 1.3 T3 tests first (design D4): add hand-encoded MOVPRFX protocol unit
+- [x] 1.3 T3 tests first (design D4): add hand-encoded MOVPRFX protocol unit
       tests — positive pair (cache == decoder, no abort) and negative pair
       (abort via `CanTakeSVEMovprfx` on both tracks) at VL=128. Tests must
       pass against the CURRENT per-step implementation before T3 lands.
