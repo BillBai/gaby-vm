@@ -11,10 +11,12 @@ hash 10.49 / struct 10.81 / fsm 9.34 / applogic 14.26.
 
 - [x] 1.1 Record the pre-change baseline: build current branch, run GRL
       measurement steps (no code change), commit the numbers table skeleton.
-- [ ] 1.2 T6 gate: disassemble `AddWithCarry` / `AddSubHelper` in the
+- [x] 1.2 T6 gate: disassemble `AddWithCarry` / `AddSubHelper` in the
       dev-release build; record whether clang already sinks the NZCV
       computation when `set_flags` is false. Decision: implement T6 or mark
-      it no-op (design D6).
+      it no-op (design D6). **Result: NO-OP — flag computation is already
+      branch-gated in both copies; T6 (section 7) is skipped. See
+      numbers.md.**
 - [ ] 1.3 T3 tests first (design D4): add hand-encoded MOVPRFX protocol unit
       tests — positive pair (cache == decoder, no abort) and negative pair
       (abort via `CanTakeSVEMovprfx` on both tracks) at VL=128. Tests must
@@ -75,8 +77,9 @@ hash 10.49 / struct 10.81 / fsm 9.34 / applogic 14.26.
 
 ## 7. T6 — AddWithCarry flag-skip (only if 1.2 says go)
 
-- [ ] 7.1 Fast path in the bool-overload when `set_flags` is false (masked
-      sum only); pair-overload untouched. GRL.
+- [x] 7.1 ~~Fast path in the bool-overload when `set_flags` is false~~
+      **Skipped per 1.2: clang already gates the flag computation; no work
+      to remove.** No commit.
 
 ## 8. Wrap-up
 

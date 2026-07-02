@@ -36,4 +36,13 @@ commit, cumulative on the branch)
 
 ## T6 disassembly gate (task 1.2)
 
-(recorded by task 1.2)
+**Verdict: NO-OP — T6 skipped.** In the dev-release binary, clang -O3
+already sinks the entire NZCV derivation behind the `set_flags` test in
+both copies of the code: the standalone
+`AddWithCarry(unsigned, bool, uint64_t, uint64_t, int)` computes the masked
+sum then `cbz w2, <ret>` skips ~35 flag instructions when `set_flags` is
+false; the copy inlined into `AddSubHelper` gates the same ~30-instruction
+flag block on `tbnz w21, #29` (the instruction's S bit). The
+`set_flags == false` path already executes only add-and-mask. A source-level
+early return would remove zero instructions. (Analysis: Opus subagent,
+2026-07-03; predicted by the exploration review's D6/B-P2 caveat.)
