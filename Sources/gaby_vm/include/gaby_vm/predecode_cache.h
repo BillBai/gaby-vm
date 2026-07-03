@@ -86,11 +86,11 @@ class PredecodeCache {
   //
   // Exactly 16 bytes so a registered code range maps to a flat entries[]
   // array indexed by (pc - range_start) / 4, making the cache-track lookup a
-  // single array load. `leaf` is an opaque handle to the resolved VIXL leaf
-  // dispatcher; only predecode_cache.cc (and the cache-track execution path)
-  // interprets it, which keeps this public header free of any vixl:: type.
-  // The V1 entry stores the (form_hash, leaf) pair directly — the per-form
-  // thunk of the design doc 4.2.1 is deferred to V2. See design.md D8.
+  // single array load. `leaf` is an opaque handle to the resolved handler
+  // function that executes this instruction on the cache track; only
+  // predecode_cache.cc (and the cache-track execution path) interprets it,
+  // which keeps this public header free of any vixl:: type. The V1 entry
+  // stores the (form_hash, leaf) pair directly.
   struct PredecodedEntry {
     // VIXL form hash for this instruction. The cache-track execution path
     // writes it to Simulator::form_hash_ before invoking the leaf, because
@@ -108,9 +108,12 @@ class PredecodeCache {
     // Always written by the predecode pass — embedders MUST treat the slot as
     // opaque storage owned by the cache.
     uint32_t flags;
-    // Opaque handle to the leaf dispatcher. predecode_cache.cc resolves and
+    // Opaque handle to the resolved handler function for this instruction —
+    // an ordinary AOT-compiled function pointer, stored through const void*
+    // (predecoded data stays non-executable). predecode_cache.cc resolves and
     // interprets this; a null value never appears in a populated entry (an
-    // unimplemented form is given a sentinel dispatcher, design doc R12).
+    // unimplemented form is given a sentinel handler that aborts if executed,
+    // design doc R12).
     const void* leaf;
   };
 

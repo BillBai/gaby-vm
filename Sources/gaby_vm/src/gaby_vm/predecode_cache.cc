@@ -31,45 +31,14 @@ using RegistrationError = PredecodeCache::RegistrationError;
 using PredecodedEntry = PredecodeCache::PredecodedEntry;
 using CodeRange = PredecodeCache::CodeRange;
 
-// The type a PredecodedEntry::leaf opaque handle really points at. It must
-// match vixl::aarch64::Simulator's private FormToVisitorFnMap::mapped_type:
-// the predecode pass stores a pointer to one of these (a process-lifetime
-// pointer-to-member-function — either an entry in VIXL's form->leaf map, or
-// the unimplemented sentinel below), and ExecuteInstructionCached casts the
-// opaque handle back to this exact type before calling it as
-// (this->*pmf)(pc_). Keep the alias byte-compatible with Simulator's
-// mapped_type — D1 of predecode-cache-hotpath-speedup changed it from
-// std::function to a raw pmf to remove the type-erasure indirection.
-using LeafFn =
-    void (vixl::aarch64::Simulator::*)(const vixl::aarch64::Instruction*);
-
-// Sentinel leaf for an instruction whose encoding the VIXL decoder names but
-// for which the Simulator carries no leaf — an "unimplemented" form (design
-// doc R12). Registering a range that contains such an instruction still
-// succeeds; the abort fires only if the cache track actually reaches it.
-//
-// The imported Simulator::VisitUnimplemented already prints the address and
-// encoding and aborts via VIXL_UNIMPLEMENTED; using its address directly keeps
-// the sentinel byte-compatible with every other entry in
-// Simulator::FormToVisitorFnMap (each of which is a pmf) and removes the
-// duplicate std::function-wrapped lambda this file used to carry.
-//
-// Held as a function-local static so the pmf has process lifetime — the
-// PredecodedEntry::leaf opaque handle points straight at it.
-const LeafFn* UnimplementedSentinelLeaf() {
-  static const LeafFn sentinel = &vixl::aarch64::Simulator::VisitUnimplemented;
-  return &sentinel;
-}
-
-// Sentinel leaf for embedded data words that cannot be cached as executable
-// instructions. This covers unallocated encodings and, if a future cache uses a
-// stricter auditor than CPUFeatures::All(), feature-gated words. Registering
-// the range succeeds, but a wild PC that reaches the data aborts through the
-// imported unallocated-instruction path with the offending address.
-const LeafFn* DataInStreamSentinelLeaf() {
-  static const LeafFn sentinel = &vixl::aarch64::Simulator::VisitUnallocated;
-  return &sentinel;
-}
+// The PredecodedEntry::leaf opaque handle now holds a gaby handler function
+// pointer (vixl::aarch64::Simulator::GabyHandler), resolved once at predecode
+// time by Simulator::ResolvePredecodeHandler and invoked on the cache track
+// as a single indirect call — no pointer-to-member-function, no vtable walk
+// (cache-dispatch-devirt C1). The two sentinel cases below are likewise
+// handlers, obtained from Simulator static accessors; reaching one aborts with
+// the byte-identical imported message (VisitUnimplemented / VisitUnallocated),
+// because the handler qualified-calls that leaf.
 
 // Predecode-time BTI-relevance classifier, written to bit 0 of
 // PredecodedEntry::flags so the cache-track hot path can skip the
@@ -280,16 +249,17 @@ RegistrationStatus PredecodeCache::Impl::RegisterCodeRange(const void* start,
     if (!auditor_.InstructionIsAvailable() || capture_visitor_.unallocated()) {
       entries[i].form_hash = 0;
       entries[i].flags = 0;
-      entries[i].leaf = DataInStreamSentinelLeaf();
+      entries[i].leaf =
+          vixl::aarch64::Simulator::GabyDataInStreamSentinelHandler();
       continue;
     }
 
     const uint32_t form_hash = capture_visitor_.form_hash();
     const void* leaf =
-        vixl::aarch64::Simulator::ResolvePredecodeLeaf(form_hash);
+        vixl::aarch64::Simulator::ResolvePredecodeHandler(form_hash);
     if (leaf == nullptr) {
       // A named-but-unimplemented form: registerable, but aborts if executed.
-      leaf = UnimplementedSentinelLeaf();
+      leaf = vixl::aarch64::Simulator::GabyUnimplementedSentinelHandler();
     }
     entries[i].form_hash = form_hash;
     // Bit 0 of `flags` marks the entry as BTI-relevant so the cache-track

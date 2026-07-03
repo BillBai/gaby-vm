@@ -1669,19 +1669,22 @@ class Simulator : public DecoderVisitor {
     cache_ = cache;
   }
 
-  // cache 命中执行。前后置步骤（pc_modified_、BType / guarded page 检查、
-  // last_instr_、IncrementPc、LogAllWrittenRegisters、UpdateBType）跟
-  // ExecuteInstruction 完全一致；唯一省掉的是末尾的 cpu_features_auditor_
-  // 强校验——RegisterCodeRange 在 predecode 阶段已用 CPUFeaturesAuditor 把整段
-  // range 审过一遍，运行期不再重复。中间那一段，上游是 decoder_->Decode(pc_)，
-  // 这里换成「查 cache → 调 leaf」。
+  // cache 命中执行。查 pc → PredecodedEntry，然后调 entry 里存好的
+  // handler。C1（cache-dispatch-devirt）之后，本步全部前后置步骤
+  // （pc_modified_、BTI / guarded-page 检查、MOVPRFX 协议、form_hash_、
+  // 静态绑定的 leaf 调用、last_instr_、IncrementPc、trace 门控、UpdateBType）
+  // 都搬进了 handler thunk（GabyThunkPrologue + 直接 bl 的 leaf + GabyThunkEpilogue），
+  // 相对 pre-C1 的内联版逐字节等价（design D5）。这里只剩「查界定位 entry +
+  // 一次间接 handler 调用」，dispatch 从「16 字节 pmf load + 虚表 walk」收成
+  // 「一次 handler 指针 load + 一次间接 call」。cache track 照旧省掉
+  // ExecuteInstruction 末尾的 cpu_features_auditor_ 强校验——RegisterCodeRange
+  // 在 predecode 阶段已用 CPUFeaturesAuditor 把整段 range 审过一遍。
   void ExecuteInstructionCached() {
     // The program counter should always be aligned.
     VIXL_ASSERT(IsWordAligned(pc_));
     // cache track 只对非空 cache 的 Simulator 开放，gaby_vm::Simulator 在
     // API 层已挡掉空 cache 的调用；这里再断言一次记录该不变量。
     VIXL_ASSERT(cache_ != nullptr);
-    pc_modified_ = false;
 
     // PC 直接是宿主指针，cache lookup 拿它做地址算术。先命中本 Simulator 的
     // cur_range_（无锁）；未命中再走 PredecodeCache::FindRange 慢路径（shared
@@ -1703,80 +1706,11 @@ class Simulator : public DecoderVisitor {
     const gaby_vm::PredecodeCache::PredecodedEntry* entry =
         &range->entries[(pc_addr - range->start) >> kInstructionSizeLog2];
 
-    // gaby-vm BEGIN:
-    // BType / guarded-page enforcement gated on the BTI-relevant bit the
-    // predecode pass wrote into entry->flags (bit 0). For non-BTI-relevant
-    // forms — the bulk of any real workload — the check is elided entirely,
-    // turning the original unconditional per-step work into a single
-    // predictable branch. The body inside the outer gate is byte-for-byte
-    // the imported VIXL check. See predecode-cache-hotpath-speedup
-    // design.md D3.
-    if (GABY_UNLIKELY((entry->flags & 1u) != 0u)) {
-      // On guarded pages, if BType is not zero, take an exception on any
-      // instruction other than BTI, PACI[AB]SP, HLT or BRK.
-      if (PcIsInGuardedPage() && (ReadBType() != DefaultBType)) {
-        if (pc_->IsPAuth()) {
-          Instr i = pc_->Mask(SystemPAuthMask);
-          if ((i != PACIASP) && (i != PACIBSP)) {
-            VIXL_ABORT_WITH_MSG(
-                "Executing non-BTI instruction with wrong BType.");
-          }
-        } else if (!pc_->IsBti() && !pc_->IsException()) {
-          VIXL_ABORT_WITH_MSG(
-              "Executing non-BTI instruction with wrong BType.");
-        }
-      }
-    }
-    // gaby-vm END
-
-    // gaby-vm BEGIN:
-    // MOVPRFX protocol without the per-step form_hash_ compare pair. The
-    // previous step recorded whether it was itself a MOVPRFX into
-    // gaby_prev_was_movprfx_; read that into the local (it means "the last
-    // executed instruction was a MOVPRFX"), then overwrite the member with
-    // this step's classification straight from the already-loaded entry->flags
-    // bit 1. Nothing between here and the post-leaf check reads the member, so
-    // the store lands before the leaf call — off the read/write dependency
-    // chain the old two-compare form built through form_hash_. The member
-    // persists across cache-track steps exactly as form_hash_ does, and joins
-    // the re-entrancy cursor (GabyInterpreterCursor) so a nested run cannot
-    // corrupt the enclosing run's MOVPRFX chain. See cache-hotpath-tier1
-    // design.md D3.
-    const bool last_instr_was_movprfx = gaby_prev_was_movprfx_;
-    gaby_prev_was_movprfx_ = (entry->flags & 2u) != 0u;
-    // gaby-vm END
-
-    // form_hash_ 必须在调 leaf 之前写好：共享的 Simulate_* 入口靠它选分支
-    // (deep-dive R1)。leaf 是个不透明指针，predecode 阶段由
-    // Simulator::ResolvePredecodeLeaf 解析、指向 FormToVisitorFnMap 里那个
-    // 进程级静态存储的 pointer-to-member-function；这里 cast 回来解引用拿到
-    // pmf 本体，然后 (this->*pmf)(pc_) 直接调一次成员函数（Itanium ABI 下大致
-    // 是一次取址 + 一次间接 call，比 std::function 的类型擦除间接调用更短）。
-    form_hash_ = entry->form_hash;
-    const FormToVisitorFnMap::mapped_type pmf =
-        *static_cast<const FormToVisitorFnMap::mapped_type*>(entry->leaf);
-    (this->*pmf)(pc_);
-
-    if (GABY_UNLIKELY(last_instr_was_movprfx)) {
-      VIXL_ASSERT(last_instr_ != NULL);
-      VIXL_CHECK(pc_->CanTakeSVEMovprfx(form_hash_, last_instr_));
-    }
-
-    last_instr_ = ReadPc();
-    IncrementPc();
-    // epilogue 收尾。cache track 把 trace mask 钉死在 0（simulator.cc 的
-    // ExecutionScope），LogAllWrittenRegisters 里那三个 ShouldTrace* 判断恒假。
-    // 用一次「任意 trace 位是否置位」的判断整体门控：trace 开着时照旧进函数、
-    // 三个内部判断各自决定输出，行为完全一致；trace 关着（cache track 常态）
-    // 时把三次判断+分支收成一次可预测分支。
-    if (GABY_UNLIKELY(GetTraceParameters() != 0)) LogAllWrittenRegisters();
-    // UpdateBType 幂等（btype_ = next_btype_; next_btype_ = DefaultBType），两者
-    // 都已是 DefaultBType 时是两条空写。只有 register-indirect 分支 leaf 会
-    // WriteNextBType，常态下两者恒为默认，跳过这两条 store；ShadowRunner 每条
-    // 指令比对 BType，行为一致由 shadow 测试兜底。
-    if ((btype_ != DefaultBType) || (next_btype_ != DefaultBType)) UpdateBType();
-    // 此处刻意不做 ExecuteInstruction 末尾的
-    // VIXL_CHECK(cpu_features_auditor_.InstructionIsAvailable())。
+    // 单次依赖 load（handler 指针）+ 单次间接调用。handler 自己 seat
+    // form_hash_、跑 BTI / MOVPRFX 协议、静态绑定调 leaf、收尾。返回值在 C1
+    // 保留（恒 nullptr），这里忽略——harness 照旧靠 pc_ 往前走（C2 定义续跑
+    // 协议）。
+    AsGabyHandler(entry->leaf)(this, entry);
   }
 
   // 单步执行原语。返回 true 表示执行了一条指令，false 表示模拟已经结束
@@ -1862,27 +1796,301 @@ class Simulator : public DecoderVisitor {
   }
   // gaby-vm END
 
-  // gaby-vm BEGIN:
-  // design.md OQ1 的落地——predecode 阶段把 form_hash 解析成
-  // leaf dispatcher 的转发器。form_hash → leaf 的真表是
-  // GetFormToVisitorFnMap()，它是 private static；PredecodeCache
-  // 的 populate pass 需要它，但让 cache friend 整个 Simulator、
-  // 或让 imported 头反向 include gaby_vm 头都不干净。这个 public
-  // static 转发器返回一个不透明指针（指向 FormToVisitorFnMap 里
-  // 那个进程级静态存储的 pointer-to-member-function——
-  // FormToVisitorFnMap::mapped_type，即
-  // void (Simulator::*)(const Instruction*)），cache 原样存进
-  // PredecodedEntry::leaf，ExecuteInstructionCached 再 cast 回来
-  // 调用。form 不在表里（unimplemented 编码）时返回 nullptr，
-  // 由 cache 换成会 abort 的哨兵 leaf。
-  // 详见 docs/refs/gaby-vm-predecode-cache-design.md §5.1、§7，
-  // 以及 predecode-cache-hotpath-speedup change 的 D1/D5。
-  static const void* ResolvePredecodeLeaf(uint32_t form_hash) {
+  // gaby-vm BEGIN: cache-dispatch-devirt (C1) — statically-bound handler ABI.
+  //
+  // Hot-path branch hints and forced inlining, local to this machinery block
+  // (Windows is a non-target, so plain __builtin_expect / always_inline). Both
+  // are #undef'd at the end of the block so they never leak.
+#define GABY_UNLIKELY(x) (__builtin_expect(!!(x), 0))
+#define GABY_ALWAYS_INLINE __attribute__((always_inline))
+  //
+  // ---- Handler contract (design cache-dispatch-devirt D1) ---------------
+  //
+  // A GabyHandler is the resolved execution target the predecode pass stores
+  // in PredecodedEntry::leaf. It is an ordinary AOT-compiled free function
+  // (Itanium free-function ABI), NOT a pointer-to-member-function: the
+  // cache-track dispatch loads one pointer from the entry and makes one
+  // indirect call, paying neither a pmf materialisation nor a vtable walk.
+  // Handlers are `static` members of vixl::aarch64::Simulator so they reach
+  // the protected/private interpreter state and leaves directly.
+  //
+  // Contract every handler (the generic thunks below, and every specialized
+  // handler C2-C7 add later) must honour:
+  //   * Signature is exactly GabyHandler. `sim` is the executing Simulator;
+  //     `entry` is the PredecodedEntry being executed. `instr` is derived
+  //     from sim->pc_ (design D3), never from the entry.
+  //   * Only trivially-destructible locals may span the leaf call. No local
+  //     with a non-trivial destructor and no try scope may be live across the
+  //     point that C2 will turn into a musttail dispatch, so that the future
+  //     threaded continuation is legal; any RAII / hook work must complete
+  //     before that point.
+  //   * The per-step epilogue protocol (MOVPRFX post-check, last_instr_ latch,
+  //     PC advance, trace gate, BType update) runs on every handler in the
+  //     order GabyThunkEpilogue encodes; specialized handlers reproduce it.
+  //   * Return value: RESERVED for C2 (the threaded-continuation protocol,
+  //     including the null-PC->terminal rule). In C1 every handler returns
+  //     nullptr and ExecuteInstructionCached ignores it, walking pc_ exactly
+  //     as before.
+  //
+  // Authoritative rationale: docs/refs/gaby-vm-fast-dispatch-synthesis-
+  // 2026-07-03.md (C1 section, findings H5/H6); this change's design.md D1-D5.
+  using GabyHandler = const gaby_vm::PredecodeCache::PredecodedEntry* (*)(
+      Simulator*, const gaby_vm::PredecodeCache::PredecodedEntry*);
+
+  // The leaf pmf type the FormToVisitorFnMap holds. Spelled out here rather
+  // than via FormToVisitorFnMap::mapped_type because that private alias is
+  // declared later in the class and the pmf->thunk table row below needs the
+  // type at parse time (a struct member is not a complete-class context). It
+  // is the same type; the static_assert on GetFormToVisitorFnMap's alias keeps
+  // them in lockstep.
+  using GabyLeafPmf = void (Simulator::*)(const Instruction*);
+
+  // The entry->leaf opaque handle is a GabyHandler stored through const void*.
+  // fn-ptr <-> const void* is representable on every POSIX/Darwin target gaby
+  // supports; the static_asserts are the ABI-drift tripwire. The const_cast is
+  // the round-trip pair of GabyHandlerToVoid, which added the const.
+  static GabyHandler AsGabyHandler(const void* leaf) {
+    return reinterpret_cast<GabyHandler>(const_cast<void*>(leaf));
+  }
+  static const void* GabyHandlerToVoid(GabyHandler handler) {
+    return reinterpret_cast<const void*>(handler);
+  }
+  static_assert(sizeof(GabyHandler) == sizeof(const void*),
+                "GabyHandler must round-trip through PredecodedEntry::leaf "
+                "(const void*); the cache-track dispatch relies on it");
+  static_assert(sizeof(GabyHandler) == sizeof(void*),
+                "GabyHandler is a plain function pointer");
+
+  // Shared prologue for every generic thunk. Reproduces, in order, the head of
+  // the pre-C1 ExecuteInstructionCached: reset pc_modified_, run the BTI /
+  // guarded-page gate behind entry->flags bit 0, then the MOVPRFX latch
+  // protocol — read gaby_prev_was_movprfx_ into the returned local, overwrite
+  // the member from entry->flags bit 1, and seat form_hash_ from the entry
+  // BEFORE the leaf runs (shared Simulate_* leaves branch on form_hash_).
+  // Force-inlined so each thunk carries the sequence with zero call overhead.
+  static GABY_ALWAYS_INLINE bool GabyThunkPrologue(
+      Simulator* sim,
+      const gaby_vm::PredecodeCache::PredecodedEntry* entry) {
+    sim->pc_modified_ = false;
+    if (GABY_UNLIKELY((entry->flags & 1u) != 0u)) {
+      // On guarded pages, if BType is not zero, take an exception on any
+      // instruction other than BTI, PACI[AB]SP, HLT or BRK.
+      if (sim->PcIsInGuardedPage() && (sim->ReadBType() != DefaultBType)) {
+        if (sim->pc_->IsPAuth()) {
+          Instr i = sim->pc_->Mask(SystemPAuthMask);
+          if ((i != PACIASP) && (i != PACIBSP)) {
+            VIXL_ABORT_WITH_MSG(
+                "Executing non-BTI instruction with wrong BType.");
+          }
+        } else if (!sim->pc_->IsBti() && !sim->pc_->IsException()) {
+          VIXL_ABORT_WITH_MSG(
+              "Executing non-BTI instruction with wrong BType.");
+        }
+      }
+    }
+    const bool last_instr_was_movprfx = sim->gaby_prev_was_movprfx_;
+    sim->gaby_prev_was_movprfx_ = (entry->flags & 2u) != 0u;
+    sim->form_hash_ = entry->form_hash;
+    return last_instr_was_movprfx;
+  }
+
+  // Shared epilogue for every generic thunk. Reproduces, in order, the tail of
+  // the pre-C1 ExecuteInstructionCached: the gated post-leaf MOVPRFX check,
+  // last_instr_ latch, PC advance, the trace gate (cache track pins the trace
+  // mask to 0, so the call is elided in the common case), and the idempotent
+  // BType update gate. Returns nullptr — the C1 continuation value.
+  static GABY_ALWAYS_INLINE const gaby_vm::PredecodeCache::PredecodedEntry*
+  GabyThunkEpilogue(Simulator* sim, bool last_instr_was_movprfx) {
+    if (GABY_UNLIKELY(last_instr_was_movprfx)) {
+      VIXL_ASSERT(sim->last_instr_ != NULL);
+      VIXL_CHECK(sim->pc_->CanTakeSVEMovprfx(sim->form_hash_, sim->last_instr_));
+    }
+    sim->last_instr_ = sim->ReadPc();
+    sim->IncrementPc();
+    if (GABY_UNLIKELY(sim->GetTraceParameters() != 0)) {
+      sim->LogAllWrittenRegisters();
+    }
+    if ((sim->btype_ != DefaultBType) || (sim->next_btype_ != DefaultBType)) {
+      sim->UpdateBType();
+    }
+    return nullptr;
+  }
+
+  // The set of Simulate_* leaves the FormToVisitorFnMap dispatches to. There is
+  // no upstream name-list X-macro for these (unlike the Visit* leaves, which
+  // come from decoder-aarch64.h's VISITOR_LIST_* lists), so this gaby-owned
+  // list is the source of truth for stamping their thunks and their
+  // pmf->thunk table rows. It MUST cover every Simulate_* the map names; a form
+  // whose leaf has no thunk resolves to nullptr and would be mis-sentinelled —
+  // vixl_port executes every reachable form and would catch the gap.
+#define GABY_SIMULATE_THUNK_LIST(V)                             \
+  V(Simulate_PdT_PgZ_ZnT_ZmT)                                   \
+  V(Simulate_PdT_Xn_Xm)                                         \
+  V(Simulate_XdSP_XnSP_Xm)                                      \
+  V(Simulate_ZdaD_ZnS_ZmS_imm)                                  \
+  V(Simulate_ZdaS_ZnH_ZmH)                                      \
+  V(Simulate_ZdaS_ZnH_ZmH_imm)                                  \
+  V(Simulate_ZdaT_PgM_ZnTb)                                     \
+  V(Simulate_ZdaT_ZnT_const)                                    \
+  V(Simulate_ZdaT_ZnT_ZmT)                                      \
+  V(Simulate_ZdaT_ZnTb_ZmTb)                                    \
+  V(Simulate_ZdB_Zn1B_Zn2B_imm)                                 \
+  V(Simulate_ZdB_ZnB_ZmB)                                       \
+  V(Simulate_ZdH_PgM_ZnS)                                       \
+  V(Simulate_ZdnT_PgM_ZdnT_const)                               \
+  V(Simulate_ZdnT_PgM_ZdnT_ZmT)                                 \
+  V(Simulate_ZdnT_ZdnT_ZmT_const)                               \
+  V(Simulate_ZdS_PgM_ZnD)                                       \
+  V(Simulate_ZdS_PgM_ZnS)                                       \
+  V(Simulate_ZdT_PgM_ZnT)                                       \
+  V(Simulate_ZdT_PgZ_ZnT_ZmT)                                   \
+  V(Simulate_ZdT_ZnT_const)                                     \
+  V(Simulate_ZdT_ZnT_ZmT)                                       \
+  V(Simulate_ZdT_ZnT_ZmTb)                                      \
+  V(Simulate_ZtD_Pg_ZnD_Xm)                                     \
+  V(Simulate_ZtD_PgZ_ZnD_Xm)                                    \
+  V(Simulate_ZtS_Pg_ZnS_Xm)                                     \
+  V(Simulate_ZtS_PgZ_ZnS_Xm)                                    \
+  V(SimulateCpyE)                                               \
+  V(SimulateCpyFP)                                              \
+  V(SimulateCpyM)                                               \
+  V(SimulateCpyP)                                               \
+  V(SimulateFPConvert)                                          \
+  V(SimulateFPRoundInt)                                         \
+  V(SimulateFPRoundIntToSize)                                   \
+  V(SimulateMatrixMul)                                          \
+  V(SimulateMTEAddSubTag)                                       \
+  V(SimulateMTELoadTag)                                         \
+  V(SimulateMTEStoreTag)                                        \
+  V(SimulateMTEStoreTagPair)                                    \
+  V(SimulateMTESubPointer)                                      \
+  V(SimulateMTETagMaskInsert)                                   \
+  V(SimulateNEONComplexMulByElement)                            \
+  V(SimulateNEONDotProdByElement)                               \
+  V(SimulateNEONFP2RegMisc)                                     \
+  V(SimulateNEONFPConvert)                                      \
+  V(SimulateNEONFPMulByElement)                                 \
+  V(SimulateNEONFPMulByElementLong)                             \
+  V(SimulateNEONMulByElementLong)                               \
+  V(SimulateNEONRoundInt)                                       \
+  V(SimulateNEONRoundIntToSize)                                 \
+  V(SimulateNEONSHA3)                                           \
+  V(SimulateSetE)                                               \
+  V(SimulateSetGM)                                              \
+  V(SimulateSetGP)                                              \
+  V(SimulateSetM)                                               \
+  V(SimulateSetP)                                               \
+  V(SimulateSHA512)                                             \
+  V(SimulateSignedMinMax)                                       \
+  V(SimulateSVEAddSubCarry)                                     \
+  V(SimulateSVEAddSubHigh)                                      \
+  V(SimulateSVEBitwiseTernary)                                  \
+  V(SimulateSVEComplexDotProduct)                               \
+  V(SimulateSVEComplexIntMulAdd)                                \
+  V(SimulateSVEExclusiveOrRotate)                               \
+  V(SimulateSVEFPConvertLong)                                   \
+  V(SimulateSVEFPMatrixMul)                                     \
+  V(SimulateSVEHalvingAddSub)                                   \
+  V(SimulateSVEIntArithPair)                                    \
+  V(SimulateSVEInterleavedArithLong)                            \
+  V(SimulateSVEIntMulLongVec)                                   \
+  V(SimulateSVEMlaMlsIndex)                                     \
+  V(SimulateSVEMulIndex)                                        \
+  V(SimulateSVENarrow)                                          \
+  V(SimulateSVEPmull128)                                        \
+  V(SimulateSVESaturatingArithmetic)                            \
+  V(SimulateSVESaturatingIntMulLongIdx)                         \
+  V(SimulateSVESaturatingMulAddHigh)                            \
+  V(SimulateSVESaturatingMulHighIndex)                          \
+  V(SimulateSVEShiftLeftImm)                                    \
+  V(SimulateUnsignedMinMax)
+
+  // One generic thunk. THUNK_NAME is the stamped function name; QUALIFIED_LEAF
+  // is `Simulator::VisitXxx` (or `Simulator::SimulateXxx`). The call
+  // `sim->QUALIFIED_LEAF(sim->pc_)` expands to a QUALIFIED member call —
+  // `sim->Simulator::VisitXxx(sim->pc_)` — which suppresses the virtual
+  // dispatch statically (a `template <auto pmf>` thunk would NOT; known clang
+  // trap). Because the qualified form binds the same way whether or not the
+  // leaf is virtual, Visit* (virtual) and Simulate* (non-virtual) share one
+  // macro. instr = sim->pc_ per design D3.
+#define GABY_DEFINE_HANDLER_THUNK(THUNK_NAME, QUALIFIED_LEAF)                \
+  static const gaby_vm::PredecodeCache::PredecodedEntry* THUNK_NAME(         \
+      Simulator* sim,                                                        \
+      const gaby_vm::PredecodeCache::PredecodedEntry* entry) {              \
+    const bool last_instr_was_movprfx = GabyThunkPrologue(sim, entry);       \
+    sim->QUALIFIED_LEAF(sim->pc_);                                           \
+    return GabyThunkEpilogue(sim, last_instr_was_movprfx);                   \
+  }
+
+#define GABY_STAMP_VISIT_THUNK(A) \
+  GABY_DEFINE_HANDLER_THUNK(GabyThunk_Visit##A, Simulator::Visit##A)
+  VISITOR_LIST_THAT_RETURN(GABY_STAMP_VISIT_THUNK)
+  SIM_AUD_VISITOR_LIST_THAT_RETURN(GABY_STAMP_VISIT_THUNK)
+  VISITOR_LIST_THAT_DONT_RETURN(GABY_STAMP_VISIT_THUNK)
+#undef GABY_STAMP_VISIT_THUNK
+
+#define GABY_STAMP_SIMULATE_THUNK(A) \
+  GABY_DEFINE_HANDLER_THUNK(GabyThunk_##A, Simulator::A)
+  GABY_SIMULATE_THUNK_LIST(GABY_STAMP_SIMULATE_THUNK)
+#undef GABY_STAMP_SIMULATE_THUNK
+#undef GABY_DEFINE_HANDLER_THUNK
+
+  // One row of the pmf -> thunk table: the leaf pmf the FormToVisitorFnMap
+  // holds, and the statically-bound thunk that reaches it.
+  struct GabyHandlerTableEntry {
+    GabyLeafPmf pmf;
+    GabyHandler handler;
+  };
+
+  // Predecode-time form_hash -> handler resolver. Replaces ResolvePredecodeLeaf
+  // (the populate pass now stores a handler fn-ptr, not a pmf pointer). Resolves
+  // the form's pmf through the existing FormToVisitorFnMap, then linear-scans
+  // the stamped {pmf, thunk} table to hand back the matching thunk. The scan
+  // runs once per instruction at REGISTRATION time, never on the hot path, so a
+  // flat scan over the table is fine. Returns nullptr for a form the map does
+  // not name (the caller substitutes the unimplemented sentinel handler); the
+  // table is a superset of every leaf the map dispatches to, so a named form
+  // always matches.
+  static const void* ResolvePredecodeHandler(uint32_t form_hash) {
     const FormToVisitorFnMap* fv = GetFormToVisitorFnMap();
     FormToVisitorFnMap::const_iterator it = fv->find(form_hash);
     if (it == fv->end()) return nullptr;
-    return &it->second;
+    const GabyLeafPmf target = it->second;
+    static const GabyHandlerTableEntry kTable[] = {
+#define GABY_TABLE_VISIT(A) \
+  {&Simulator::Visit##A, &Simulator::GabyThunk_Visit##A},
+        VISITOR_LIST_THAT_RETURN(GABY_TABLE_VISIT)
+            SIM_AUD_VISITOR_LIST_THAT_RETURN(GABY_TABLE_VISIT)
+                VISITOR_LIST_THAT_DONT_RETURN(GABY_TABLE_VISIT)
+#undef GABY_TABLE_VISIT
+#define GABY_TABLE_SIMULATE(A) {&Simulator::A, &Simulator::GabyThunk_##A},
+                    GABY_SIMULATE_THUNK_LIST(GABY_TABLE_SIMULATE)
+#undef GABY_TABLE_SIMULATE
+    };
+    for (const GabyHandlerTableEntry& row : kTable) {
+      if (row.pmf == target) return GabyHandlerToVoid(row.handler);
+    }
+    // A named form whose leaf has no stamped thunk is an internal invariant
+    // break (the table is a superset by construction), not an input error.
+    VIXL_UNREACHABLE();
+    return nullptr;
   }
+
+  // Sentinel handlers for the populate pass. The unimplemented-form and
+  // data-in-stream sentinels are now handlers, not pmf pointers: they are the
+  // thunks for VisitUnimplemented / VisitUnallocated, so reaching one on the
+  // cache track aborts with the byte-identical imported message (the abort
+  // fires inside the leaf the thunk qualified-calls).
+  static const void* GabyUnimplementedSentinelHandler() {
+    return GabyHandlerToVoid(&Simulator::GabyThunk_VisitUnimplemented);
+  }
+  static const void* GabyDataInStreamSentinelHandler() {
+    return GabyHandlerToVoid(&Simulator::GabyThunk_VisitUnallocated);
+  }
+
+#undef GABY_SIMULATE_THUNK_LIST
+#undef GABY_ALWAYS_INLINE
+#undef GABY_UNLIKELY
   // gaby-vm END
 
   // gaby-vm BEGIN:

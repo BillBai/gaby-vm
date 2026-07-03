@@ -149,12 +149,30 @@ call. Shared `Simulate_*` leaves branch on that value.
 BTI-relevant instructions, so most cache-mode instructions skip the guarded-page
 BType check. Remaining bits are reserved for future per-form predecode work.
 
-`leaf` is an opaque handle to the resolved VIXL leaf dispatcher. The public
+`leaf` is an opaque handle to the resolved cache-track dispatcher. The public
 header exposes no `vixl::` type.
+
+> Superseded by `cache-dispatch-devirt` (C1, 2026-07-03): `leaf` now holds a
+> statically-bound *handler* function pointer, not a pointer to
+> pointer-to-member-function storage. The field size, offset, and type are
+> unchanged (still `const void*` in the 16-byte entry); only the pointed-at
+> thing changed. The cache-track dispatch is now one handler-slot load plus one
+> indirect call — no pmf materialisation, no vtable walk.
 
 The older 8-byte per-form thunk idea is deferred. Direct 16-byte entries were
 chosen for V1 because they are simpler, auditable, and already fast enough to
 validate the dispatch-cache architecture.
+
+> Superseded by `cache-dispatch-devirt` (C1): the "already fast enough, thunk
+> deferred" stance no longer holds — per-form thunks landed. The entry stayed
+> 16 bytes (the 8-byte-entry variant is still not pursued), but each form now
+> resolves to a macro-generated generic thunk (a `static` member of
+> `vixl::aarch64::Simulator`) that seats `form_hash_`, runs the BTI / MOVPRFX
+> protocol, makes a qualified — hence statically bound — call to the imported
+> leaf, and runs the epilogue. This removed the virtual-dispatch dependent-load
+> tail the old `(this->*pmf)(pc_)` path paid, and fixes the handler ABI the
+> later specialization changes (C2-C7) build on. See the change's design.md and
+> `docs/refs/gaby-vm-fast-dispatch-synthesis-2026-07-03.md`.
 
 #### 4.2.2 `CodeRange` and Range Table
 

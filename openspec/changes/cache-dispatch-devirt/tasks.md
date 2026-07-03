@@ -14,26 +14,26 @@ numbers.md. Before-reference: T5 row (parse 8.455 / hash 7.177 / struct
 
 ## 2. Handler ABI + thunks
 
-- [ ] 2.1 Internal handler machinery in a gaby marker block:
+- [x] 2.1 Internal handler machinery in a gaby marker block:
       `GabyHandler` typedef, handler-contract comment block (per design D1),
       `AsGabyHandler` cast helper + static_asserts.
-- [ ] 2.2 Thunk-emitting macro over the visitor expansion lists; static
+- [x] 2.2 Thunk-emitting macro over the visitor expansion lists; static
       member thunks reproducing the exact current per-step sequence
       (design D2/D3/D5); sentinel handlers with identical abort behavior.
-- [ ] 2.3 `ResolvePredecodeHandler` + populate-pass switch to handler
+- [x] 2.3 `ResolvePredecodeHandler` + populate-pass switch to handler
       storage in `entry->leaf`; public-header comment wording update.
-- [ ] 2.4 Shrink `ExecuteInstructionCached` to lookup + one handler call
+- [x] 2.4 Shrink `ExecuteInstructionCached` to lookup + one handler call
       (design D5 audit contract).
 
 ## 3. Verification
 
-- [ ] 3.1 Side-by-side audit: old hub sequence vs thunk body order (review
+- [x] 3.1 Side-by-side audit: old hub sequence vs thunk body order (review
       gate, recorded as a checklist in the commit message or numbers.md).
-- [ ] 3.2 GRL; record text-size delta of the release library/binary in
+- [x] 3.2 GRL; record text-size delta of the release library/binary in
       numbers.md; acceptance = ≥ neutral bench + all gates green.
 
 ## 4. Wrap-up
 
-- [ ] 4.1 numbers.md row + detail; supersession notes in
+- [x] 4.1 numbers.md row + detail; supersession notes in
       `docs/refs/gaby-vm-predecode-cache-design.md` (D8 thunk deferral,
       "already fast enough" stance); commit(s) with task refs.
