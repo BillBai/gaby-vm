@@ -8,7 +8,7 @@ numbers.md. Before-reference: T5 row (parse 8.455 / hash 7.177 / struct
 
 ## 1. Ground truth
 
-- [ ] 1.1 Re-profile applogic at branch tip (profile build, `sample`, 12s)
+- [x] 1.1 Re-profile applogic at branch tip (profile build, `sample`, 12s)
       and record the dispatch-hub share in numbers.md. Abort/re-price the
       change if the hub is materially below ~20%.
 
